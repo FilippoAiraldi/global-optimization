@@ -10,7 +10,15 @@ import MLJBase
 using Distances: pairwise, SqEuclidean
 
 
-_kernelfunctions::Dict{Symbol, Function} = Dict(
+@inline _tomat(X) = begin
+    if ndims(X) == 1
+        X = reshape(X, :, 1)
+    end
+    return MLJBase.matrix(X)
+end
+
+
+_kernelfunctions::Dict{Symbol,Function} = Dict(
     :inversequadratic => (d2, eps) -> 1 / (1 + eps^2 * d2),
     :multiquadric => (d2, eps) -> sqrt(1 + eps^2 * d2),
     :linear => (d2, eps) -> eps * sqrt(d2),
@@ -45,14 +53,8 @@ function MLJBase.fit(m::RBFRegressor, X, y)
     # process inputs
     #  - X ∈ (n_samples, n_features)
     #  - y ∈ (n_samples, 1)
-    if ndims(X) == 1
-        X = reshape(X, :, 1)
-    end
-    if ndims(y) == 1
-        y = reshape(y, :, 1)
-    end
-    Xm = MLJBase.matrix(X)
-    ym = MLJBase.matrix(y)
+    Xm = _tomat(X)
+    ym = _tomat(y)
 
     # create matrix of kernel evaluations
     d = pairwise(SqEuclidean(), Xm, dims=1)
@@ -68,12 +70,14 @@ MLJBase.fitted_params(m::RBFRegressor, (coefs, _)) = (coefs=coefs,)
 
 
 function MLJBase.predict(m::RBFRegressor, (coefs, Xm), Xnew)
-    if ndims(Xnew) == 1
-        Xnew = reshape(Xnew, :, 1)
-    end
-    Xnewm = MLJBase.matrix(Xnew)
+    # process input
+    Xnewm = _tomat(Xnew)
+
+    # create matrix of kernel evaluations
     d = pairwise(SqEuclidean(), Xm, Xnewm, dims=1)
     M = _kernelfunctions[m.kernel].(d, m.eps)
+
+    # predict as linear combination
     ynew = M' * coefs
     return ynew
 end
