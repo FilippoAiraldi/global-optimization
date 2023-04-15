@@ -1,20 +1,22 @@
 # https://alan-turing-institute.github.io/MLJ.jl/dev/quick_start_guide_to_adding_models/
 
 module Regressors
-export RBFRegressor, _kernelfunctions
 
 
 import MLJModelInterface
 const MMI = MLJModelInterface
-import MLJBase
+import MLJBase: matrix, fit, predict, fitted_params
 using Distances: pairwise, SqEuclidean
+
+
+export RBFRegression, IDWRegression, fit, predict, fitted_params
 
 
 @inline _tomat(X) = begin
     if ndims(X) == 1
         X = reshape(X, :, 1)
     end
-    return MLJBase.matrix(X)
+    return matrix(X)
 end
 
 
@@ -36,7 +38,7 @@ Linear regression with radial basis function (RBF) kernels.
   `:linear`, `:gaussian`, `:thinplatespline`, `:inversemultiquadric`.
 - eps: parameter to scale distances.
 """
-MMI.@mlj_model mutable struct RBFRegressor <: MMI.Deterministic
+MMI.@mlj_model mutable struct RBFRegression <: MMI.Deterministic
     kernel::Symbol = :inversequadratic::(_ in (
         :inversequadratic,
         :multiquadric,
@@ -49,7 +51,7 @@ MMI.@mlj_model mutable struct RBFRegressor <: MMI.Deterministic
 end
 
 
-function MLJBase.fit(m::RBFRegressor, X, y)
+function fit(m::RBFRegression, X, y)
     # process inputs
     #  - X ∈ (n_samples, n_features)
     #  - y ∈ (n_samples, 1)
@@ -66,10 +68,10 @@ function MLJBase.fit(m::RBFRegressor, X, y)
 end
 
 
-MLJBase.fitted_params(m::RBFRegressor, (coefs, _)) = (coefs=coefs,)
+fitted_params(m::RBFRegression, (coefs, _)) = (coefs=coefs,)
 
 
-function MLJBase.predict(m::RBFRegressor, (coefs, Xm), Xnew)
+function predict(m::RBFRegression, (coefs, Xm), Xnew)
     # process input
     Xnewm = _tomat(Xnew)
 
