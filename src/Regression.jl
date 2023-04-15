@@ -1,6 +1,6 @@
 # https://alan-turing-institute.github.io/MLJ.jl/dev/quick_start_guide_to_adding_models/
 
-module Regressors
+module Regression
 
 
 import MLJModelInterface
@@ -84,5 +84,49 @@ function predict(m::RBFRegression, (coefs, Xm), Xnew)
     return ynew
 end
 
-# TODO: partial_fit
+
+# TODO: partial_fit for RBFRegression
+
+
+"""
+Linear regression with inverse distance weighting (IDW).
+"""
+MMI.@mlj_model mutable struct IDWRegression <: MMI.Deterministic
+    weighting::Symbol = :inversesquared::(_ in (:inversesquared, :expinversesquared))
+end
+
+
+function fit(m::IDWRegression, X, y)
+    # process inputs
+    #  - X ∈ (n_samples, n_features)
+    #  - y ∈ (n_samples, 1)
+    Xm = _tomat(X)
+    ym = _tomat(y)
+
+    # do nothing
+    return (Xm, ym), nothing, NamedTuple{}()
+end
+
+
+fitted_params(m::IDWRegression, (_, _)) = ()
+
+
+function predict(m::IDWRegression, (Xm, ym), Xnew)
+    # process input
+    Xnewm = _tomat(Xnew)
+
+    # create matrix of weights
+    d = pairwise(SqEuclidean(), Xm, Xnewm, dims=1)
+
+    # implement cases when x==x_i or x==x_j
+
+    # W = 1 ./ d
+    # if m.weighting == :expinversesquared
+    #     W .*= exp.(-d)
+    # end
+end
+
+
+# TODO: partial_fit for IDWRegression
+
 end
