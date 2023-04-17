@@ -34,12 +34,12 @@ _kernelfunctions::Dict{Symbol,Function} = Dict(
 
 
 """
-Linear regression with radial basis function (RBF) kernels.
+Regression with radial basis function (RBF) kernels.
 
 # Fields
 - kernel: type of RBF function to use. One of `:inversequadratic`, `:multiquadric`,
   `:linear`, `:gaussian`, `:thinplatespline`, `:inversemultiquadric`.
-- eps: parameter to scale distances.
+- ϵ: parameter to scale distances.
 """
 MMI.@mlj_model mutable struct RBFRegression <: MMI.Deterministic
     kernel::Symbol = :inversequadratic::(_ in (
@@ -92,7 +92,11 @@ end
 
 
 """
-Linear regression with inverse distance weighting (IDW).
+Regression with inverse distance weighting (IDW).
+
+# Fields
+- weighting: type of weighting function to use. One of `:inversesquared`,
+  `:expinversesquared`.
 """
 MMI.@mlj_model mutable struct IDWRegression <: MMI.Deterministic
     weighting::Symbol = :inversesquared::(_ in (:inversesquared, :expinversesquared))
