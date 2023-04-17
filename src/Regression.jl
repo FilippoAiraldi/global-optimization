@@ -13,6 +13,7 @@ export RBFRegression, IDWRegression, fit, predict, fitted_params
 
 
 const δ = 1e-6  # small number to avoid nans
+const sqeuclideandist = SqEuclidean()
 
 @inline _tomat(X) = begin
     if ndims(X) == 1
@@ -78,7 +79,7 @@ function predict(m::RBFRegression, (coefs, Xm), Xnew)
     Xnewm = _tomat(Xnew)
 
     # create matrix of kernel evaluations
-    d² = pairwise(SqEuclidean(), Xm, Xnewm, dims=1)
+    d² = pairwise(sqeuclideandist, Xm, Xnewm, dims=1)
     M = _kernelfunctions[m.kernel].(d², m.ϵ)
 
     # predict as linear combination
@@ -118,14 +119,15 @@ function predict(m::IDWRegression, (Xm, ym), Xnew)
     Xnewm = _tomat(Xnew)
 
     # create matrix of weights
-    d = pairwise(SqEuclidean(), Xm, Xnewm, dims=1)
+    d = pairwise(sqeuclideandist, Xm, Xnewm, dims=1)
+    W = 1 ./ (d .+ δ)
+    if m.weighting == :expinversesquared
+        W .*= exp.(-d)
+    end
 
-    # implement cases when x==x_i or x==x_j
-
-    # W = 1 ./ d
-    # if m.weighting == :expinversesquared
-    #     W .*= exp.(-d)
-    # end
+    # predict as weighted average
+    ynew = (W' * ym) ./ sum(W, dims=1)'
+    return ynew
 end
 
 
