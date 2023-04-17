@@ -12,6 +12,8 @@ using Distances: pairwise, SqEuclidean
 export RBFRegression, IDWRegression, fit, predict, fitted_params
 
 
+const δ = 1e-6  # small number to avoid nans
+
 @inline _tomat(X) = begin
     if ndims(X) == 1
         X = reshape(X, :, 1)
@@ -21,12 +23,12 @@ end
 
 
 _kernelfunctions::Dict{Symbol,Function} = Dict(
-    :inversequadratic => (d2, eps) -> 1 / (1 + eps^2 * d2),
-    :multiquadric => (d2, eps) -> sqrt(1 + eps^2 * d2),
-    :linear => (d2, eps) -> eps * sqrt(d2),
-    :gaussian => (d2, eps) -> exp(-eps^2 * d2),
-    :thinplatespline => (d2, eps) -> eps^2 * d2 * log(eps * sqrt(d2) .+ 1e-6),
-    :inversemultiquadric => (d2, eps) -> 1 / sqrt(1 + eps^2 * d2),
+    :inversequadratic => (d², ε) -> 1 / (1 + ε^2 * d²),
+    :multiquadric => (d², ε) -> √(1 + ε^2 * d²),
+    :linear => (d², ε) -> ε * √d²,
+    :gaussian => (d², ε) -> exp(-ε^2 * d²),
+    :thinplatespline => (d², ε) -> ε^2 * d² * log(ε * √d² .+ δ),
+    :inversemultiquadric => (d², ε) -> 1 / √(1 + ε^2 * d²),
 )
 
 
@@ -47,7 +49,7 @@ MMI.@mlj_model mutable struct RBFRegression <: MMI.Deterministic
         :thinplatespline,
         :inversemultiquadric,
     ))
-    eps::Float64 = 1e-3::(_ >= 0)
+    ϵ::Float64 = 1e-3::(_ >= 0)
 end
 
 
@@ -59,8 +61,8 @@ function fit(m::RBFRegression, X, y)
     ym = _tomat(y)
 
     # create matrix of kernel evaluations
-    d = pairwise(SqEuclidean(), Xm, dims=1)
-    M = _kernelfunctions[m.kernel].(d, m.eps)
+    d² = pairwise(SqEuclidean(), Xm, dims=1)
+    M = _kernelfunctions[m.kernel].(d², m.ϵ)
 
     # compute coefficients
     coefs = M \ ym
@@ -76,8 +78,8 @@ function predict(m::RBFRegression, (coefs, Xm), Xnew)
     Xnewm = _tomat(Xnew)
 
     # create matrix of kernel evaluations
-    d = pairwise(SqEuclidean(), Xm, Xnewm, dims=1)
-    M = _kernelfunctions[m.kernel].(d, m.eps)
+    d² = pairwise(SqEuclidean(), Xm, Xnewm, dims=1)
+    M = _kernelfunctions[m.kernel].(d², m.ϵ)
 
     # predict as linear combination
     ynew = M' * coefs
