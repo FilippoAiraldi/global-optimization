@@ -118,7 +118,7 @@ function fit(m::IDWRegression, X, y)
 end
 
 
-fitted_params(m::IDWRegression, (_, _)) = ()
+fitted_params(m::IDWRegression, fitresults) = ()
 
 
 function predict(m::IDWRegression, (Xm, ym), Xnew)
@@ -138,7 +138,12 @@ function predict(m::IDWRegression, (Xm, ym), Xnew)
 end
 
 
-function partial_fit(m::IDWRegression, (Xm, ym), X, y)
+function partial_fit(m::IDWRegression, fitresults, X, y)
+    if fitresults === nothing
+        return fit(m, X, y)
+    end
+    Xm, ym = fitresults
+
     # process inputs
     #  - X ∈ (n_samples, n_features)
     #  - y ∈ (n_samples, 1)
