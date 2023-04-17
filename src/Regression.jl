@@ -9,14 +9,17 @@ import MLJBase: matrix, fit, predict, fitted_params
 using Distances: pairwise, SqEuclidean
 
 
-export RBFRegression, IDWRegression, fit, predict, fitted_params
+export RBFRegression, IDWRegression, fit, partial_fit, predict, fitted_params
 
 
 const δ = 1e-6  # small number to avoid nans
 const sqeuclideandist = SqEuclidean()
 
 @inline _tomat(X) = begin
-    if ndims(X) == 1
+    ndim = ndims(X)
+    if ndim == 0
+        X = [X;;]
+    elseif ndim == 1
         X = reshape(X, :, 1)
     end
     return matrix(X)
@@ -135,6 +138,15 @@ function predict(m::IDWRegression, (Xm, ym), Xnew)
 end
 
 
-# TODO: partial_fit for IDWRegression
+function partial_fit(m::IDWRegression, (Xm, ym), X, y)
+    # process inputs
+    #  - X ∈ (n_samples, n_features)
+    #  - y ∈ (n_samples, 1)
+    Xp = _tomat(X)  # p for partial
+    yp = _tomat(y)
+
+    # append new data to old matrices and return
+    return ([Xm; Xp], [ym; yp]), nothing, NamedTuple{}()
+end
 
 end
