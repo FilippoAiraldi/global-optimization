@@ -1,12 +1,11 @@
 # reproduces Figure 1 of Bemporad (2020)
 
+include("../src/NonMyopicGlobOpt.jl")
 include("../src/TestCases.jl")
-include("../src/Regression.jl")
-include("../src/Util.jl")
+using .NonMyopicGlobOpt: RBFRegression, IDWRegression, fit, partial_fit, predict
 import .TestCases
-using .Regression: RBFRegression, IDWRegression, fit, partial_fit, predict, _tomat
-using .Util
 using Plots
+
 
 # grab function
 f = TestCases.bemporad2020

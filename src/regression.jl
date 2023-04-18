@@ -1,16 +1,9 @@
 # https://alan-turing-institute.github.io/MLJ.jl/dev/quick_start_guide_to_adding_models/
 
-module Regression
-
-
 import MLJModelInterface
 const MMI = MLJModelInterface
 import MLJBase: matrix, fit, predict, fitted_params
 using Distances: pairwise, SqEuclidean
-
-
-export RBFRegression, IDWRegression, fit, partial_fit, predict, fitted_params
-
 
 const δ = 1e-6  # small number to avoid nans
 const sqeuclideandist = SqEuclidean()
@@ -189,6 +182,4 @@ function partial_fit(m::IDWRegression, fitresults, X, y)
 
     # append new data to old matrices and return
     return ([Xm; Xp], [ym; yp]), nothing, NamedTuple{}()
-end
-
 end
