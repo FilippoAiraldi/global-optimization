@@ -57,7 +57,7 @@ MMI.@mlj_model mutable struct RBFRegression <: MMI.Deterministic
 end
 
 
-function fit(m::RBFRegression, X, y)
+function fit(m::RBFRegression, X, y; minv::Bool=false)
     # process inputs
     #  - X ∈ (n_samples, n_features)
     #  - y ∈ (n_samples, 1)
@@ -70,14 +70,17 @@ function fit(m::RBFRegression, X, y)
 
     # compute coefficients
     coefs = M \ ym
-    return (coefs, Xm), nothing, NamedTuple{}()
+
+    # if requested, compute also the inverse of M
+    Minv = minv ? inv(M) : nothing
+    return (coefs, Xm, ym, Minv), nothing, NamedTuple{}()
 end
 
 
-fitted_params(m::RBFRegression, (coefs, _)) = (coefs=coefs,)
+fitted_params(m::RBFRegression, fitresults) = (coefs=fitresults[1],)
 
 
-function predict(m::RBFRegression, (coefs, Xm), Xnew)
+function predict(m::RBFRegression, (coefs, Xm, _, _), Xnew)
     # process input
     Xnewm = _tomat(Xnew)
 
@@ -91,7 +94,41 @@ function predict(m::RBFRegression, (coefs, Xm), Xnew)
 end
 
 
-# TODO: partial_fit for RBFRegression
+function partial_fit(m::RBFRegression, fitresults, X, y)
+    if fitresults === nothing
+        return fit(m, X, y; minv=true)
+    end
+    _, Xm, ym, Minv = fitresults
+    if Minv === nothing
+        throw(ArgumentError(
+            "Expected `fitresults` to contain the inverse of the kernel matrix. Have \
+            you run `fit(...; minv=true)`?"
+        ))
+    end
+
+    # process inputs
+    #  - X ∈ (n_samples, n_features)
+    #  - y ∈ (n_samples, 1)
+    Xp = _tomat(X)  # p for partial
+    yp = _tomat(y)
+
+    # compute distance of new data w.r.t. old points and itself
+    kf = _kernelfunctions[m.kernel]
+    Φ = kf.(pairwise(sqeuclideandist, Xm, Xp, dims=1), m.ϵ)
+    ϕ = kf.(pairwise(sqeuclideandist, Xp, dims=1), m.ϵ)
+
+    # compute new inverse of M via blockwise inversion
+    c = inv(ϕ - Φ' * Minv * Φ)
+    A = Minv + Minv * Φ * c * Φ' * Minv
+    B = -Minv * Φ * c
+    Minvnew = [A B; B' c]
+
+    # compute new coefficients
+    Xmnew = [Xm; Xp]
+    ymnew = [ym; yp]
+    coefsnew = Minvnew * ymnew
+    return (coefsnew, Xmnew, ymnew, Minvnew), nothing, NamedTuple{}()
+end
 
 
 """
@@ -118,7 +155,7 @@ function fit(m::IDWRegression, X, y)
 end
 
 
-fitted_params(m::IDWRegression, fitresults) = ()
+fitted_params(m::IDWRegression, _) = ()
 
 
 function predict(m::IDWRegression, (Xm, ym), Xnew)
