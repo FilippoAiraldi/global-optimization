@@ -3,10 +3,9 @@
 import MLJModelInterface
 const MMI = MLJModelInterface
 import MLJBase: matrix, fit, predict, fitted_params
-using Distances: pairwise, SqEuclidean
+using Distances: pairwise
+include("./consts.jl")
 
-const δ = 1e-6  # small number to avoid nans
-const sqeuclideandist = SqEuclidean()
 
 @inline _tomat(X) = begin
     ndim = ndims(X)
@@ -156,14 +155,15 @@ function predict(m::IDWRegression, (Xm, ym), Xnew)
     Xnewm = _tomat(Xnew)
 
     # create matrix of weights
-    d = pairwise(sqeuclideandist, Xm, Xnewm, dims=1)
-    W = 1 ./ (d .+ δ)
+    d² = pairwise(sqeuclideandist, Xm, Xnewm, dims=1)
+    W = 1 ./ (d² .+ δ)
     if m.weighting == :expinversesquared
-        W .*= exp.(-d)
+        W .*= exp.(-d²)
     end
 
     # predict as weighted average
-    ynew = (W' * ym) ./ sum(W, dims=1)'
+    v = W ./ sum(W, dims=1)
+    ynew = v' * ym
     return ynew
 end
 

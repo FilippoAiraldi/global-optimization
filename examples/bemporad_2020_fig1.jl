@@ -2,7 +2,7 @@
 
 include("../src/NonMyopicGlobOpt.jl")
 include("../src/TestCases.jl")
-using .NonMyopicGlobOpt: RBFRegression, IDWRegression, fit, partial_fit, predict
+using .NonMyopicGlobOpt: RBFRegression, IDWRegression, partial_fit, predict
 import .TestCases
 using Plots
 
