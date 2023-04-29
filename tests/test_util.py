@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 from pymoo.util.normalization import ZeroToOneNormalization
 
-from nmgo.util.normalization import SimpleArbitraryNormalization
+from globopt.util.normalization import SimpleArbitraryNormalization
 
 
 class TestNormalization(unittest.TestCase):
