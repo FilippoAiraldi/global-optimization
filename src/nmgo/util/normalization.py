@@ -74,3 +74,10 @@ class SimpleArbitraryNormalization(Normalization):
         return (X - self.xl_new) / (self.xu_new - self.xl_new) * (
             self.xu - self.xl
         ) + self.xl
+
+    def __repr__(self) -> str:
+        name = self.__class__.__name__
+        return f"{name}[({self.xl}, {self.xu}) -> ({self.xl_new}, {self.xu_new})]"
+
+    def __str__(self) -> str:
+        return super().__repr__()
