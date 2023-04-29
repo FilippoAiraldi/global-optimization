@@ -3,19 +3,19 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "nmgo"
+name = "globopt"
 version = "0.0.0"
 authors = [
   { name="Filippo Airaldi", email="filippoairaldi@gmail.com" },
 ]
-description = "Non-myopic Global Optimization"
+description = "Global Optimization"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 license = { text = "MIT" }
 classifiers = [
-    "Programming Language :: Python :: 3.8",
 	"Programming Language :: Python :: 3.9",
 	"Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: Mathematics"
@@ -23,8 +23,8 @@ classifiers = [
 dependencies = []
 
 [project.urls]
-"Homepage" = "https://github.com/FilippoAiraldi/non-myopic-global-optimization"
-"Bug Tracker" = "https://github.com/FilippoAiraldi/non-myopic-global-optimization/issues"
+"Homepage" = "https://github.com/FilippoAiraldi/global-optimization"
+"Bug Tracker" = "https://github.com/FilippoAiraldi/global-optimization/issues"
 
 [tool.setuptools]
 license-files = [

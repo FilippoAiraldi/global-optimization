@@ -1,3 +1,3 @@
-# Non-myopic Global Optimization
+# Global Optimization
 
-Non-myopic Global Optimization via IDW and RBF approximations
+Myopic and non-myopic Global Optimization via IDW and RBF approximations
