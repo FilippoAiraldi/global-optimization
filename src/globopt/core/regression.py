@@ -128,7 +128,7 @@ class RBFRegression(RegressorMixin, BaseEstimator):
             "thinplatespline",
             "inversemultiquadric",
         ] = "inversequadratic",
-        eps: float = 1e-3,
+        eps: float = 1e-1,
     ) -> None:
         """Instantiate a regression model with RBFs.
 
@@ -138,7 +138,7 @@ class RBFRegression(RegressorMixin, BaseEstimator):
             'thinplatespline', 'inversemultiquadric' }
             The type of RBF kernel to use.
         eps : float, optional
-            Distance-scaling parameter for the RBF kernel, by default 1e-3.
+            Distance-scaling parameter for the RBF kernel, by default `1e-1`.
         """
         RegressorMixin.__init__(self)
         BaseEstimator.__init__(self)
