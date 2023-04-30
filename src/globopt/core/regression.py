@@ -6,6 +6,7 @@ from typing import Any, Callable, Literal
 
 import numpy as np
 import numpy.typing as npt
+from numba import njit
 from scipy.spatial.distance import cdist, pdist, squareform
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.utils._param_validation import Interval, StrOptions
@@ -14,17 +15,6 @@ from typing_extensions import Self
 
 """Small value to avoid division by zero."""
 DELTA = 1e-9
-
-
-"""RBF kernels."""
-RBF_FUNCS: dict[str, Callable[[np.ndarray, float], np.ndarray]] = {
-    "inversequadratic": lambda d2, eps: 1 / (1 + eps**2 * d2),
-    "multiquadric": lambda d2, eps: np.sqrt(1 + eps**2 * d2),
-    "linear": lambda d2, eps: eps * np.sqrt(d2),
-    "gaussian": lambda d2, eps: np.exp(-(eps**2) * d2),
-    "thinplatespline": lambda d2, eps: eps**2 * d2 * np.log(eps * d2 + DELTA),
-    "inversemultiquadric": lambda d2, eps: 1 / np.sqrt(1 + eps**2 * d2),
-}
 
 
 class IDWRegression(RegressorMixin, BaseEstimator):
@@ -110,6 +100,44 @@ class IDWRegression(RegressorMixin, BaseEstimator):
         return v.T @ self.y_
 
 
+"""RBF kernels."""
+RBF_FUNCS: dict[str, Callable[[np.ndarray, float], np.ndarray]] = {
+    "inversequadratic": lambda d2, eps: 1 / (1 + eps**2 * d2),
+    "multiquadric": lambda d2, eps: np.sqrt(1 + eps**2 * d2),
+    "linear": lambda d2, eps: eps * np.sqrt(d2),
+    "gaussian": lambda d2, eps: np.exp(-(eps**2) * d2),
+    "thinplatespline": lambda d2, eps: eps**2 * d2 * np.log(eps * d2 + DELTA),
+    "inversemultiquadric": lambda d2, eps: 1 / np.sqrt(1 + eps**2 * d2),
+}
+
+
+@njit
+def _linsolve_via_svd(M, y):
+    """Internal jit function to solve linear system via SVD."""
+    U, S, VT = np.linalg.svd(M)
+    Sinv = np.diag(1 / S)
+    c = U.T @ y
+    w = Sinv @ c
+    coef = VT.T @ w
+    Minv = VT.T @ Sinv @ U.T
+    return coef, Minv
+
+
+@njit
+def _blockwise_inversion(y_, y, Minv, phi, Phi):
+    """Internal jit function to perform blockwise inversion."""
+    L = Minv @ Phi
+    c = np.linalg.inv(phi - Phi.T @ L)
+    B = -L @ c
+    A = Minv - B @ L.T
+    Minv_new = np.vstack((np.hstack((A, B)), np.hstack((B.T, c))))
+
+    # update coefficients
+    y_new = np.concatenate((y_, y), axis=0)
+    coef_new = Minv_new @ y_new
+    return y_new, coef_new, Minv_new
+
+
 class RBFRegression(RegressorMixin, BaseEstimator):
     """Radial Basis Function regression."""
 
@@ -157,6 +185,7 @@ class RBFRegression(RegressorMixin, BaseEstimator):
         """
         self._validate_params()
         X, y = self._validate_data(X, y, y_numeric=True)
+        y = y.astype(float)  # type: ignore[union-attr]
 
         # create matrix of kernel evaluations
         fun = RBF_FUNCS[self.kernel]
@@ -164,15 +193,8 @@ class RBFRegression(RegressorMixin, BaseEstimator):
         M = squareform(fun(d2, self.eps))
         M[np.diag_indices_from(M)] = fun(0, self.eps)  # type: ignore[arg-type]
 
-        # compute coefficients via SVD
-        U, S, VT = np.linalg.svd(M)
-        Sinv = np.diag(1 / S)
-        c = U.T @ y
-        w = Sinv @ c
-        self.coef_ = VT.T @ w
-
-        # compute also inverse of M (useful for partial_fit)
-        self.Minv_ = VT.T @ Sinv @ U.T
+        # compute coefficients via SVD and inverse of M (useful for partial_fit)
+        self.coef_, self.Minv_ = _linsolve_via_svd(M, y)
 
         # save training data
         self.X_ = X
@@ -195,6 +217,7 @@ class RBFRegression(RegressorMixin, BaseEstimator):
             return self.fit(X, y)
 
         check_is_fitted(self, attributes=("X_", "y_", "coef_", "Minv_"))
+        y = y.astype(float)  # type: ignore[union-attr]
 
         # create matrix of kernel evaluations of new elements w.r.t. training data and
         # themselves
@@ -204,16 +227,10 @@ class RBFRegression(RegressorMixin, BaseEstimator):
         phi = squareform(fun(phi, self.eps))
         phi[np.diag_indices_from(phi)] = fun(0, self.eps)  # type: ignore[arg-type]
 
-        # update inverse of M via blockwise inversion
-        L = self.Minv_ @ Phi
-        c = np.linalg.inv(phi - Phi.T @ L)
-        B = -L @ c
-        A = self.Minv_ - B @ L.T
-        self.Minv_ = np.block([[A, B], [B.T, c]])
-
-        # update coefficients
-        y_new = np.concatenate((self.y_, y), axis=0)
-        self.coef_ = self.Minv_ @ y_new
+        # update inverse of M via blockwise inversion and coefficients
+        y_new, self.coef_, self.Minv_ = _blockwise_inversion(
+            self.y_, y, self.Minv_, phi, Phi
+        )
 
         # append to training data
         self.X_ = np.concatenate((self.X_, X), axis=0)
