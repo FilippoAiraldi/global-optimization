@@ -8,10 +8,10 @@ from globopt.util.normalization import SimpleArbitraryNormalization
 
 class TestNormalization(unittest.TestCase):
     def test_simple_arbitrary_normalization__normalizes_correctly(self) -> None:
-        xl = np.random.randn()
-        xu = xl**2 + np.random.randn() ** 2
-        xl_new = np.random.randn()
-        xu_new = xl_new**2 + np.random.randn() ** 2
+        xu = np.random.randn() ** 2
+        xl = -xu
+        xu_new = np.random.randn() ** 2
+        xl_new = -xu_new
 
         normalizations = (
             SimpleArbitraryNormalization(xl, xu, xl_new, xu_new),
