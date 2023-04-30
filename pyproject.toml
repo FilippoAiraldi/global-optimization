@@ -10,17 +10,21 @@ authors = [
 ]
 description = "Global Optimization"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.9,<3.11"
 license = { text = "MIT" }
 classifiers = [
 	"Programming Language :: Python :: 3.9",
 	"Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: Mathematics"
 ]
-dependencies = []
+dependencies = [
+    "numba >= 0.56.4",
+    "pymoo >= 0.6.0.1",
+    "scikit-learn >= 1.2.2",
+    "typing_extensions >= 4.5.0",
+]
 
 [project.urls]
 "Homepage" = "https://github.com/FilippoAiraldi/global-optimization"
