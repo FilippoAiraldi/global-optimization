@@ -17,6 +17,34 @@ from typing_extensions import Self
 DELTA = 1e-9
 
 
+# no jit here, it's already fast enough
+def idw_weighting(
+    X: npt.ArrayLike, Xm: npt.ArrayLike, exp_weighting: bool = False
+) -> npt.NDArray[np.floating]:
+    """Computes the IDW weighting function.
+
+    Parameters
+    ----------
+    X : array_like
+        Array of `x` for which to compute the weighting function.
+    Xm : array_like
+        Array of observed query points.
+    exp_weighting : bool, optional
+        Whether the weighting function should decay exponentially, by default
+        `False`.
+
+    Returns
+    -------
+    array
+        The weighiing function computed at `X` against dataset `Xm`.
+    """
+    d2 = cdist(Xm, X, "sqeuclidean")
+    W = 1 / (d2 + DELTA)
+    if exp_weighting:
+        W *= np.exp(-W)
+    return W
+
+
 class IDWRegression(RegressorMixin, BaseEstimator):
     """Inverse Distance Weighting regression."""
 
@@ -90,10 +118,7 @@ class IDWRegression(RegressorMixin, BaseEstimator):
         X = self._validate_data(X, reset=False)
 
         # create matrix of inverse-distance weights
-        d2 = cdist(self.X_, X, "sqeuclidean")
-        W = 1 / (d2 + DELTA)
-        if self.exp_weighting:
-            W *= np.exp(-W)
+        W = idw_weighting(X, self.X_, self.exp_weighting)
 
         # predict as weighted average
         v = W / W.sum(axis=0)
@@ -124,7 +149,7 @@ def _linsolve_via_svd(M, y):
 
 
 @njit
-def _blockwise_inversion(y_, y, Minv, phi, Phi):
+def _blockwise_inversion(ym, y, Minv, phi, Phi):
     """Internal jit function to perform blockwise inversion."""
     L = Minv @ Phi
     c = np.linalg.inv(phi - Phi.T @ L)
@@ -133,7 +158,7 @@ def _blockwise_inversion(y_, y, Minv, phi, Phi):
     Minv_new = np.vstack((np.hstack((A, B)), np.hstack((B.T, c))))
 
     # update coefficients
-    y_new = np.concatenate((y_, y), axis=0)
+    y_new = np.concatenate((ym, y), axis=0)
     coef_new = Minv_new @ y_new
     return y_new, coef_new, Minv_new
 
