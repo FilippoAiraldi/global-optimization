@@ -18,7 +18,7 @@ def f(x):
     )
 
 
-class TestIDWRegression(unittest.TestCase):
+class TestIDWandRBFRegression(unittest.TestCase):
     def test__with_sklearn_check_estimator(self) -> None:
         check_estimator(IDWRegression())
         check_estimator(RBFRegression())

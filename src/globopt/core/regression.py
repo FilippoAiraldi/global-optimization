@@ -30,8 +30,7 @@ def idw_weighting(
     Xm : array_like
         Array of observed query points.
     exp_weighting : bool, optional
-        Whether the weighting function should decay exponentially, by default
-        `False`.
+        Whether the weighting function should decay exponentially, by default `False`.
 
     Returns
     -------
