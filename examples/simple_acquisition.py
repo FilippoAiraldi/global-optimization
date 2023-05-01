@@ -1,3 +1,17 @@
+"""
+Example of computation and minimization of the myopic acquisition function on a simple
+scalar function. This example attempts to reproduce Fig. 3 and 6 of [1].
+
+References
+----------
+[1] A. Bemporad. Global optimization via inverse distance weighting and radial basis
+    functions. Computational Optimization and Applications, 77(2):571–595, 2020
+"""
+
+
+import os
+os.environ["NUMBA_DISABLE_JIT"] = "1"  # no need for jit in this example
+
 import matplotlib.pyplot as plt
 import numpy as np
 from pymoo.algorithms.soo.nonconvex.pso import PSO
@@ -44,14 +58,13 @@ a = acquisition(x, y_hat, X, y, dym, 1, 0.5)
 
 
 # compute minimizer of acquisition function
-def acquisition_problem_func(x):
-    y_hat = mdl.predict(x)
-    return acquisition(x, y_hat, X, y, dym, 1, 0.5)
-
-
 algorithm = PSO()
 problem = FunctionalProblem(
-    n_var=1, objs=acquisition_problem_func, xl=-3, xu=3, elementwise=False
+    n_var=1,
+    objs=lambda x: acquisition(x, mdl.predict(x), X, y, dym, 1, 0.5),
+    xl=-3,
+    xu=3,
+    elementwise=False,  # enables vectorized evaluation of acquisition function
 )
 res = minimize(problem, algorithm, verbose=True, seed=1)
 
@@ -78,7 +91,7 @@ axs[0].plot(x, z, label="z(x)")
 axs[1].plot(x, fx, label="f(x)")
 line = axs[1].plot(x, y_hat, label=str(mdl))[0]
 axs[1].plot(X, y, "o", label=None, color=line.get_color())
-line = axs[1].plot(x, a, label="a(x)", color="yellow")[0]
+line = axs[1].plot(x, a, label="a(x)")[0]
 axs[1].plot(
     res.X.item(),
     res.F.item(),

@@ -1,3 +1,14 @@
+"""
+Example of regression with inverse distance weighting (IDW) and radial basis functions
+(RBF) on a simple scalar function. This example attempts to reproduce Fig. 1 of [1].
+
+References
+----------
+[1] A. Bemporad. Global optimization via inverse distance weighting and radial basis
+    functions. Computational Optimization and Applications, 77(2):571–595, 2020
+"""
+
+
 import matplotlib.pyplot as plt
 import numpy as np
 

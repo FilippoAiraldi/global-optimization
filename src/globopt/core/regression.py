@@ -1,4 +1,13 @@
-"""Implementation of Radial Basis Function and Inverse Distance Weighting regression."""
+"""
+Implementation of Radial Basis Function and Inverse Distance Weighting regression
+according to [1]. These regression models are coded in line with the sklearn API, so
+they offer common methods such as `fit`, `predict`, as well as `partial_fit`.
+
+References
+----------
+[1] A. Bemporad. Global optimization via inverse distance weighting and radial basis
+    functions. Computational Optimization and Applications, 77(2):571–595, 2020
+"""
 
 
 from numbers import Real

@@ -1,3 +1,20 @@
+"""
+Implementation of the acquisition function for RBF/IDW-based Global Optimization
+according to [1]. Where possible, these are jit-compiled for speed with Numba.
+
+To disable jit compilation:
+```python
+import os
+os.environ["NUMBA_DISABLE_JIT"] = "1"
+```
+
+References
+----------
+[1] A. Bemporad. Global optimization via inverse distance weighting and radial basis
+    functions. Computational Optimization and Applications, 77(2):571–595, 2020
+"""
+
+
 from typing import Optional
 
 import numpy as np

@@ -1,3 +1,6 @@
+"""Utility classes for easier normalization of ranges and values."""
+
+
 from typing import Union
 
 import numpy as np
