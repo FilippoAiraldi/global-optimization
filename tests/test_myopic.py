@@ -74,7 +74,12 @@ class TestAlgorithm(unittest.TestCase):
         algorithm = GO(regression=regression, init_points=x0)
 
         res = minimize(
-            problem, algorithm, termination=("n_iter", 6), seed=1, save_history=True
+            problem,
+            algorithm,
+            termination=("n_iter", 6),
+            verbose=True,
+            seed=1,
+            save_history=True,
         )
 
         x = np.linspace(*problem.bounds(), 500).reshape(-1, 1)
