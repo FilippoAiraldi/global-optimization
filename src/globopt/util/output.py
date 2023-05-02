@@ -1,6 +1,7 @@
 import contextlib
 import sys
 from typing import Iterator, TextIO
+
 from pymoo.core.algorithm import Algorithm
 from pymoo.util.display.single import Column, SingleObjectiveOutput
 
