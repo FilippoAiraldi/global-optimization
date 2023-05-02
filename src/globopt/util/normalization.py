@@ -1,12 +1,15 @@
 """Utility classes for easier normalization of ranges and values."""
 
 
-from typing import Union
+from numbers import Number
+from typing import Any, Union
 
 import numpy as np
 import numpy.typing as npt
+from pymoo.core.problem import Problem
 from pymoo.util.normalization import Normalization
 
+from globopt.util.wrapper import Wrapper
 
 
 class RangeNormalization(Normalization):
@@ -85,3 +88,51 @@ class RangeNormalization(Normalization):
 
     def __str__(self) -> str:
         return super().__repr__()
+
+
+class NormalizedProblemWrapper(Problem, Wrapper[Problem]):
+    """A wrapper class for the normalization of problems."""
+
+    def __init__(
+        self,
+        problem: Problem,
+        new_xl: Union[Number, npt.ArrayLike] = -1,
+        new_xu: Union[Number, npt.ArrayLike] = +1,
+    ) -> None:
+        assert problem.has_bounds(), "Can only normalize bounded problems."
+        Problem.__init__(
+            self,
+            n_var=problem.n_var,
+            n_obj=problem.n_obj,
+            n_ieq_constr=problem.n_ieq_constr,
+            n_eq_constr=problem.n_eq_constr,
+            xl=new_xl,
+            xu=new_xu,
+            vtype=problem.vtype,
+            vars=problem.vars,
+            elementwise=problem.elementwise,
+            elementwise_func=problem.elementwise_func,
+            elementwise_runner=problem.elementwise_runner,
+            replace_nan_values_by=problem.replace_nan_values_by,
+            exclude_from_serialization=problem.exclude_from_serialization,
+            callback=problem.callback,
+            strict=problem.strict,
+        )
+        Wrapper.__init__(self, to_wrap=problem)
+        self.normalization = RangeNormalization(*self.wrapped.bounds(), *self.bounds())
+
+    def original_bounds(
+        self,
+    ) -> tuple[npt.NDArray[np.floating], npt.NDArray[np.floating]]:
+        """Gets the bounds of the wrapped problem."""
+        return self.wrapped.bounds()
+
+    def _evaluate(
+        self, x: npt.NDArray[np.floating], out: dict[str, Any], *args, **kwargs
+    ) -> None:
+        x = self.normalization.backward(x)
+        self.wrapped._evaluate(x, out, *args, **kwargs)
+
+    def _calc_pareto_set(self) -> Union[None, Number, npt.NDArray[np.floating]]:
+        pf = self.wrapped._calc_pareto_set()
+        return None if pf is None else self.normalization.forward(pf)
