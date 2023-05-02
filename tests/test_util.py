@@ -9,6 +9,7 @@ from pymoo.util.normalization import ZeroToOneNormalization
 from globopt.util.benchmark import Adjiman
 from globopt.util.normalization import NormalizedProblemWrapper, RangeNormalization
 from globopt.util.output import PrefixedStream
+from globopt.util.wrapper import Wrapper
 
 
 class TestNormalization(unittest.TestCase):
@@ -54,6 +55,21 @@ class TestNormalization(unittest.TestCase):
             y_opt,
             atol=1e-4,
         )
+
+
+class TestWrapper(unittest.TestCase):
+    def test_wrapper(self):
+        class Object:
+            pass
+
+        fieldvalue = object()
+        obj = Object()
+        obj.field = fieldvalue
+        wrapped_obj = Wrapper(obj)
+        self.assertIsNot(obj, wrapped_obj)
+        self.assertIs(obj, wrapped_obj.unwrapped)
+        self.assertIs(obj, wrapped_obj.wrapped)
+        self.assertEqual(obj.field, wrapped_obj.field)
 
 
 class TestPrefixedStream(unittest.TestCase):
