@@ -126,10 +126,11 @@ class GO(Algorithm):
         # solve the acquisition minimization problem
         with PrefixedStream.prefixed_print("- - - - "):
             res = minimize(acq_problem, self.acquisition_min_algorithm, **kwargs)
-
-        # return population with the new point to evaluate as last
         self.acquisition_min_res = res
-        return Population.new(X=np.concatenate((X, res.X.reshape(1, problem.n_var)), 0))
+
+        # return population with the new point to evaluate merged as last
+        xnew = res.X.reshape(1, problem.n_var)
+        return Population.merge(self.pop, Population.new(X=xnew))
 
     def _advance(self, infills: Population = None, **kwargs: Any) -> Optional[bool]:
         # add new offspring to the regression model
