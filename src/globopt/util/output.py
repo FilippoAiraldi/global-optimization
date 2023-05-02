@@ -1,3 +1,6 @@
+import contextlib
+import sys
+from typing import Iterator, TextIO
 from pymoo.core.algorithm import Algorithm
 from pymoo.util.display.single import Column, SingleObjectiveOutput
 
@@ -23,3 +26,25 @@ class GlobalOptimizationOutput(SingleObjectiveOutput):
         if algorithm.problem.n_var == 1:
             Xopt = Xopt.item()
         self.x_min.set(Xopt)
+
+
+class PrefixedStream:
+    """Wrapper to prefix a stream with a string every time `write` is called."""
+
+    def __init__(self, prefix: str, original_stream: TextIO) -> None:
+        self.prefix = prefix
+        self.original_stream = original_stream
+
+    def write(self, message: str) -> int:
+        if message != "\n":
+            message = self.prefix + message.replace("\n", "\n" + self.prefix)
+        return self.original_stream.write(message)
+
+    @classmethod
+    @contextlib.contextmanager
+    def prefixed_print(cls, prefix: str) -> Iterator[None]:
+        sys.stdout = cls(prefix, sys.stdout)
+        try:
+            yield
+        finally:
+            sys.stdout = sys.__stdout__  # restore default stdout
