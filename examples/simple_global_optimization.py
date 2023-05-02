@@ -1,6 +1,6 @@
 """
-Example of computation and minimization of the myopic acquisition function on a simple
-scalar function. This example attempts to reproduce Fig. 3 and 6 of [1].
+Example of application of the GO myopic algorithm. This example attempts to reproduce
+Fig. 7 of [1].
 
 References
 ----------
