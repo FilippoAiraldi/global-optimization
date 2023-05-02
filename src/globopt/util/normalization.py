@@ -1,4 +1,4 @@
-"""Utility classes for easier normalization of ranges and values."""
+"""Utility classes for easier normalization of ranges and values for problems."""
 
 
 from numbers import Number

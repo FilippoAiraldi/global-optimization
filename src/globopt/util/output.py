@@ -1,3 +1,9 @@
+"""
+Utility classes for better stdout printing of solver's information during minimization
+runs.
+"""
+
+
 import contextlib
 import sys
 from typing import Iterator, TextIO

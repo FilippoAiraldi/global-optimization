@@ -1,3 +1,14 @@
+"""
+Implementation of myopic Global Optimization strategy based on RBF or IDW regression.
+The scheme was first proposed in [1]. Here, the algorithm is implemented according to
+`pymoo` API.
+
+References
+----------
+[1] A. Bemporad. Global optimization via inverse distance weighting and radial basis
+    functions. Computational Optimization and Applications, 77(2):571–595, 2020
+"""
+
 from typing import Any, Optional, Union
 
 import numpy as np

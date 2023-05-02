@@ -1,3 +1,5 @@
+"""Implementation of OpenAI's gym-like wrappers for, e.g., problems."""
+
 from typing import Any, Generic, TypeVar
 
 WrappedInstance = TypeVar("WrappedInstance")
