@@ -44,8 +44,9 @@ class PrefixedStream:
     @classmethod
     @contextlib.contextmanager
     def prefixed_print(cls, prefix: str) -> Iterator[None]:
-        sys.stdout = cls(prefix, sys.stdout)
+        old_sys_stdout = sys.stdout  # might be different from sys.__stdout__
+        sys.stdout = cls(prefix, sys.stdout)  # type: ignore[assignment]
         try:
             yield
         finally:
-            sys.stdout = sys.__stdout__  # restore default stdout
+            sys.stdout = old_sys_stdout
