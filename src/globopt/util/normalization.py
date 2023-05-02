@@ -8,7 +8,8 @@ import numpy.typing as npt
 from pymoo.util.normalization import Normalization
 
 
-class SimpleArbitraryNormalization(Normalization):
+
+class RangeNormalization(Normalization):
     """
     Normalization to and from arbitrary bounds. It is simple in the sense that it does
     not consider any none values and assumes lower as well as upper bounds are given.

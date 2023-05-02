@@ -24,7 +24,7 @@ from pymoo.optimize import minimize
 from pymoo.util.normalization import NoNormalization
 
 from globopt.myopic.algorithm import GO, RBFRegression, acquisition
-from globopt.util.normalization import SimpleArbitraryNormalization
+from globopt.util.normalization import RangeNormalization
 
 plt.style.use("bmh")
 
@@ -35,7 +35,7 @@ class Simple1DProblem(Problem):
     def __init__(self, normalized: bool = True) -> None:
         if normalized:
             xl, xu = -1, 1
-            self.normalization = SimpleArbitraryNormalization(-3, 3, xl, xu)
+            self.normalization = RangeNormalization(-3, 3, xl, xu)
         else:
             xl, xu = -3, 3
             self.normalization = NoNormalization()

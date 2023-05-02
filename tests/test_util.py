@@ -10,14 +10,14 @@ from globopt.util.output import PrefixedStream
 
 
 class TestNormalization(unittest.TestCase):
-    def test_simple_arbitrary_normalization__normalizes_correctly(self) -> None:
+    def test_range_normalization__normalizes_correctly(self) -> None:
         xu = np.random.randn() ** 2
         xl = -xu
         xu_new = np.random.randn() ** 2
         xl_new = -xu_new
 
         normalizations = (
-            SimpleArbitraryNormalization(xl, xu, xl_new, xu_new),
+            RangeNormalization(xl, xu, xl_new, xu_new),
             ZeroToOneNormalization(xl, xu),
         )
         x = np.random.randn(1000)
