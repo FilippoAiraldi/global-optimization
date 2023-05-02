@@ -23,8 +23,6 @@ from numba import njit
 
 from globopt.core.regression import idw_weighting
 
-TWO_DIV_PI = 2 / np.pi
-
 
 @njit
 def idw_variance(
@@ -71,7 +69,7 @@ def idw_distance(W: npt.NDArray[np.floating]) -> npt.NDArray[np.floating]:
     array
         The distance function acquisition term evaluated at each point.
     """
-    return TWO_DIV_PI * np.arctan(1 / W.sum(axis=0))
+    return (2 / np.pi) * np.arctan(1 / W.sum(axis=0))
 
 
 # cannot jit this function due to idw_weighting

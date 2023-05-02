@@ -10,6 +10,7 @@ References
 
 
 import os
+
 os.environ["NUMBA_DISABLE_JIT"] = "1"  # no need for jit in this example
 
 import matplotlib.pyplot as plt
