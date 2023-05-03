@@ -71,7 +71,11 @@ class TestAlgorithm(unittest.TestCase):
         problem = Simple1DProblem()
         x0 = [-2.62, -1.2, 0.14, 1.1, 2.82]
         regression = RBFRegression("thinplatespline", 0.01)
-        algorithm = GO(regression=regression, init_points=x0)
+        algorithm = GO(
+            regression=regression,
+            init_points=x0,
+            acquisition_fun_kwargs={"c1": 1, "c2": 0.5},
+        )
 
         res = minimize(
             problem,
@@ -88,7 +92,7 @@ class TestAlgorithm(unittest.TestCase):
             y_hat = algo.regression.predict(x)
             Xm = algo.pop.get("X").reshape(-1, 1)
             ym = algo.pop.get("F").reshape(-1)
-            a = acquisition(x, y_hat, Xm, ym, None)
+            a = acquisition(x, y_hat, Xm, ym, None, **algo.acquisition_fun_kwargs)
             acq_min = (
                 algo.acquisition_min_res.opt.item().X
                 if hasattr(algo, "acquisition_min_res")

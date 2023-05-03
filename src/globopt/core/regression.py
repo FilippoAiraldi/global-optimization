@@ -189,7 +189,7 @@ class RBFRegression(RegressorMixin, BaseEstimator):
             "thinplatespline",
             "inversemultiquadric",
         ] = "inversequadratic",
-        eps: float = 1e-1,
+        eps: float = 1.0775,
     ) -> None:
         """Instantiate a regression model with RBFs.
 

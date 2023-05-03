@@ -55,14 +55,14 @@ dym = y.max() - y.min()  # span of observations
 W = idw_weighting(x, X)
 s = idw_variance(y_hat, y, W)
 z = idw_distance(W)
-a = acquisition(x, y_hat, X, y, dym)
+a = acquisition(x, y_hat, X, y, dym, c1=1, c2=0.5)
 
 
 # compute minimizer of acquisition function
 algorithm = PSO()
 problem = FunctionalProblem(
     n_var=1,
-    objs=lambda x: acquisition(x, mdl.predict(x), X, y, dym),
+    objs=lambda x: acquisition(x, mdl.predict(x), X, y, dym, c1=1, c2=0.5),
     xl=-3,
     xu=3,
     elementwise=False,  # enables vectorized evaluation of acquisition function

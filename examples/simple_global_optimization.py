@@ -69,6 +69,7 @@ algorithm = GO(
     regression=RBFRegression("thinplatespline", 0.01),
     init_points=x0,
     acquisition_min_kwargs={"verbose": True},
+    acquisition_fun_kwargs={"c1": 1, "c2": 0.5},
 )
 res = minimize(
     problem,
@@ -96,7 +97,7 @@ for i in range(len(axs)):
 
     # plot current regression model prediction and acquisition function
     y_hat = algo.regression.predict(x)
-    a = acquisition(x, y_hat, Xm, ym, None)
+    a = acquisition(x, y_hat, Xm, ym, None, **algo.acquisition_fun_kwargs)
     ax.plot(x, y_hat, label=r"$\hat{f}(x)$")
     ax.plot(x, a, label="$a(x)$")
     if i < len(axs) - 1:

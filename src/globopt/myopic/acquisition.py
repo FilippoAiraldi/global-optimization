@@ -79,8 +79,8 @@ def acquisition(
     Xm: npt.NDArray[np.floating],
     ym: npt.NDArray[np.floating],
     dym: Optional[float],
-    c1: float = 1,
-    c2: float = 0.5,
+    c1: float = 1.5078,
+    c2: float = 1.4246,
     exp_weighting: bool = False,
 ) -> npt.NDArray[np.floating]:
     """Computes the acquisition function for IDW/RBF regression models.
