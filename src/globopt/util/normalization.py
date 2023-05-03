@@ -2,7 +2,7 @@
 
 
 from numbers import Number
-from typing import Any, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -130,9 +130,12 @@ class NormalizedProblemWrapper(Problem, Wrapper[Problem]):
     def _evaluate(
         self, x: npt.NDArray[np.floating], out: dict[str, Any], *args, **kwargs
     ) -> None:
-        x = self.normalization.backward(x)
-        self.wrapped._evaluate(x, out, *args, **kwargs)
+        x_ = self.normalization.backward(x)
+        self.wrapped._evaluate(x_, out, *args, **kwargs)
 
     def _calc_pareto_set(self) -> Union[None, Number, npt.NDArray[np.floating]]:
         pf = self.wrapped._calc_pareto_set()
         return None if pf is None else self.normalization.forward(pf)
+
+    def _calc_pareto_front(self, *args, **kwargs) -> Optional[npt.NDArray[np.floating]]:
+        return self.wrapped._calc_pareto_front(*args, **kwargs)
