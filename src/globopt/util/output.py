@@ -6,47 +6,49 @@ runs.
 
 import contextlib
 import sys
-from typing import Iterator, TextIO
+from typing import Iterator, Optional, TextIO
 
+import numpy as np
 from pymoo.core.algorithm import Algorithm
 from pymoo.core.problem import Problem
 from pymoo.util.display.single import Column, SingleObjectiveOutput
 
 
+def pareto_set_if_possible(problem: Problem) -> Optional[np.ndarray]:
+    """Gets the pareto set of the problem if possible, otherwise returns `None`."""
+    try:
+        return problem.pareto_set()
+    except Exception:
+        return None
+
+
 class GlobalOptimizationOutput(SingleObjectiveOutput):
     """Display output for global optimization algorithms.
 
-    Adds a column for the minimizer of the objective function found so far.
+    Adds a column for the distance of the current best minimizer of the objective
+    function found so far and the (single) true minimizer.
     """
 
-    def __init__(self, include_x_min: bool = True, problem: Problem = None) -> None:
-        """Instantiate the output object.
-
-        Parameters
-        ----------
-        include_x_min : bool, optional
-            Whether to include a column for the current minimizer, by default `True`.
-        problem : Problem, optional
-            If provided, the width of the `x_min` column will scaled to accommodate the
-            number of variables in the problem.
-        """
+    def __init__(self) -> None:
+        """Instantiate the output object."""
         super().__init__()
-        width = 13 * (1 if problem is None else problem.n_var)
-        self.x_min = Column(name="x_min", width=width) if include_x_min else None
+        self.x_gap = Column(name="x_gap")
 
     def initialize(self, algorithm: Algorithm) -> None:
         super().initialize(algorithm)
-        if self.x_min is not None:
-            self.columns.append(self.x_min)
+        problem: Problem = algorithm.problem
+        ps = pareto_set_if_possible(problem)
+        self.x_opt = None if ps is None else np.reshape(ps, problem.n_var)
+        if self.x_opt is not None:
+            self.columns.append(self.x_gap)
 
     def update(self, algorithm: Algorithm) -> None:
         super().update(algorithm)
-        if self.x_min is not None:
+        if self.x_opt is not None:
             opt = algorithm.opt[0]
-            Xopt = opt.X if opt.feas else None
-            if algorithm.problem.n_var == 1:
-                Xopt = Xopt.item()
-            self.x_min.set(Xopt)
+            if opt.feas:
+                Xopt = opt.X.reshape(algorithm.problem.n_var)
+                self.x_gap.set(np.linalg.norm(Xopt - self.x_opt))
 
 
 class PrefixedStream:
