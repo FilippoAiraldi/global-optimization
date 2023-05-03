@@ -4,12 +4,16 @@ from copy import deepcopy
 from io import StringIO
 
 import numpy as np
+from pymoo.problems import get_problem
 from pymoo.util.normalization import ZeroToOneNormalization
+from pymoo.algorithms.soo.nonconvex.ga import GA
+from pymoo.optimize import minimize
 
 from globopt.util.benchmark import Adjiman
 from globopt.util.normalization import NormalizedProblemWrapper, RangeNormalization
 from globopt.util.output import PrefixedStream
 from globopt.util.wrapper import Wrapper
+from globopt.util.callback import BestSoFarCallback
 
 
 class TestNormalization(unittest.TestCase):
@@ -93,6 +97,23 @@ class TestPrefixedStream(unittest.TestCase):
 
         self.assertEqual(
             self.capture.getvalue(), f"{text1}\n{prefix}{text2}\n{text3}\n"
+        )
+
+
+class TestCallback(unittest.TestCase):
+    def test__best_so_far_callback(self):
+        problem = get_problem("sphere")
+        algorithm = GA(pop_size=50)
+        res = minimize(
+            problem,
+            algorithm,
+            ('n_gen', 10),
+            callback=BestSoFarCallback(),
+            save_history=True
+        )
+        np.testing.assert_array_equal(
+            res.algorithm.callback.data["best"],
+            [e.opt.get("F").item() for e in res.history]
         )
 
 
