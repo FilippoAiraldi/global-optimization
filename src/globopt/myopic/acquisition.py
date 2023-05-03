@@ -48,11 +48,11 @@ def idw_variance(
     """
     V = W / W.sum(axis=0)
     sqdiff = np.square(ym.reshape(-1, 1) - y_hat.reshape(1, -1))  # np.subtract.outer
-    out = np.empty(y_hat.shape)
-    for i in range(len(out)):
-        out[i] = V[:, i].T @ sqdiff[:, i]
-    return np.sqrt(out)
-    # return np.sqrt(np.diag(V.T @ sqdiff))  # faster for small arrays
+    # out = np.empty_like(y_hat)
+    # for i in range(len(out)):
+    #     out[i] = V[:, i].T @ sqdiff[:, i]
+    # return np.sqrt(out)
+    return np.sqrt(np.diag(V.T @ sqdiff))  # faster for small arrays
 
 
 # no need to jit this function, it's already fast enough
