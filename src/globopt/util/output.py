@@ -37,9 +37,15 @@ class GlobalOptimizationOutput(SingleObjectiveOutput):
     def initialize(self, algorithm: Algorithm) -> None:
         super().initialize(algorithm)
         problem: Problem = algorithm.problem
-        ps = pareto_set_if_possible(problem)
-        self.x_opt = None if ps is None else np.reshape(ps, problem.n_var)
-        if self.x_opt is not None:
+        ps_ = pareto_set_if_possible(problem)
+        if ps_ is None:
+            self.x_opt = None
+        else:
+            ps: np.ndarray = np.atleast_2d(np.squeeze(ps_))
+            assert (
+                ps.ndim == 2 and ps.shape[1] == problem.n_var
+            ), "Pareto set must have shape `(n_points, n_var)`."
+            self.x_opt = ps
             self.columns.append(self.x_gap)
 
     def update(self, algorithm: Algorithm) -> None:
@@ -47,8 +53,8 @@ class GlobalOptimizationOutput(SingleObjectiveOutput):
         if self.x_opt is not None:
             opt = algorithm.opt[0]
             if opt.feas:
-                Xopt = opt.X.reshape(algorithm.problem.n_var)
-                self.x_gap.set(np.linalg.norm(Xopt - self.x_opt))
+                # compute distance of current best to pareto set and pick closest
+                self.x_gap.set(np.linalg.norm(opt.X - self.x_opt, axis=1).min())
 
 
 class PrefixedStream:

@@ -4,16 +4,16 @@ from copy import deepcopy
 from io import StringIO
 
 import numpy as np
-from pymoo.problems import get_problem
-from pymoo.util.normalization import ZeroToOneNormalization
 from pymoo.algorithms.soo.nonconvex.ga import GA
 from pymoo.optimize import minimize
+from pymoo.problems import get_problem
+from pymoo.util.normalization import ZeroToOneNormalization
 
 from globopt.util.benchmark import Adjiman
+from globopt.util.callback import BestSoFarCallback
 from globopt.util.normalization import NormalizedProblemWrapper, RangeNormalization
 from globopt.util.output import PrefixedStream
 from globopt.util.wrapper import Wrapper
-from globopt.util.callback import BestSoFarCallback
 
 
 class TestNormalization(unittest.TestCase):
@@ -107,13 +107,13 @@ class TestCallback(unittest.TestCase):
         res = minimize(
             problem,
             algorithm,
-            ('n_gen', 10),
+            ("n_gen", 10),
             callback=BestSoFarCallback(),
-            save_history=True
+            save_history=True,
         )
         np.testing.assert_array_equal(
             res.algorithm.callback.data["best"],
-            [e.opt.get("F").item() for e in res.history]
+            [e.opt.get("F").item() for e in res.history],
         )
 
 
