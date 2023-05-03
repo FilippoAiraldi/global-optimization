@@ -296,16 +296,9 @@ class Rosenbrock(Rosenbrock_original):
     def _evaluate(self, x: npt.NDArray[np.floating], out: dict, *_, **__) -> None:
         x_i = x[:, :-1]
         x_i_1 = x[:, 1:]
-        F_ = (100 * anp.square(x_i_1 - anp.square(x_i)) + anp.square(1 - x_i)).sum(
-            axis=-1
-        )
-
-        l = []
-        for i in range(x.shape[1] - 1):
-            val = 100 * (x[:, i + 1] - x[:, i] ** 2) ** 2 + (1 - x[:, i]) ** 2
-            l.append(val)
-        out["F"] = anp.sum(anp.column_stack(l), axis=1)
-        np.testing.assert_allclose(out["F"], F_)
+        out["F"] = (
+            100 * anp.square(x_i_1 - anp.square(x_i)) + anp.square(1 - x_i)
+        ).sum(axis=-1)
 
     def _calc_pareto_front(self) -> float:
         return ALMOSTZERO
@@ -319,6 +312,75 @@ class Rosenbrock8(Rosenbrock):
         super().__init__(8, *args, **kwargs)
 
 
+class Step2Function(Problem):
+    """Step 2 Function benchmark function as per [1].
+
+    References
+    ----------
+    [1] Jamil, M., Yang, X.-S.: A literature survey of benchmark functions for global
+        optimisation problems. Int. J. Math. Model. Numer. Optim. 4(2):150–194 (2013).
+    """
+
+    def __init__(
+        self,
+        n_var: int,
+        xl: Union[Number, npt.ArrayLike] = -3,
+        xu: Union[Number, npt.ArrayLike] = 3,
+    ) -> None:
+        super().__init__(n_var=n_var, n_obj=1, xl=xl, xu=xu, vtype=float)
+
+    def _evaluate(self, x: npt.NDArray[np.floating], out: dict, *_, **__) -> None:
+        out["F"] = np.square(np.floor(x + 0.5)).sum(axis=-1)
+
+    def _calc_pareto_front(self) -> float:
+        return ALMOSTZERO
+
+    def _calc_pareto_set(self) -> npt.NDArray[np.floating]:
+        return np.zeros(self.n_var)
+
+
+class Step2Function5(Step2Function):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(5, *args, **kwargs)
+
+
+class StyblinskiTang(Problem):
+    """Styblinski-Tang benchmark function as per [1, 2].
+
+    References
+    ----------
+    [1] Jamil, M., Yang, X.-S.: A literature survey of benchmark functions for global
+        optimisation problems. Int. J. Math. Model. Numer. Optim. 4(2):150–194 (2013).
+    [2] Surjanovic, S. & Bingham, D. (2013). Virtual Library of Simulation Experiments:
+        Test Functions and Datasets. Retrieved May 3, 2023, from
+        http://www.sfu.ca.tudelft.idm.oclc.org/~ssurjano.
+    """
+
+    def __init__(
+        self,
+        n_var: int,
+        xl: Union[Number, npt.ArrayLike] = -5,
+        xu: Union[Number, npt.ArrayLike] = 5,
+    ) -> None:
+        super().__init__(n_var=n_var, n_obj=1, xl=xl, xu=xu, vtype=float)
+
+    def _evaluate(self, x: npt.NDArray[np.floating], out: dict, *_, **__) -> None:
+        x_2 = anp.square(x)
+        x_4 = anp.square(x_2)
+        out["F"] = 0.5 * (x_4 - 16 * x_2 + 5 * x).sum(axis=-1)
+
+    def _calc_pareto_front(self) -> float:
+        return -39.16599 * self.n_var
+
+    def _calc_pareto_set(self) -> npt.NDArray[np.floating]:
+        return np.full(self.n_var, -2.903534)
+
+
+class StyblinskiTang5(StyblinskiTang):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(5, *args, **kwargs)
+
+
 """Dict of all the avaiable benchmark classes and their maximum evaluation number."""
 TESTS: dict[str, tuple[Type[Problem], int]] = {
     cls.__name__.lower(): (cls, max_evals)
@@ -329,7 +391,10 @@ TESTS: dict[str, tuple[Type[Problem], int]] = {
         (CamelSixHumps, 15),
         (Hartman3, 50),
         (Hartman6, 80),
+        (Himmelblau, 20),
         (Rosenbrock8, 80),
+        (Step2Function5, 25),
+        (StyblinskiTang5, 60),
     ]
 }
 
