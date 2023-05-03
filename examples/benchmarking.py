@@ -1,4 +1,5 @@
 import os
+import pickle
 from itertools import zip_longest
 
 os.environ["NUMBA_DISABLE_JIT"] = "1"  # no need for jit in this example
@@ -9,6 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 from joblib import Parallel, delayed
+from matplotlib.ticker import MaxNLocator
 from pymoo.algorithms.soo.nonconvex.pso import PSO
 from pymoo.core.problem import Problem
 from pymoo.optimize import minimize
@@ -66,19 +68,23 @@ def solve_problem(name: str, times: int) -> tuple[Problem, npt.NDArray[np.floati
 
 
 # run the benchmarking
+N = 100
 testnames = get_available_benchmark_tests()
-testnames = ["ackley"]
-f = lambda name: solve_problem(name, 3)
-results = Parallel(n_jobs=1, verbose=10)(delayed(f)(name) for name in testnames)
+results = Parallel(n_jobs=-1, verbose=10)(
+    delayed(solve_problem)(name, N) for name in testnames
+)
 
 # save the results to disk
 nowstr = datetime.now().strftime("%Y%m%d_%H%M%S")
-savemat(f"results_{nowstr}.mat", {n: out for n, (_, out) in zip(testnames, results)})
+savemat(f"bm_{nowstr}.mat", {n: out for n, (_, out) in zip(testnames, results)})
+with open(f"bm_{nowstr}.pkl", "wb") as f:
+    pickle.dump(results, f)
+
 
 # plot results
-n_rows = 3
+n_rows = 2
 n_cols = np.ceil(len(results) / n_rows).astype(int)
-_, axs = plt.subplots(n_cols, n_rows, constrained_layout=False)
+_, axs = plt.subplots(n_cols, n_rows, constrained_layout=True, figsize=(6.5, 7))
 axs = np.atleast_2d(axs)
 for ax, problem, out in zip_longest(axs.flat, *zip(*results)):
     if problem is None or out is None:
@@ -98,8 +104,9 @@ for ax, problem, out in zip_longest(axs.flat, *zip(*results)):
         ax.plot(evals, best, color=h.get_color(), lw=0.5)
         ax.fill_between(evals, worst, best, alpha=0.2, color=h.get_color(), lw=2)
         ax.plot(evals, fmin, "--", color="grey", zorder=-1000)
-        ax.set_title(problem.__class__.__name__.lower())
+        ax.set_title(problem.__class__.__name__.lower(), fontsize=11)
         ax.set_xlim(1, evals[-1])
+        ax.xaxis.set_major_locator(MaxNLocator(nbins=5, integer=True))
 for ax in axs[-1]:
     ax.set_xlabel("number of function evaluations")
 plt.show()
