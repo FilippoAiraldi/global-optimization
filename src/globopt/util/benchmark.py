@@ -20,7 +20,6 @@ from pymoo.problems.single import Rosenbrock as Rosenbrock_original
 
 from globopt.util.normalization import NormalizedProblemWrapper
 
-
 # in some problems do not return 0 as pareto front, as this produces a bug in which
 # f_gap is not computed
 ALMOSTZERO = float(np.finfo(np.float64).tiny)

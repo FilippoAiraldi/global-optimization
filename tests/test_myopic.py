@@ -77,7 +77,7 @@ class TestAlgorithm(unittest.TestCase):
             problem,
             algorithm,
             termination=("n_iter", 6),
-            verbose=True,
+            verbose=False,
             seed=1,
             save_history=True,
         )
