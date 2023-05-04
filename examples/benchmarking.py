@@ -1,6 +1,6 @@
 import os
 
-os.environ["NUMBA_DISABLE_JIT"] = "1"  # no need for jit in this example
+os.environ["NUMBA_DISABLE_JIT"] = "1"
 
 import pickle
 from datetime import datetime
