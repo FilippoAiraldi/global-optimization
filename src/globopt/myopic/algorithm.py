@@ -82,13 +82,6 @@ class GO(Algorithm):
         self.acquisition_fun_kwargs = acquisition_fun_kwargs or {}
         super().__init__(output=output or GlobalOptimizationOutput(), **kwargs)
 
-    def _setup(self, problem: Problem, **kwargs: Any) -> None:
-        # reset the regression model
-        super()._setup(problem, **kwargs)
-        for attr in self.regression.__dict__:
-            if attr.endswith("_") and not attr.endswith("__"):
-                del self.regression.__dict__[attr]
-
     def _initialize_infill(self) -> None:
         # initialize population
         super()._initialize_infill()
