@@ -17,8 +17,8 @@ from pymoo.optimize import minimize
 from pymoo.termination.default import DefaultSingleObjectiveTermination
 from scipy.io import savemat
 
+from globopt.core.benchmark import get_available_benchmark_tests, get_benchmark_test
 from globopt.myopic.algorithm import GO, RBFRegression
-from globopt.util.benchmark import get_available_benchmark_tests, get_benchmark_test
 from globopt.util.callback import BestSoFarCallback
 
 plt.style.use("bmh")

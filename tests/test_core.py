@@ -9,6 +9,7 @@ from parameterized import parameterized
 from scipy.io import loadmat
 from sklearn.utils.estimator_checks import check_estimator
 
+from globopt.core.benchmark import get_available_benchmark_tests, get_benchmark_test
 from globopt.core.regression import IDWRegression, RBFRegression
 
 RESULTS = loadmat(r"tests/data_test_core.mat")
@@ -51,6 +52,20 @@ class TestIDWandRBFRegression(unittest.TestCase):
         y_hat = np.asarray([mdl.predict(x) for mdl in mdls])
 
         np.testing.assert_allclose(y_hat, RESULTS["y_hat"])
+
+
+class TestBenchmark(unittest.TestCase):
+    @parameterized.expand((False, True))
+    def test__pareto_set_and_front(self, normalized: bool):
+        testnames = get_available_benchmark_tests()
+        for name in testnames:
+            pbl, _ = get_benchmark_test(name, normalize=normalized)
+            ps = pbl.pareto_set()
+            pf = pbl.pareto_front()
+            pf_actual = pbl.evaluate(ps)
+            np.testing.assert_allclose(
+                pf_actual.squeeze(), pf.squeeze(), rtol=1e-5, atol=1e-5
+            )
 
 
 if __name__ == "__main__":
