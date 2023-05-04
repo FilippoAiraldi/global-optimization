@@ -1,10 +1,10 @@
 import os
-import pickle
-from itertools import zip_longest
 
 os.environ["NUMBA_DISABLE_JIT"] = "1"  # no need for jit in this example
 
+import pickle
 from datetime import datetime
+from itertools import zip_longest
 
 import matplotlib.pyplot as plt
 import numpy as np

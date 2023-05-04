@@ -1,9 +1,14 @@
-"""Optimization benchmark problems (see [1]).
+"""
+Collection of popular tests for benchmarking optimization algorithms. These tests were
+implemented according to [1, 2].
 
 References
 ----------
 [1] Jamil, M., Yang, X.-S.: A literature survey of benchmark functions for global
     optimisation problems. Int. J. Math. Model. Numer. Optim. 4(2):150–194 (2013).
+[2] Surjanovic, S. & Bingham, D. (2013). Virtual Library of Simulation Experiments: Test
+    Functions and Datasets. Retrieved May 3, 2023, from
+    http://www.sfu.ca.tudelft.idm.oclc.org/~ssurjano.
 """
 
 
