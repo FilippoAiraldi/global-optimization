@@ -1,3 +1,7 @@
+import os
+
+os.environ["NUMBA_DISABLE_JIT"] = "1"  # disable jit for testing
+
 import unittest
 
 import numpy as np
@@ -7,7 +11,7 @@ from sklearn.utils.estimator_checks import check_estimator
 
 from globopt.core.regression import IDWRegression, RBFRegression
 
-RESULTS = loadmat(r"tests/data_test_regression.mat")
+RESULTS = loadmat(r"tests/data_test_core.mat")
 
 
 def f(x):
