@@ -62,7 +62,7 @@ class IdwRegression(RegressorMixin, BaseEstimator):
         """
         self._validate_params()
         X, y = self._validate_data(X, y, y_numeric=True)
-        self.X_, self.y_ = idw_fit(X, y)
+        self.X_, self.y_ = idw_fit(X, y)  # type: ignore[arg-type]
         return self
 
     def partial_fit(self, X: npt.ArrayLike, y: npt.ArrayLike) -> Self:
@@ -98,7 +98,9 @@ class IdwRegression(RegressorMixin, BaseEstimator):
         """
         check_is_fitted(self, attributes=("X_", "y_"))
         X = self._validate_data(X, reset=False)
-        return idw_predict((self.X_, self.y_), X, self.exp_weighting)
+        return idw_predict(
+            (self.X_, self.y_), X, self.exp_weighting  # type: ignore[arg-type]
+        )
 
 
 class RbfRegression(RegressorMixin, BaseEstimator):
@@ -142,7 +144,9 @@ class RbfRegression(RegressorMixin, BaseEstimator):
         self._validate_params()
         X, y = self._validate_data(X, y, y_numeric=True)
         y = y.astype(float)  # type: ignore[union-attr]
-        self.X_, self.y_, self.coef_, self.Minv_ = rbf_fit(X, y, self.kernel, self.eps)
+        self.X_, self.y_, self.coef_, self.Minv_ = rbf_fit(
+            X, y, self.kernel, self.eps  # type: ignore[arg-type]
+        )
         return self
 
     def partial_fit(self, X: npt.ArrayLike, y: npt.ArrayLike) -> Self:
@@ -161,8 +165,9 @@ class RbfRegression(RegressorMixin, BaseEstimator):
         X, y = self._validate_data(X, y, y_numeric=True, reset=False)
         check_is_fitted(self, attributes=("X_", "y_", "coef_", "Minv_"))
         y = y.astype(float)  # type: ignore[union-attr]
+        fitresult = (self.X_, self.y_, self.coef_, self.Minv_)
         self.X_, self.y_, self.coef_, self.Minv_ = rbf_partial_fit(
-            (self.X_, self.y_, self.coef_, self.Minv_), X, y, self.kernel, self.eps
+            fitresult, X, y, self.kernel, self.eps  # type: ignore[arg-type]
         )
         return self
 
@@ -181,6 +186,7 @@ class RbfRegression(RegressorMixin, BaseEstimator):
         """
         check_is_fitted(self, attributes=("X_", "coef_"))
         X = self._validate_data(X, reset=False)
+        fitresult = (self.X_, self.y_, self.coef_, self.Minv_)
         return rbf_predict(
-            (self.X_, self.y_, self.coef_, self.Minv_), X, self.kernel, self.eps
+            fitresult, X, self.kernel, self.eps  # type: ignore[arg-type]
         )

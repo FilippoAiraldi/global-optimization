@@ -9,6 +9,7 @@ References
 """
 
 import os
+from typing import Union
 
 os.environ["NUMBA_DISABLE_JIT"] = "1"  # no need for jit in this example
 
@@ -33,7 +34,7 @@ X = np.array([[-2.61, -1.92, -0.63, 0.38, 2]]).T
 y = f(X).flatten()
 
 # create regressors
-mdls = [
+mdls: list[Union[IdwRegression, RbfRegression]] = [
     IdwRegression(),
     RbfRegression("inversequadratic", 0.5),
     RbfRegression("thinplatespline", 0.01),

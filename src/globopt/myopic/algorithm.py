@@ -38,7 +38,7 @@ class GO(Algorithm):
 
     def __init__(
         self,
-        regression: Union[IdwRegression, RbfRegression] = None,
+        regression: Union[None, IdwRegression, RbfRegression] = None,
         sampling: Sampling = None,
         init_points: Union[int, npt.ArrayLike] = 5,
         acquisition_min_algorithm: Algorithm = None,
