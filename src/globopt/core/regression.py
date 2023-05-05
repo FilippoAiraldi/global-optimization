@@ -219,10 +219,10 @@ class RbfRegression(RegressorMixin, BaseEstimator):
         y = y.astype(float)  # type: ignore[union-attr]
 
         # create matrix of kernel evaluations
-        fun = RBF_FUNCS[self.kernel]
+        fun: Callable[[Any, float], np.ndarray] = RBF_FUNCS[self.kernel]
         d2 = pdist(X, "sqeuclidean")  # returns all single distances, not a matrix
         M = squareform(fun(d2, self.eps))
-        M[np.diag_indices_from(M)] = fun(0, self.eps)  # type: ignore[arg-type]
+        M[np.diag_indices_from(M)] = fun(0, self.eps)
 
         # compute coefficients via SVD and inverse of M (useful for partial_fit)
         self.coef_, self.Minv_ = _linsolve_via_svd(M, y)
@@ -252,11 +252,11 @@ class RbfRegression(RegressorMixin, BaseEstimator):
 
         # create matrix of kernel evaluations of new elements w.r.t. training data and
         # themselves
-        fun = RBF_FUNCS[self.kernel]
+        fun: Callable[[Any, float], np.ndarray] = RBF_FUNCS[self.kernel]
         Phi = fun(cdist(self.X_, X, "sqeuclidean"), self.eps)
         phi = pdist(X, "sqeuclidean")  # returns all single distances, not a matrix
         phi = squareform(fun(phi, self.eps))
-        phi[np.diag_indices_from(phi)] = fun(0, self.eps)  # type: ignore[arg-type]
+        phi[np.diag_indices_from(phi)] = fun(0, self.eps)
 
         # update inverse of M via blockwise inversion and coefficients
         y_new, self.coef_, self.Minv_ = _blockwise_inversion(
