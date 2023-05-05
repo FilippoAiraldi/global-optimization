@@ -42,7 +42,7 @@ def solve_problem(name: str, times: int) -> tuple[Problem, npt.NDArray[np.floati
     algorithm = GO(
         regression=RBFRegression(eps=1.0775 / n_var),
         init_points=2 * n_var,
-        acquisition_min_algorithm=PSO(pop_size=20),
+        acquisition_min_algorithm=PSO(pop_size=10 * n_var),
         acquisition_min_kwargs={
             "termination": DefaultSingleObjectiveTermination(
                 ftol=1e-4, n_max_gen=2000, period=10
@@ -52,7 +52,7 @@ def solve_problem(name: str, times: int) -> tuple[Problem, npt.NDArray[np.floati
     )
 
     # solve the problem multiple times with different seeds
-    seed = fnv1a(name) % 2**32
+    seed = fnv1a(name)
     out = np.empty((times, max_n_iter))
     for i in range(times):
         res = minimize(
@@ -61,7 +61,7 @@ def solve_problem(name: str, times: int) -> tuple[Problem, npt.NDArray[np.floati
             termination=("n_iter", max_n_iter),
             callback=BestSoFarCallback(),
             verbose=False,
-            seed=seed + i * 2**7,
+            seed=(seed + i * 2**7) % 2**32,
         )
         out[i] = res.algorithm.callback.data["best"]
     return problem, out
