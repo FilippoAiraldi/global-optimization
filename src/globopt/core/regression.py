@@ -197,7 +197,7 @@ class RbfRegression(RegressorMixin, BaseEstimator):
             'thinplatespline', 'inversemultiquadric' }
             The type of RBF kernel to use.
         eps : float, optional
-            Distance-scaling parameter for the RBF kernel, by default `1e-1`.
+            Distance-scaling parameter for the RBF kernel, by default `1.0775`.
         """
         RegressorMixin.__init__(self)
         BaseEstimator.__init__(self)
