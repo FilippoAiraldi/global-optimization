@@ -22,6 +22,8 @@ from typing_extensions import Self
 
 from globopt.core.functional_regression import (
     RBF_FUNCS,
+    IdwFitResult,
+    RbfFitResult,
     RbfKernel,
     idw_fit,
     idw_partial_fit,
@@ -49,6 +51,12 @@ class IdwRegression(RegressorMixin, BaseEstimator):
         RegressorMixin.__init__(self)
         BaseEstimator.__init__(self)
         self.exp_weighting = exp_weighting
+
+    @property
+    def fitresult(self) -> IdwFitResult:
+        """The fit result of the IDW model."""
+        check_is_fitted(self, attributes=("X_", "y_"))
+        return self.X_, self.y_
 
     def fit(self, X: npt.ArrayLike, y: npt.ArrayLike) -> Self:
         """Fits the model to the data.
@@ -78,9 +86,9 @@ class IdwRegression(RegressorMixin, BaseEstimator):
         if not hasattr(self, "X_"):
             return self.fit(X, y)
 
+        fr = self.fitresult
         X, y = self._validate_data(X, y, y_numeric=True, reset=False)
-        check_is_fitted(self, attributes=("X_", "y_"))
-        self.X_, self.y_ = idw_partial_fit((self.X_, self.y_), X, y)
+        self.X_, self.y_ = idw_partial_fit(fr, X, y)
         return self
 
     def predict(self, X: npt.ArrayLike) -> npt.NDArray[np.floating]:
@@ -96,11 +104,9 @@ class IdwRegression(RegressorMixin, BaseEstimator):
         y: array of floats
             Prediction of `y`.
         """
-        check_is_fitted(self, attributes=("X_", "y_"))
+        fr = self.fitresult
         X = self._validate_data(X, reset=False)
-        return idw_predict(
-            (self.X_, self.y_), X, self.exp_weighting  # type: ignore[arg-type]
-        )
+        return idw_predict(fr, X, self.exp_weighting)  # type: ignore[arg-type]
 
 
 class RbfRegression(RegressorMixin, BaseEstimator):
@@ -130,6 +136,12 @@ class RbfRegression(RegressorMixin, BaseEstimator):
         BaseEstimator.__init__(self)
         self.kernel = kernel
         self.eps = eps
+
+    @property
+    def fitresult(self) -> RbfFitResult:
+        """The fit result of the RBF model."""
+        check_is_fitted(self, attributes=("X_", "y_", "coef_", "Minv_"))
+        return self.X_, self.y_, self.coef_, self.Minv_
 
     def fit(self, X: npt.ArrayLike, y: npt.ArrayLike) -> Self:
         """Fits the model to the data.
@@ -162,12 +174,11 @@ class RbfRegression(RegressorMixin, BaseEstimator):
         if not hasattr(self, "X_"):
             return self.fit(X, y)
 
+        fr = self.fitresult
         X, y = self._validate_data(X, y, y_numeric=True, reset=False)
-        check_is_fitted(self, attributes=("X_", "y_", "coef_", "Minv_"))
         y = y.astype(float)  # type: ignore[union-attr]
-        fitresult = (self.X_, self.y_, self.coef_, self.Minv_)
         self.X_, self.y_, self.coef_, self.Minv_ = rbf_partial_fit(
-            fitresult, X, y, self.kernel, self.eps  # type: ignore[arg-type]
+            fr, X, y, self.kernel, self.eps  # type: ignore[arg-type]
         )
         return self
 
@@ -184,9 +195,6 @@ class RbfRegression(RegressorMixin, BaseEstimator):
         y: array of floats
             Prediction of `y`.
         """
-        check_is_fitted(self, attributes=("X_", "coef_"))
+        fr = self.fitresult
         X = self._validate_data(X, reset=False)
-        fitresult = (self.X_, self.y_, self.coef_, self.Minv_)
-        return rbf_predict(
-            fitresult, X, self.kernel, self.eps  # type: ignore[arg-type]
-        )
+        return rbf_predict(fr, X, self.kernel, self.eps)  # type: ignore[arg-type]
