@@ -6,24 +6,13 @@ For a object-oriented approach, see `globopt.core.regression`.
 """
 
 
-from typing import Any, Callable, Union
+from typing import Callable, Literal, Union
 
 import numpy as np
 import numpy.typing as npt
 from numba import njit
+from scipy.spatial.distance import cdist, pdist, squareform
 from typing_extensions import TypeAlias
-
-from globopt.core.regression import (
-    RBF_FUNCS,
-    IdwRegression,
-    RbfRegression,
-    _blockwise_inversion,
-    _linsolve_via_svd,
-    cdist,
-    idw_weighting,
-    pdist,
-    squareform,
-)
 
 IdwFitResult: TypeAlias = tuple[npt.NDArray[np.floating], npt.NDArray[np.floating]]
 RbfFitResult: TypeAlias = tuple[
@@ -32,28 +21,45 @@ RbfFitResult: TypeAlias = tuple[
     npt.NDArray[np.floating],
     npt.NDArray[np.floating],
 ]
+RbfKernel: TypeAlias = Literal[
+    "inversequadratic",
+    "multiquadric",
+    "linear",
+    "gaussian",
+    "thinplatespline",
+    "inversemultiquadric",
+]
 
 
-def get_fitresult(
-    mdl: Union[IdwRegression, RbfRegression]
-) -> Union[IdwFitResult, RbfFitResult]:
-    """Extracts the fit result from a regression model.
+"""Small value to avoid division by zero."""
+DELTA = 1e-9
+
+
+# no jit here, it's already fast enough
+def idw_weighting(
+    X: npt.ArrayLike, Xm: npt.ArrayLike, exp_weighting: bool = False
+) -> npt.NDArray[np.floating]:
+    """Computes the IDW weighting function.
 
     Parameters
     ----------
-    mdl : IdwRegression or RbfRegression]
-        The (partially) fitted model to get the result from.
+    X : array_like
+        Array of `x` for which to compute the weighting function.
+    Xm : array_like
+        Array of observed query points.
+    exp_weighting : bool, optional
+        Whether the weighting function should decay exponentially, by default `False`.
 
     Returns
     -------
-    IdwFitResult or RbfFitResult
-        The result of the IDW or RBF regression.
+    array
+        The weighiing function computed at `X` against dataset `Xm`.
     """
-    return (
-        (mdl.X_, mdl.y_)
-        if isinstance(mdl, IdwRegression)
-        else (mdl.X_, mdl.y_, mdl.coef_, mdl.Minv_)
-    )
+    d2 = cdist(Xm, X, "sqeuclidean")
+    W = 1 / (d2 + DELTA)
+    if exp_weighting:
+        W *= np.exp(-W)
+    return W
 
 
 def idw_fit(X: npt.NDArray[np.floating], y: npt.NDArray[np.floating]) -> IdwFitResult:
@@ -143,16 +149,54 @@ def idw_predict(
     but no input validation is performed here.
     """
     X_, y_ = fitresult
-    W = idw_weighting(X, X_, exp_weighting)
+    W = idw_weighting(X, X_, exp_weighting)  # create matrix of inverse-distance weights
     v = W / W.sum(axis=0)
-    return v.T @ y_
+    return v.T @ y_  # predict as weighted average based on normalized distance
+
+
+"""RBF kernels."""
+RBF_FUNCS: dict[
+    RbfKernel, Callable[[Union[float, np.ndarray], float], Union[float, np.ndarray]]
+] = {
+    "inversequadratic": lambda d2, eps: 1 / (1 + eps**2 * d2),
+    "multiquadric": lambda d2, eps: np.sqrt(1 + eps**2 * d2),
+    "linear": lambda d2, eps: eps * np.sqrt(d2),
+    "gaussian": lambda d2, eps: np.exp(-(eps**2) * d2),
+    "thinplatespline": lambda d2, eps: eps**2 * d2 * np.log(eps * d2 + DELTA),
+    "inversemultiquadric": lambda d2, eps: 1 / np.sqrt(1 + eps**2 * d2),
+}
+
+
+@njit
+def _linsolve_via_svd(M, y):
+    """Internal jit function to solve linear system via SVD."""
+    U, S, VT = np.linalg.svd(M)
+    Sinv = np.diag(1 / S)
+    Minv = VT.T @ Sinv @ U.T
+    coef = Minv @ y
+    return coef, Minv
+
+
+@njit
+def _blockwise_inversion(ym, y, Minv, phi, Phi):
+    """Internal jit function to perform blockwise inversion."""
+    L = Minv @ Phi
+    c = np.linalg.inv(phi - Phi.T @ L)
+    B = -L @ c
+    A = Minv - B @ L.T
+    Minv_new = np.vstack((np.hstack((A, B)), np.hstack((B.T, c))))
+
+    # update coefficients
+    y_new = np.concatenate((ym, y), axis=0)
+    coef_new = Minv_new @ y_new
+    return y_new, coef_new, Minv_new
 
 
 # cannot jit due to pdist
 def rbf_fit(
     X: npt.NDArray[np.floating],
     y: npt.NDArray[np.floating],
-    kernel: str = "inversequadratic",
+    kernel: RbfKernel = "inversequadratic",
     eps: float = 1.0775,
 ) -> RbfFitResult:
     """Fits an RBF model to the data.
@@ -182,10 +226,13 @@ def rbf_fit(
     ```
     but no input validation is performed here.
     """
+    # create matrix of kernel evaluations
     fun = RBF_FUNCS[kernel]
-    d2 = pdist(X, "sqeuclidean")
+    d2 = pdist(X, "sqeuclidean")  # returns all single distances, not a matrix
     M = squareform(fun(d2, eps))
     M[np.diag_indices_from(M)] = fun(0, eps)
+
+    # compute coefficients via SVD and inverse of M (useful for partial_fit)
     coef_, Minv_ = _linsolve_via_svd(M, y)
     return (X, y, coef_, Minv_)
 
@@ -195,7 +242,7 @@ def rbf_partial_fit(
     fitresult: RbfFitResult,
     X: npt.NDArray[np.floating],
     y: npt.NDArray[np.floating],
-    kernel: str = "inversequadratic",
+    kernel: RbfKernel = "inversequadratic",
     eps: float = 1.0775,
 ) -> RbfFitResult:
     """Fits an already partially fitted RBF model to the additional data.
@@ -228,11 +275,15 @@ def rbf_partial_fit(
     but no input validation is performed here.
     """
     X_, y_, _, Minv_ = fitresult
-    fun: Callable[[Any, float], np.ndarray] = RBF_FUNCS[kernel]
+
+    # create matrix of kernel evals of new elements w.r.t. training data and themselves
+    fun = RBF_FUNCS[kernel]
     Phi = fun(cdist(X_, X, "sqeuclidean"), eps)
     phi = pdist(X, "sqeuclidean")
     phi = squareform(fun(phi, eps))
     phi[np.diag_indices_from(phi)] = fun(0, eps)
+
+    # update inverse of M via blockwise inversion and coefficients
     y_new, coef_new, Minv_new = _blockwise_inversion(y_, y, Minv_, phi, Phi)
     X_new = np.concatenate((X_, X), axis=0)
     return (X_new, y_new, coef_new, Minv_new)
@@ -242,7 +293,7 @@ def rbf_partial_fit(
 def rbf_predict(
     fitresult: RbfFitResult,
     X: npt.NDArray[np.floating],
-    kernel: str = "inversequadratic",
+    kernel: RbfKernel = "inversequadratic",
     eps: float = 1.0775,
 ) -> npt.NDArray[np.floating]:
     """Predicts target values according to the IDW model.
@@ -273,6 +324,10 @@ def rbf_predict(
     but no input validation is performed here.
     """
     X_, coef_ = fitresult[0], fitresult[2]
+
+    # create matrix of kernel evaluations
     d2 = cdist(X_, X, "sqeuclidean")
     M = RBF_FUNCS[kernel](d2, eps)
-    return M.T @ coef_
+
+    # predict as linear combination
+    return M.T @ coef_  # type: ignore[union-attr]

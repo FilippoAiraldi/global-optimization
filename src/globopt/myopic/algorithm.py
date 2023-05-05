@@ -25,7 +25,8 @@ from pymoo.optimize import minimize
 from pymoo.problems.functional import FunctionalProblem
 from pymoo.util.display.output import Output
 
-from globopt.core.regression import DELTA, IdwRegression, RbfRegression
+from globopt.core.functional_regression import DELTA
+from globopt.core.regression import IdwRegression, RbfRegression
 from globopt.myopic.acquisition import acquisition
 from globopt.util.output import GlobalOptimizationOutput, PrefixedStream
 

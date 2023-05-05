@@ -21,7 +21,7 @@ import numpy as np
 import numpy.typing as npt
 from numba import njit
 
-from globopt.core.regression import idw_weighting
+from globopt.core.functional_regression import idw_weighting
 
 
 @njit
