@@ -10,6 +10,14 @@ from scipy.io import loadmat
 from sklearn.utils.estimator_checks import check_estimator
 
 from globopt.core.benchmark import get_available_benchmark_tests, get_benchmark_test
+from globopt.core.functional_regression import (
+    idw_fit,
+    idw_partial_fit,
+    idw_predict,
+    rbf_fit,
+    rbf_partial_fit,
+    rbf_predict,
+)
 from globopt.core.regression import IdwRegression, RbfRegression
 
 RESULTS = loadmat(r"tests/data_test_core.mat")
@@ -50,6 +58,34 @@ class TestRegression(unittest.TestCase):
             ]
         x = np.linspace(-3, 3, 100).reshape(-1, 1)
         y_hat = np.asarray([mdl.predict(x) for mdl in mdls])
+
+        np.testing.assert_allclose(y_hat, RESULTS["y_hat"])
+
+
+class TestFunctionalRegression(unittest.TestCase):
+    def test__fit_and_partial_fit(self) -> None:
+        X = np.array([[-2.61, -1.92, -0.63, 0.38, 2]]).T
+        y = f(X).flatten()
+        Xs, ys = np.array_split(X, 3), np.array_split(y, 3)
+
+        fr = [
+            idw_fit(Xs[0], ys[0]),
+            rbf_fit(Xs[0], ys[0], "inversequadratic", 0.5),
+            rbf_fit(Xs[0], ys[0], "thinplatespline", 0.01),
+        ]
+        for i in range(1, len(Xs)):
+            fr[0] = idw_partial_fit(fr[0], Xs[i], ys[i])
+            fr[1] = rbf_partial_fit(fr[1], Xs[i], ys[i], "inversequadratic", 0.5)
+            fr[2] = rbf_partial_fit(fr[2], Xs[i], ys[i], "thinplatespline", 0.01)
+
+        x = np.linspace(-3, 3, 100).reshape(-1, 1)
+        y_hat = np.asarray(
+            (
+                idw_predict(fr[0], x),
+                rbf_predict(fr[1], x, "inversequadratic", 0.5),
+                rbf_predict(fr[2], x, "thinplatespline", 0.01),
+            )
+        )
 
         np.testing.assert_allclose(y_hat, RESULTS["y_hat"])
 
