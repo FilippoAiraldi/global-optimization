@@ -58,7 +58,7 @@ def idw_weighting(
     d2 = cdist(Xm, X, "sqeuclidean")
     W = 1 / (d2 + DELTA)
     if exp_weighting:
-        W *= np.exp(-W)
+        W *= np.exp(-d2)
     return W
 
 
