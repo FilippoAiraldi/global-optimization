@@ -117,7 +117,7 @@ def idw_partial_fit(
     but no input validation is performed here.
     """
     X_, y_ = fitresult
-    return (np.concatenate((X_, X), axis=0), np.concatenate((y_, y), axis=0))
+    return np.concatenate((X_, X), axis=0), np.concatenate((y_, y), axis=0)
 
 
 # cannot jit due to idw_weighting's cdist
@@ -234,7 +234,7 @@ def rbf_fit(
 
     # compute coefficients via SVD and inverse of M (useful for partial_fit)
     coef_, Minv_ = _linsolve_via_svd(M, y)
-    return (X, y, coef_, Minv_)
+    return X, y, coef_, Minv_
 
 
 # cannot jit due to cdist and pdist
@@ -286,7 +286,7 @@ def rbf_partial_fit(
     # update inverse of M via blockwise inversion and coefficients
     y_new, coef_new, Minv_new = _blockwise_inversion(y_, y, Minv_, phi, Phi)
     X_new = np.concatenate((X_, X), axis=0)
-    return (X_new, y_new, coef_new, Minv_new)
+    return X_new, y_new, coef_new, Minv_new
 
 
 # cannot jit due to cdist
