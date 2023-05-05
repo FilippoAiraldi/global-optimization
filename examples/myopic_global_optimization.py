@@ -57,12 +57,12 @@ class Simple1DProblem(Problem):
 
     def _calc_pareto_set(self) -> float:
         """Returns the global minimizer of the problem."""
-        return self.normalization.forward(-0.959769)
+        return self.normalization.forward(-0.959769).item()
 
 
 # instantiate problem and create starting training data
 problem = Simple1DProblem(normalized=False)
-x0 = [-2.62, -1.2, 0.14, 1.1, 2.82]
+x0 = problem.normalization.forward([-2.62, -1.2, 0.14, 1.1, 2.82])
 
 # instantiate algorithm and then run the optimization
 algorithm = GO(
