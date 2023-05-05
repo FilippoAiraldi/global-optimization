@@ -10,7 +10,7 @@ from scipy.io import loadmat
 from sklearn.utils.estimator_checks import check_estimator
 
 from globopt.core.benchmark import get_available_benchmark_tests, get_benchmark_test
-from globopt.core.regression import IDWRegression, RBFRegression
+from globopt.core.regression import IdwRegression, RbfRegression
 
 RESULTS = loadmat(r"tests/data_test_core.mat")
 
@@ -23,19 +23,19 @@ def f(x):
     )
 
 
-class TestIDWandRBFRegression(unittest.TestCase):
+class TestRegression(unittest.TestCase):
     def test__with_sklearn_check_estimator(self) -> None:
-        check_estimator(IDWRegression())
-        check_estimator(RBFRegression())
+        check_estimator(IdwRegression())
+        check_estimator(RbfRegression())
 
     @parameterized.expand([(False,), (True,)])
     def test__fit_and_partial_fit(self, use_partial: bool) -> None:
         X = np.array([[-2.61, -1.92, -0.63, 0.38, 2]]).T
         y = f(X).flatten()
         mdls = [
-            IDWRegression(),
-            RBFRegression("inversequadratic", 0.5),
-            RBFRegression("thinplatespline", 0.01),
+            IdwRegression(),
+            RbfRegression("inversequadratic", 0.5),
+            RbfRegression("thinplatespline", 0.01),
         ]
 
         if not use_partial:

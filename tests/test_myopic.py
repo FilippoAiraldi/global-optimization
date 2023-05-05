@@ -11,7 +11,7 @@ from pymoo.core.problem import Problem
 from pymoo.optimize import minimize
 from scipy.io import loadmat
 
-from globopt.core.regression import RBFRegression
+from globopt.core.regression import RbfRegression
 from globopt.myopic.acquisition import (
     acquisition,
     idw_distance,
@@ -51,7 +51,7 @@ class TestAcquisition(unittest.TestCase):
     def test_acquisition_function__returns_correct_values(self):
         X = np.array([[-2.61, -1.92, -0.63, 0.38, 2]]).T
         y = f(X).flatten()
-        mdl = RBFRegression("thinplatespline", 0.01)
+        mdl = RbfRegression("thinplatespline", 0.01)
         mdl.fit(X, y)
 
         x = np.linspace(-3, 3, 1000).reshape(-1, 1)
@@ -70,7 +70,7 @@ class TestAlgorithm(unittest.TestCase):
     def test__returns_correct_result(self):
         problem = Simple1DProblem()
         x0 = [-2.62, -1.2, 0.14, 1.1, 2.82]
-        regression = RBFRegression("thinplatespline", 0.01)
+        regression = RbfRegression("thinplatespline", 0.01)
         algorithm = GO(
             regression=regression,
             init_points=x0,

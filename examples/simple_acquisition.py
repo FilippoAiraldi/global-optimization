@@ -19,7 +19,7 @@ from pymoo.algorithms.soo.nonconvex.pso import PSO
 from pymoo.optimize import minimize
 from pymoo.problems.functional import FunctionalProblem
 
-from globopt.core.regression import RBFRegression
+from globopt.core.regression import RbfRegression
 from globopt.myopic.acquisition import (
     acquisition,
     idw_distance,
@@ -43,7 +43,7 @@ X = np.array([[-2.61, -1.92, -0.63, 0.38, 2]]).T
 y = f(X).flatten()
 
 # create regressor and fit it
-mdl = RBFRegression("thinplatespline", 0.01)
+mdl = RbfRegression("thinplatespline", 0.01)
 mdl.fit(X, y)
 
 # predict values over all domain via fitted model

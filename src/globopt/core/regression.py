@@ -53,7 +53,7 @@ def idw_weighting(
     return W
 
 
-class IDWRegression(RegressorMixin, BaseEstimator):
+class IdwRegression(RegressorMixin, BaseEstimator):
     """Inverse Distance Weighting regression."""
 
     _parameter_constraints: dict[str, Any] = {"exp_weighting": ["boolean"]}
@@ -169,7 +169,7 @@ def _blockwise_inversion(ym, y, Minv, phi, Phi):
     return y_new, coef_new, Minv_new
 
 
-class RBFRegression(RegressorMixin, BaseEstimator):
+class RbfRegression(RegressorMixin, BaseEstimator):
     """Radial Basis Function regression."""
 
     _parameter_constraints: dict[str, Any] = {

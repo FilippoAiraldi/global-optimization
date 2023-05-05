@@ -23,7 +23,7 @@ from pymoo.core.problem import Problem
 from pymoo.optimize import minimize
 from pymoo.util.normalization import NoNormalization
 
-from globopt.myopic.algorithm import GO, RBFRegression, acquisition
+from globopt.myopic.algorithm import GO, RbfRegression, acquisition
 from globopt.util.normalization import RangeNormalization
 
 plt.style.use("bmh")
@@ -66,7 +66,7 @@ x0 = [-2.62, -1.2, 0.14, 1.1, 2.82]
 
 # instantiate algorithm and then run the optimization
 algorithm = GO(
-    regression=RBFRegression("thinplatespline", 0.01),
+    regression=RbfRegression("thinplatespline", 0.01),
     init_points=x0,
     acquisition_min_kwargs={"verbose": True},
     acquisition_fun_kwargs={"c1": 1, "c2": 0.5},

@@ -25,7 +25,7 @@ from pymoo.optimize import minimize
 from pymoo.problems.functional import FunctionalProblem
 from pymoo.util.display.output import Output
 
-from globopt.core.regression import DELTA, IDWRegression, RBFRegression
+from globopt.core.regression import DELTA, IdwRegression, RbfRegression
 from globopt.myopic.acquisition import acquisition
 from globopt.util.output import GlobalOptimizationOutput, PrefixedStream
 
@@ -37,7 +37,7 @@ class GO(Algorithm):
 
     def __init__(
         self,
-        regression: Union[IDWRegression, RBFRegression] = None,
+        regression: Union[IdwRegression, RbfRegression] = None,
         sampling: Sampling = None,
         init_points: Union[int, npt.ArrayLike] = 5,
         acquisition_min_algorithm: Algorithm = None,
@@ -50,8 +50,8 @@ class GO(Algorithm):
 
         Parameters
         ----------
-        regression : IDWRegression or RBFRegression], optional
-            The regression model to use. If not specified, `IDWRegression` is used.
+        regression : IdwRegression or RbfRegression], optional
+            The regression model to use. If not specified, `IdwRegression` is used.
         sampling : Sampling, optional
             Sampling strategy to draw initial points, in case `init_points` is an
             integer. By default, `LatinHypercubeSampling` is used.
@@ -69,7 +69,7 @@ class GO(Algorithm):
             `verbose=True`. By default, `GlobalOptimizationOutput`.
         """
         if regression is None:
-            regression = IDWRegression()
+            regression = IdwRegression()
         self.regression = regression
         if sampling is None:
             sampling = LatinHypercubeSampling()

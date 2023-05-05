@@ -15,7 +15,7 @@ os.environ["NUMBA_DISABLE_JIT"] = "1"  # no need for jit in this example
 import matplotlib.pyplot as plt
 import numpy as np
 
-from globopt.core.regression import IDWRegression, RBFRegression
+from globopt.core.regression import IdwRegression, RbfRegression
 
 plt.style.use("bmh")
 
@@ -34,9 +34,9 @@ y = f(X).flatten()
 
 # create regressors
 mdls = [
-    IDWRegression(),
-    RBFRegression("inversequadratic", 0.5),
-    RBFRegression("thinplatespline", 0.01),
+    IdwRegression(),
+    RbfRegression("inversequadratic", 0.5),
+    RbfRegression("thinplatespline", 0.01),
 ]
 
 # fit models to data points - with partial_fit
