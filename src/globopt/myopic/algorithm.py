@@ -83,8 +83,17 @@ class GO(Algorithm):
         self.acquisition_fun_kwargs = acquisition_fun_kwargs or {}
         super().__init__(output=output or GlobalOptimizationOutput(), **kwargs)
 
+    def _setup(self, problem: Problem, **kwargs: Any) -> None:
+        """Makes sure the algorithm is set up correctly."""
+        super()._setup(problem, **kwargs)
+        self.acquisition_fun_kwargs["exp_weighting"] = getattr(
+            self.regression, "exp_weighting", False
+        )
+        self.acquisition_min_kwargs["seed"] = None  # would set seed globally (bad)
+        self.acquisition_min_kwargs["copy_algorithm"] = True
+
     def _initialize_infill(self) -> None:
-        # initialize population
+        """Initialize population (by sampling, if not provided)."""
         super()._initialize_infill()
         problem: Problem = self.problem  # type: ignore[annotation-unchecked]
         init_points = self.init_points
@@ -101,14 +110,16 @@ class GO(Algorithm):
         return Population.new(X=np.reshape(init_points, (-1, problem.n_var)))
 
     def _initialize_advance(self, infills: Population, **kwargs) -> None:
-        # fit regression model to initial data
+        """Fits the regression model to initial data."""
         super()._initialize_advance(infills, **kwargs)
         X, y = infills.get("X", "F")
         self.regression.fit(X, y.reshape(-1))
 
     def _infill(self) -> Population:
-        # create offspring by suggesting new point to evaluate by minimizing acquisition
+        """Creates one offspring (new point to evaluate) by minimizing acquisition."""
         super()._infill()
+
+        # define acquisition function problem
         X, y = self.pop.get("X", "F")
         dym = y.max() - y.min()  # span of observations
         mdl = self.regression
@@ -123,28 +134,24 @@ class GO(Algorithm):
             elementwise=False,  # enables vectorized evaluation of acquisition function
         )
 
-        # do not set the seed, otherwise seed is globally set for all rng operations
-        kwargs = self.acquisition_min_kwargs.copy()
-        kwargs["seed"] = None
-        kwargs["copy_algorithm"] = True
-
         # solve the acquisition minimization problem
         with PrefixedStream.prefixed_print("- - - - "):
-            res = minimize(acq_problem, self.acquisition_min_algorithm, **kwargs)
+            res = minimize(
+                acq_problem,
+                self.acquisition_min_algorithm,
+                **self.acquisition_min_kwargs,
+            )
         self.acquisition_min_res = res
 
         # return population with the new point to evaluate merged as last
         xnew = res.X.reshape(1, problem.n_var)
         return Population.merge(self.pop, Population.new(X=xnew))
 
-    def _advance(self, infills: Population = None, **kwargs: Any) -> Optional[bool]:
-        # add new offspring to the regression model
+    def _advance(self, infills: Population, **kwargs: Any) -> Optional[bool]:
+        """Adds new offspring to the regression model."""
         super()._advance(infills, **kwargs)
-        assert (
-            infills is not None
-        ), "This algorithms uses the AskAndTell interface: `infills` must be provided."
         self.pop = infills
         Xnew = infills[-1].X.reshape(1, -1)
         ynew = infills[-1].F.reshape(-1)
         self.regression.partial_fit(Xnew, ynew)
-        return True  # True or None: succesful iteration; False: failed iteration
+        return True  # succesful iteration: True or None; failed iteration: False
