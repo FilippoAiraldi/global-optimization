@@ -149,10 +149,8 @@ def _linsolve_via_svd(M, y):
     """Internal jit function to solve linear system via SVD."""
     U, S, VT = np.linalg.svd(M)
     Sinv = np.diag(1 / S)
-    c = U.T @ y
-    w = Sinv @ c
-    coef = VT.T @ w
     Minv = VT.T @ Sinv @ U.T
+    coef = Minv @ y
     return coef, Minv
 
 
