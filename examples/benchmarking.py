@@ -41,7 +41,7 @@ def solve_problem(name: str, times: int) -> tuple[Problem, npt.NDArray[np.floati
         acquisition_min_algorithm=PSO(pop_size=10 * n_var),
         acquisition_min_kwargs={
             "termination": DefaultSingleObjectiveTermination(
-                ftol=1e-4, n_max_gen=2000, period=10
+                ftol=1e-4, n_max_gen=300, period=10
             )
         },
         acquisition_fun_kwargs={"c1": 1.5078 / n_var, "c2": 1.4246 / n_var},
@@ -51,6 +51,7 @@ def solve_problem(name: str, times: int) -> tuple[Problem, npt.NDArray[np.floati
     seed = fnv1a(name)
     out = np.empty((times, max_n_iter))
     for i in range(times):
+        print(f"Solving {name.upper()}, iteration {i + 1}")
         res = minimize(
             problem,
             algorithm,
