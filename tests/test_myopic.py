@@ -1,7 +1,3 @@
-import os
-
-os.environ["NUMBA_DISABLE_JIT"] = "1"  # disable jit for testing
-
 import pickle
 import unittest
 from typing import Any

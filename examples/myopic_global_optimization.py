@@ -9,10 +9,6 @@ References
 """
 
 
-import os
-
-os.environ["NUMBA_DISABLE_JIT"] = "1"  # no need for jit in this example
-
 from typing import Any
 
 import matplotlib.pyplot as plt

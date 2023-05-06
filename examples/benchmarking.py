@@ -1,7 +1,3 @@
-import os
-
-os.environ["NUMBA_DISABLE_JIT"] = "0"
-
 import pickle
 from datetime import datetime
 from itertools import zip_longest
