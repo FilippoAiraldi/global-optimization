@@ -14,7 +14,7 @@ from pymoo.termination.default import DefaultSingleObjectiveTermination
 from scipy.io import savemat
 
 from globopt.core.benchmark import get_available_benchmark_tests, get_benchmark_test
-from globopt.myopic.algorithm import GO, RbfRegression
+from globopt.myopic.algorithm import GO, Rbf
 from globopt.util.callback import BestSoFarCallback
 
 plt.style.use("bmh")
@@ -36,7 +36,7 @@ def solve_problem(name: str, times: int) -> tuple[Problem, npt.NDArray[np.floati
     # create the algorithm
     n_var = problem.n_var
     algorithm = GO(
-        regression=RbfRegression(eps=1.0775 / n_var),
+        regression=Rbf(eps=1.0775 / n_var),
         init_points=2 * n_var,
         acquisition_min_algorithm=PSO(pop_size=10 * n_var),
         acquisition_min_kwargs={
@@ -75,7 +75,6 @@ nowstr = datetime.now().strftime("%Y%m%d_%H%M%S")
 savemat(f"bm_{nowstr}.mat", {n: out for n, (_, out) in zip(testnames, results)})
 with open(f"bm_{nowstr}.pkl", "wb") as f:
     pickle.dump(results, f)
-
 
 # plot results
 n_rows = 2
