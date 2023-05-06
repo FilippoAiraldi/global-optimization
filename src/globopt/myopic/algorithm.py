@@ -25,8 +25,7 @@ from pymoo.optimize import minimize
 from pymoo.problems.functional import FunctionalProblem
 from pymoo.util.display.output import Output
 
-from globopt.core.functional_regression import DELTA
-from globopt.core.regression import IdwRegression, RbfRegression
+from globopt.core.regression import DELTA, Idw, Rbf, fit, partial_fit
 from globopt.myopic.acquisition import acquisition
 from globopt.util.output import GlobalOptimizationOutput, PrefixedStream
 
@@ -38,7 +37,7 @@ class GO(Algorithm):
 
     def __init__(
         self,
-        regression: Union[None, IdwRegression, RbfRegression] = None,
+        regression: Union[None, Idw, Rbf] = None,
         sampling: Sampling = None,
         init_points: Union[int, npt.ArrayLike] = 5,
         acquisition_min_algorithm: Algorithm = None,
@@ -51,8 +50,8 @@ class GO(Algorithm):
 
         Parameters
         ----------
-        regression : IdwRegression or RbfRegression], optional
-            The regression model to use. If not specified, `IdwRegression` is used.
+        regression : Rbf or Idw, optional
+            The regression model to use. If not specified, `Idw` is used.
         sampling : Sampling, optional
             Sampling strategy to draw initial points, in case `init_points` is an
             integer. By default, `LatinHypercubeSampling` is used.
@@ -70,7 +69,7 @@ class GO(Algorithm):
             `verbose=True`. By default, `GlobalOptimizationOutput`.
         """
         if regression is None:
-            regression = IdwRegression()
+            regression = Idw()
         self.regression = regression
         if sampling is None:
             sampling = LatinHypercubeSampling()
@@ -86,9 +85,6 @@ class GO(Algorithm):
     def _setup(self, problem: Problem, **kwargs: Any) -> None:
         """Makes sure the algorithm is set up correctly."""
         super()._setup(problem, **kwargs)
-        self.acquisition_fun_kwargs["exp_weighting"] = getattr(
-            self.regression, "exp_weighting", False
-        )
         self.acquisition_min_kwargs["seed"] = None  # would set seed globally (bad)
         self.acquisition_min_kwargs["copy_algorithm"] = True
 
@@ -113,22 +109,20 @@ class GO(Algorithm):
         """Fits the regression model to initial data."""
         super()._initialize_advance(infills, **kwargs)
         X, y = infills.get("X", "F")
-        self.regression.fit(X, y.reshape(-1))
+        self.regression = fit(self.regression, X[np.newaxis], y[np.newaxis])
 
     def _infill(self) -> Population:
         """Creates one offspring (new point to evaluate) by minimizing acquisition."""
         super()._infill()
 
         # define acquisition function problem
-        X, y = self.pop.get("X", "F")
-        dym = y.max() - y.min()  # span of observations
-        mdl = self.regression
         problem: Problem = self.problem  # type: ignore[annotation-unchecked]
+        mdl = self.regression
+        kwargs = self.acquisition_fun_kwargs
+        dym = mdl.ym_.max() - mdl.ym_.min()  # span of observations
         acq_problem = FunctionalProblem(
             n_var=problem.n_var,
-            objs=lambda x: acquisition(
-                x, mdl.predict(x), X, y, dym, **self.acquisition_fun_kwargs
-            ),
+            objs=lambda x: acquisition(x[np.newaxis], mdl, None, dym, **kwargs)[0],
             xl=problem.xl,
             xu=problem.xu,
             elementwise=False,  # enables vectorized evaluation of acquisition function
@@ -151,7 +145,7 @@ class GO(Algorithm):
         """Adds new offspring to the regression model."""
         super()._advance(infills, **kwargs)
         self.pop = infills
-        Xnew = infills[-1].X.reshape(1, -1)
-        ynew = infills[-1].F.reshape(-1)
-        self.regression.partial_fit(Xnew, ynew)
+        Xnew = infills[-1].X.reshape(1, 1, -1)
+        ynew = infills[-1].F.reshape(1, 1, -1)
+        self.regression = partial_fit(self.regression, Xnew, ynew)
         return True  # succesful iteration: True or None; failed iteration: False

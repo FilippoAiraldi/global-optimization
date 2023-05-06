@@ -65,9 +65,8 @@ class TestAlgorithm(unittest.TestCase):
     def test__returns_correct_result(self):
         problem = Simple1DProblem()
         x0 = [-2.62, -1.2, 0.14, 1.1, 2.82]
-        regression = RbfRegression("thinplatespline", 0.01)
         algorithm = GO(
-            regression=regression,
+            regression=Rbf("thinplatespline", 0.01),
             init_points=x0,
             acquisition_fun_kwargs={"c1": 1, "c2": 0.5},
         )
@@ -84,16 +83,18 @@ class TestAlgorithm(unittest.TestCase):
         x = np.linspace(*problem.bounds(), 500).reshape(-1, 1)
         out: dict[int, tuple[np.ndarray, ...]] = {}
         for i, algo in enumerate(res.history, start=1):
-            y_hat = algo.regression.predict(x)
+            y_hat = predict(algo.regression, x[np.newaxis])
             Xm = algo.pop.get("X").reshape(-1, 1)
             ym = algo.pop.get("F").reshape(-1)
-            a = acquisition(x, y_hat, Xm, ym, None, **algo.acquisition_fun_kwargs)
+            a = acquisition(
+                x[np.newaxis], algo.regression, y_hat, **algo.acquisition_fun_kwargs
+            )
             acq_min = (
                 algo.acquisition_min_res.opt.item().X
                 if hasattr(algo, "acquisition_min_res")
                 else np.nan
             )
-            out[i] = (y_hat, Xm, ym, a, acq_min)
+            out[i] = (y_hat.squeeze(), Xm, ym, a.squeeze(), acq_min)
 
         for key in out:
             for actual, expected in zip(out[key], RESULTS[key]):

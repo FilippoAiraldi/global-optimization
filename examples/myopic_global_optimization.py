@@ -19,7 +19,7 @@ from pymoo.core.problem import Problem
 from pymoo.optimize import minimize
 from pymoo.util.normalization import NoNormalization
 
-from globopt.myopic.algorithm import GO, RbfRegression, acquisition
+from globopt.myopic.algorithm import GO, Rbf, acquisition, predict
 from globopt.util.normalization import RangeNormalization
 
 plt.style.use("bmh")
@@ -62,7 +62,7 @@ x0 = problem.normalization.forward([-2.62, -1.2, 0.14, 1.1, 2.82])
 
 # instantiate algorithm and then run the optimization
 algorithm = GO(
-    regression=RbfRegression("thinplatespline", 0.01),
+    regression=Rbf("thinplatespline", 0.01),
     init_points=x0,
     acquisition_min_kwargs={"verbose": True},
     acquisition_fun_kwargs={"c1": 1, "c2": 0.5},
@@ -92,9 +92,9 @@ for i in range(len(axs)):
     ax.plot(Xm, ym, "o", color=line.get_color(), markersize=8)
 
     # plot current regression model prediction and acquisition function
-    y_hat = algo.regression.predict(x)
-    a = acquisition(x, y_hat, Xm, ym, None, **algo.acquisition_fun_kwargs)
-    ax.plot(x, y_hat, label=r"$\hat{f}(x)$")
+    y_hat = predict(algo.regression, x[np.newaxis])
+    a = acquisition(x[None], algo.regression, y_hat, **algo.acquisition_fun_kwargs)[0]
+    ax.plot(x, y_hat[0], label=r"$\hat{f}(x)$")
     ax.plot(x, a, label="$a(x)$")
     if i < len(axs) - 1:
         acq_min = res.history[i + 1].acquisition_min_res.opt.item()
