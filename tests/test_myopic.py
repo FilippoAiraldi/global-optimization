@@ -49,11 +49,9 @@ class Simple1DProblem(Problem):
 
 class TestAcquisition(unittest.TestCase):
     def test_acquisition_function__returns_correct_values(self):
-        X = np.array([[-2.61, -1.92, -0.63, 0.38, 2]]).T
+        X = np.array([-2.61, -1.92, -0.63, 0.38, 2]).reshape(1, -1, 1)
         y = f(X)
 
-        X = np.expand_dims(X, 0)  # add batch dimension
-        y = np.expand_dims(y, 0)
         mdl = fit(Rbf("thinplatespline", 0.01), X, y)
         x = np.linspace(-3, 3, 1000).reshape(1, -1, 1)
         y_hat = predict(mdl, x)

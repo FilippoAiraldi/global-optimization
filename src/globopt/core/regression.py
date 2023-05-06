@@ -273,12 +273,12 @@ def _rbf_predict(mdl: Rbf, X: Array) -> Array:
     return M.transpose(0, 2, 1) @ mdl.coef_
 
 
-def fit(ops: RegressorType, X: Array, y: Array) -> RegressorType:
+def fit(mdl: RegressorType, X: Array, y: Array) -> RegressorType:
     """Fits an IDW or RBF model to the data.
 
     Parameters
     ----------
-    ops : Idw or Rbf
+    mdl : Idw or Rbf
         The options for the RBF model.
     X : array of shape (batch, n_samples, n_features)
         The input data to be fitted.
@@ -290,11 +290,7 @@ def fit(ops: RegressorType, X: Array, y: Array) -> RegressorType:
     Idw or Rbf
         The result of the fit operation for RBF regression.
     """
-    if X.ndim == 2:
-        X = X[np.newaxis]
-    if y.ndim == 2:
-        y = y[np.newaxis]
-    return _rbf_fit(ops, X, y) if isinstance(ops, Rbf) else _idw_fit(ops, X, y)
+    return _rbf_fit(mdl, X, y) if isinstance(mdl, Rbf) else _idw_fit(mdl, X, y)
 
 
 def partial_fit(mdl: RegressorType, X: Array, y: Array) -> RegressorType:
@@ -314,10 +310,6 @@ def partial_fit(mdl: RegressorType, X: Array, y: Array) -> RegressorType:
     Idw or Rbf
         The newly result of the partial fit operation for the regression.
     """
-    if X.ndim == 2:
-        X = X[np.newaxis]
-    if y.ndim == 2:
-        y = y[np.newaxis]
     return (
         _rbf_partial_fit(mdl, X, y)
         if isinstance(mdl, Rbf)
@@ -340,8 +332,4 @@ def predict(mdl: RegressorType, X: Array) -> Array:
     y: array of floats
         Prediction of `y`.
     """
-    is_2d = X.ndim == 2
-    if is_2d:
-        X = X[np.newaxis]
-    y_hat = _rbf_predict(mdl, X) if isinstance(mdl, Rbf) else _idw_predict(mdl, X)
-    return y_hat[0] if is_2d else y_hat
+    return _rbf_predict(mdl, X) if isinstance(mdl, Rbf) else _idw_predict(mdl, X)

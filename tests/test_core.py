@@ -20,17 +20,16 @@ def f(x):
 
 class TestRegression(unittest.TestCase):
     def test__fit_and_partial_fit(self) -> None:
-        X = np.array([[-2.61, -1.92, -0.63, 0.38, 2]]).T
+        X = np.array([-2.61, -1.92, -0.63, 0.38, 2]).reshape(1, -1, 1)
         y = f(X)
-        Xs, ys = np.array_split(X, 3), np.array_split(y, 3)
+        Xs, ys = np.array_split(X, 3, axis=1), np.array_split(y, 3, axis=1)
 
         mdls = [Idw(), Rbf("inversequadratic", 0.5), Rbf("thinplatespline", 0.01)]
         fitresults = [fit(mdl, Xs[0], ys[0]) for mdl in mdls]
         for i in range(1, len(Xs)):
             fitresults = [partial_fit(fr, Xs[i], ys[i]) for fr in fitresults]
-
-        x = np.linspace(-3, 3, 100).reshape(-1, 1)
-        y_hat = np.asarray([predict(fr, x)[..., 0] for fr in fitresults])
+        x = np.linspace(-3, 3, 100).reshape(1, -1, 1)
+        y_hat = np.concatenate([predict(fr, x) for fr in fitresults], 0)[..., 0]
 
         np.testing.assert_allclose(y_hat, RESULTS["y_hat"])
 

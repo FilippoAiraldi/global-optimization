@@ -9,10 +9,6 @@ References
 """
 
 
-import os
-
-os.environ["NUMBA_DISABLE_JIT"] = "1"  # no need for jit in this example
-
 import matplotlib.pyplot as plt
 import numpy as np
 from pymoo.algorithms.soo.nonconvex.pso import PSO
@@ -38,8 +34,9 @@ def f(x):
     )
 
 
-# create data points
-X = np.array([[-2.61, -1.92, -0.63, 0.38, 2]]).T
+# create data points - X has shape (batch, n_samples, n_var), where the batch dim can be
+# used to fit multiple models at once. Here, it is 1
+X = np.array([-2.61, -1.92, -0.63, 0.38, 2]).reshape(1, -1, 1)
 y = f(X)
 
 # create regressor and fit it
@@ -47,12 +44,10 @@ mdl: RegressorType = Rbf("thinplatespline", 0.01)
 mdl = fit(mdl, X, y)
 
 # predict values over all domain via fitted model
-x = np.linspace(-3, 3, 1000).reshape(1, -1, 1)
+x = np.linspace(-3, 3, 1000).reshape(1, -1, 1)  # add batch dim
 y_hat = predict(mdl, x)
 
 # compute acquisition function components (these methods should not be used directly)
-X = np.expand_dims(X, 0)  # add batch dimension
-y = np.expand_dims(y, 0)
 dym = y.max() - y.min()  # span of observations
 W = idw_weighting(x, X, mdl.exp_weighting)
 s = _idw_variance(y_hat, y, W)
@@ -80,12 +75,15 @@ a = a.flatten()
 y_hat = y_hat.flatten()
 s = s.flatten()
 z = z.flatten()
-X, y = X[0], y[0]
+X, y = X.squeeze(), y.squeeze()
+
+# plot the function, the observations and the prediction in both axes
+for ax in axs:
+    line = ax.plot(x, fx, label="$f(x)$")[0]
+    ax.plot(X, y, "o", label=None, color=line.get_color())
+    line = ax.plot(x, y_hat, label=None)[0]
 
 # plot acquisition function components
-line = axs[0].plot(x, fx, label="$f(x)$")[0]
-axs[0].plot(X, y, "o", label=None, color=line.get_color())
-line = axs[0].plot(x, y_hat, label=None)[0]
 axs[0].fill_between(
     x,
     y_hat - s,
@@ -97,9 +95,6 @@ axs[0].fill_between(
 axs[0].plot(x, z, label="$z(x)$")
 
 # plot acquisition function and its minimizer
-line = axs[1].plot(x, fx, label="$f(x)$")[0]
-axs[1].plot(X, y, "o", label=None, color=line.get_color())
-axs[1].plot(x, y_hat)
 line = axs[1].plot(x, a, label="$a(x)$")[0]
 axs[1].plot(
     res.X.item(),
@@ -110,7 +105,7 @@ axs[1].plot(
     color=line.get_color(),
 )
 
-# ax.set_xlabel("x")
+# make plots look nice
 for ax in axs:
     ax.set_xlim(-3, 3)
     ax.set_ylim(0, 2.5)
