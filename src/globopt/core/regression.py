@@ -333,3 +333,34 @@ def predict(mdl: RegressorType, X: Array) -> Array:
         Prediction of `y`.
     """
     return _rbf_predict(mdl, X) if isinstance(mdl, Rbf) else _idw_predict(mdl, X)
+
+
+def repeat(mdl: RegressorType, n: int) -> RegressorType:
+    """Repeats a regressor model `n` times, so that `n` regressions can be computed in
+    parallel per batch.
+
+    Parameters
+    ----------
+    mdl : RegressorType
+        The regressor model to be repeated.
+    n : int
+        The number of times the regressor model should be repeated.
+
+    Returns
+    -------
+    RegressorType
+        The repeated regressor model. The repetitions are all the same model.
+    """
+    if isinstance(mdl, Idw):
+        return Idw(mdl.exp_weighting, mdl.Xm_.repeat(n, 0), mdl.ym_.repeat(n, 0))
+    else:
+        return Rbf(
+            mdl.kernel,
+            mdl.eps,
+            mdl.svd_tol,
+            mdl.exp_weighting,
+            mdl.Xm_.repeat(n, 0),
+            mdl.ym_.repeat(n, 0),
+            mdl.coef_.repeat(n, 0),
+            mdl.Minv_.repeat(n, 0),
+        )
