@@ -61,7 +61,7 @@ class TestAcquisition(unittest.TestCase):
         W = idw_weighting(x, X)
         s = _idw_variance(y_hat, y, W)
         z = _idw_distance(W)
-        a = acquisition(x, mdl, y_hat, dym, 1, 0.5, False)
+        a = acquisition(x, mdl, y_hat, dym, 1, 0.5)
 
         out = np.concatenate((s, z, a), 0)[..., 0]
         np.testing.assert_allclose(out, RESULTS["acquisitions"])

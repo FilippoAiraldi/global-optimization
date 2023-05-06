@@ -65,7 +65,6 @@ def acquisition(
     dym: Optional[float] = None,
     c1: float = 1.5078,
     c2: float = 1.4246,
-    exp_weighting: bool = False,
 ) -> Array:
     """Computes the acquisition function for IDW/RBF regression models.
 
@@ -85,8 +84,7 @@ def acquisition(
         Weight of the contribution of the variance function.
     c2 : float
         Weight of the contribution of the distance function.
-    exp_weighting : bool, optional
-        Whether the weighting function should decay exponentially, by default `False`.
+
     Returns
     -------
     array
@@ -104,7 +102,7 @@ def acquisition(
     if dym is None:
         dym = ym.max() - ym.min()
 
-    W = idw_weighting(x, Xm, exp_weighting)
+    W = idw_weighting(x, Xm, mdl.exp_weighting)
     s = _idw_variance(y_hat, ym, W)
     z = _idw_distance(W)
     a = y_hat - c1 * s - c2 * dym * z
