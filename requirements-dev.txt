@@ -1,4 +1,3 @@
-numba>=0.56.4
+joblib>=1.2.0
 pymoo>=0.6.0.1
-scikit-learn>=1.2.2
 typing_extensions>=4.5.0
