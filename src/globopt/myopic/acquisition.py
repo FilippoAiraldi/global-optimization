@@ -95,7 +95,7 @@ def acquisition(
     if y_hat is None:
         y_hat = predict(mdl, x)
     if dym is None:
-        dym = ym.max() - ym.min()
+        dym = ym.max((1, 2)) - ym.min((1, 2))
 
     W = idw_weighting(x, Xm, mdl.exp_weighting)
     s = _idw_variance(y_hat, ym, W)
