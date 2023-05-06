@@ -16,6 +16,7 @@ from scipy.io import savemat
 from globopt.core.benchmark import get_available_benchmark_tests, get_benchmark_test
 from globopt.myopic.algorithm import GO, Rbf
 from globopt.util.callback import BestSoFarCallback
+from globopt.core.jit_pso import JitPSO
 
 plt.style.use("bmh")
 
@@ -38,7 +39,7 @@ def solve_problem(name: str, times: int) -> tuple[Problem, npt.NDArray[np.floati
     algorithm = GO(
         regression=Rbf(eps=1.0775 / n_var),
         init_points=2 * n_var,
-        acquisition_min_algorithm=PSO(pop_size=10 * n_var),
+        acquisition_min_algorithm=JitPSO(pop_size=10 * n_var),
         acquisition_min_kwargs={
             "termination": DefaultSingleObjectiveTermination(
                 ftol=1e-4, n_max_gen=300, period=10
