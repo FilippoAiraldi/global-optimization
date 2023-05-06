@@ -70,7 +70,7 @@ def acquisition(
 
     Parameters
     ----------
-    x : array
+    x : array shape (batch, n_target, n_features)
         Array of points for which to compute the acquisition.
     mdl : Idw or Rbf
         Fitted model to use for computing the acquisition function.

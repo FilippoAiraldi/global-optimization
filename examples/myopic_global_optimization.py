@@ -18,7 +18,7 @@ from pymoo.core.problem import Problem
 from pymoo.optimize import minimize
 from pymoo.util.normalization import NoNormalization
 
-from globopt.core.regression import Rbf, predict, Array
+from globopt.core.regression import Array, Rbf, predict
 from globopt.myopic.algorithm import GO, acquisition
 from globopt.util.normalization import RangeNormalization
 
