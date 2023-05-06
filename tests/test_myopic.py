@@ -11,11 +11,11 @@ from pymoo.core.problem import Problem
 from pymoo.optimize import minimize
 from scipy.io import loadmat
 
-from globopt.core.regression import RbfRegression
+from globopt.core.regression import Rbf, fit, predict
 from globopt.myopic.acquisition import (
+    _idw_distance,
+    _idw_variance,
     acquisition,
-    idw_distance,
-    idw_variance,
     idw_weighting,
 )
 from globopt.myopic.algorithm import GO
@@ -50,20 +50,21 @@ class Simple1DProblem(Problem):
 class TestAcquisition(unittest.TestCase):
     def test_acquisition_function__returns_correct_values(self):
         X = np.array([[-2.61, -1.92, -0.63, 0.38, 2]]).T
-        y = f(X).flatten()
-        mdl = RbfRegression("thinplatespline", 0.01)
-        mdl.fit(X, y)
+        y = f(X)
 
-        x = np.linspace(-3, 3, 1000).reshape(-1, 1)
-        y_hat = mdl.predict(x)
-
+        X = np.expand_dims(X, 0)  # add batch dimension
+        y = np.expand_dims(y, 0)
+        mdl = fit(Rbf("thinplatespline", 0.01), X, y)
+        x = np.linspace(-3, 3, 1000).reshape(1, -1, 1)
+        y_hat = predict(mdl, x)
         dym = y.max() - y.min()  # span of observations
         W = idw_weighting(x, X)
-        s = idw_variance(y_hat, y, W)
-        z = idw_distance(W)
-        a = acquisition(x, y_hat, X, y, dym, 1, 0.5)
+        s = _idw_variance(y_hat, y, W)
+        z = _idw_distance(W)
+        a = acquisition(x, mdl, y_hat, dym, 1, 0.5, False)
 
-        np.testing.assert_allclose(np.stack((s, z, a)), RESULTS["acquisitions"])
+        out = np.concatenate((s, z, a), 0)[..., 0]
+        np.testing.assert_allclose(out, RESULTS["acquisitions"])
 
 
 class TestAlgorithm(unittest.TestCase):

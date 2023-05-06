@@ -1,12 +1,6 @@
 """
 Implementation of the acquisition function for RBF/IDW-based Global Optimization
-according to [1]. Where possible, these are jit-compiled for speed with Numba.
-
-To disable jit compilation:
-```python
-import os
-os.environ["NUMBA_DISABLE_JIT"] = "1"
-```
+according to [1].
 
 References
 ----------
@@ -18,18 +12,11 @@ References
 from typing import Optional
 
 import numpy as np
-import numpy.typing as npt
-from numba import njit
 
-from globopt.core.functional_regression import idw_weighting
+from globopt.core.regression import Array, RegressorType, idw_weighting, predict
 
 
-@njit
-def idw_variance(
-    y_hat: npt.NDArray[np.floating],
-    ym: npt.NDArray[np.floating],
-    W: npt.NDArray[np.floating],
-) -> npt.NDArray[np.floating]:
+def _idw_variance(y_hat: Array, ym: Array, W: Array) -> Array:
     """Computes the variance function acquisition term for IDW/RBF regression models.
 
     Parameters
@@ -46,17 +33,16 @@ def idw_variance(
     array
         The variance function acquisition term evaluated at each point.
     """
-    V = W / W.sum(axis=0)
-    sqdiff = np.square(ym.reshape(-1, 1) - y_hat.reshape(1, -1))  # np.subtract.outer
+    V = W / W.sum(2, keepdims=True)
+    sqdiff = np.square(ym - y_hat.transpose(0, 2, 1))
+    out = np.diagonal(V @ sqdiff, axis1=1, axis2=2)[..., None]  # fast for small arrays
     # out = np.empty_like(y_hat)
-    # for i in range(len(out)):
-    #     out[i] = V[:, i].T @ sqdiff[:, i]
-    # return np.sqrt(out)
-    return np.sqrt(np.diag(V.T @ sqdiff))  # faster for small arrays
+    # for i in range(out.shape[1]):
+    #     out[:, i] = np.diag(V[:, i] @ sqdiff[:, :, i].T).reshape(-1, 1)
+    return np.sqrt(out)
 
 
-# no need to jit this function, it's already fast enough
-def idw_distance(W: npt.NDArray[np.floating]) -> npt.NDArray[np.floating]:
+def _idw_distance(W: Array) -> Array:
     """Computes the distance function acquisition term for IDW/RBF regression models.
 
     Parameters
@@ -69,32 +55,29 @@ def idw_distance(W: npt.NDArray[np.floating]) -> npt.NDArray[np.floating]:
     array
         The distance function acquisition term evaluated at each point.
     """
-    return (2 / np.pi) * np.arctan(1 / W.sum(axis=0))
+    return (2 / np.pi) * np.arctan(1 / W.sum(2, keepdims=True))
 
 
-# cannot jit this function due to idw_weighting
 def acquisition(
-    x: npt.NDArray[np.floating],
-    y_hat: npt.NDArray[np.floating],
-    Xm: npt.NDArray[np.floating],
-    ym: npt.NDArray[np.floating],
-    dym: Optional[float],
+    x: Array,
+    mdl: RegressorType,
+    y_hat: Optional[Array] = None,
+    dym: Optional[float] = None,
     c1: float = 1.5078,
     c2: float = 1.4246,
     exp_weighting: bool = False,
-) -> npt.NDArray[np.floating]:
+) -> Array:
     """Computes the acquisition function for IDW/RBF regression models.
 
     Parameters
     ----------
     x : array
         Array of points for which to compute the acquisition.
-    y_hat : array
-        Array of regressed predictions for which to compute the variance.
-    Xm : array
-        Dataset of `X` used to fit the regression model.
-    ym : array
-        Dataset of `y` used to fit the regression model.
+    mdl : Idw or Rbf
+        Fitted model to use for computing the acquisition function.
+    y_hat : array, optional
+        Predictions of the regression model at `x`. If `None`, they are computed based
+        on the fitted `mdl`. By default, `None`.
     dym : float or None
         Delta between the maximum and minimum values of `ym`. If `None`, it is computed
         automatically.
@@ -109,12 +92,20 @@ def acquisition(
     array
         The variance function acquisition term evaluated at each point.
     """
-    # compute variance and distance functions
-    W = idw_weighting(x, Xm, exp_weighting)
-    s = idw_variance(y_hat, ym, W)
-    z = idw_distance(W)
-
-    # compute acquisition function
+    Xm = mdl.Xm_
+    ym = mdl.ym_
+    is_2d = x.ndim == 2
+    if is_2d:
+        x = x[np.newaxis]
+    if y_hat is None:
+        y_hat = predict(mdl, x)
+    elif y_hat.ndim == 2:
+        y_hat = y_hat[np.newaxis]
     if dym is None:
         dym = ym.max() - ym.min()
-    return y_hat - c1 * s - c2 * dym * z
+
+    W = idw_weighting(x, Xm, exp_weighting)
+    s = _idw_variance(y_hat, ym, W)
+    z = _idw_distance(W)
+    a = y_hat - c1 * s - c2 * dym * z
+    return a[0] if is_2d else a
