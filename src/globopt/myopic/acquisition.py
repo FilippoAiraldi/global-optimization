@@ -87,8 +87,9 @@ def acquisition(
 
     Returns
     -------
-    array
-        The variance function acquisition term evaluated at each point.
+    array of shape (batch, n_target, 1)
+        The variance function acquisition term evaluated at each target point and with
+        the model of the corresponding batch.
     """
     Xm = mdl.Xm_
     ym = mdl.ym_
