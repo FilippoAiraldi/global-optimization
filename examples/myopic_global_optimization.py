@@ -13,13 +13,13 @@ from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
-import numpy.typing as npt
 from matplotlib.axes import Axes
 from pymoo.core.problem import Problem
 from pymoo.optimize import minimize
 from pymoo.util.normalization import NoNormalization
 
-from globopt.myopic.algorithm import GO, Rbf, acquisition, predict
+from globopt.core.regression import Rbf, predict, Array
+from globopt.myopic.algorithm import GO, acquisition
 from globopt.util.normalization import RangeNormalization
 
 plt.style.use("bmh")
@@ -37,9 +37,7 @@ class Simple1DProblem(Problem):
             self.normalization = NoNormalization()
         super().__init__(n_var=1, n_obj=1, xl=xl, xu=xu, type_var=float)
 
-    def _evaluate(
-        self, x: npt.NDArray[np.floating], out: dict[str, Any], *_, **__
-    ) -> None:
+    def _evaluate(self, x: Array, out: dict[str, Any], *_, **__) -> None:
         x = self.normalization.backward(x)
         out["F"] = (
             (1 + x * np.sin(2 * x) * np.cos(3 * x) / (1 + x**2)) ** 2
