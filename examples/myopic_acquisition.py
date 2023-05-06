@@ -60,7 +60,7 @@ a = acquisition(x, mdl, y_hat, dym, c1=1, c2=0.5)
 algorithm = PSO()
 problem = FunctionalProblem(
     n_var=1,
-    objs=lambda x: acquisition(x, mdl, c1=1, c2=0.5),
+    objs=lambda x: acquisition(x[np.newaxis], mdl, c1=1, c2=0.5)[0],
     xl=-3,
     xu=3,
     elementwise=False,  # enables vectorized evaluation of acquisition function

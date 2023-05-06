@@ -92,18 +92,12 @@ def acquisition(
     """
     Xm = mdl.Xm_
     ym = mdl.ym_
-    is_2d = x.ndim == 2
-    if is_2d:
-        x = x[np.newaxis]
     if y_hat is None:
         y_hat = predict(mdl, x)
-    elif y_hat.ndim == 2:
-        y_hat = y_hat[np.newaxis]
     if dym is None:
         dym = ym.max() - ym.min()
 
     W = idw_weighting(x, Xm, mdl.exp_weighting)
     s = _idw_variance(y_hat, ym, W)
     z = _idw_distance(W)
-    a = y_hat - c1 * s - c2 * dym * z
-    return a[0] if is_2d else a
+    return y_hat - c1 * s - c2 * dym * z
