@@ -62,34 +62,38 @@ def acquisition(
     x: Array,
     mdl: RegressorType,
     y_hat: Optional[Array] = None,
-    dym: Optional[float] = None,
+    dym: Optional[Array] = None,
     c1: float = 1.5078,
     c2: float = 1.4246,
 ) -> Array:
-    """Computes the acquisition function for IDW/RBF regression models.
+    """Computes the myopic acquisition function for IDW/RBF regression models.
 
     Parameters
     ----------
-    x : array shape (batch, n_target, n_features)
-        Array of points for which to compute the acquisition.
+    x : array of shape (batch, n_samples, n_var)
+        Array of points for which to compute the acquisition. `batch` is the number of
+        parallel regressors used in the computations, `n_samples` is the number of
+        target points for which to compute the acquisition, and `n_var` is the number of
+        features/variables of each point.
     mdl : Idw or Rbf
         Fitted model to use for computing the acquisition function.
-    y_hat : array, optional
+    y_hat : array of shape (batch, n_samples, 1), optional
         Predictions of the regression model at `x`. If `None`, they are computed based
-        on the fitted `mdl`. By default, `None`.
-    dym : float or None
-        Delta between the maximum and minimum values of `ym`. If `None`, it is computed
-        automatically.
-    c1 : float
-        Weight of the contribution of the variance function.
-    c2 : float
-        Weight of the contribution of the distance function.
+        on the fitted `mdl`. If pre-computed, can be provided to speed up computations;
+        otherwise is computed on-the-fly automatically. By default, `None`.
+    dym : array of shape (batch, 1, 1), optional
+        Delta between the maximum and minimum values of `ym`. If pre-computed, can be
+        provided to speed up computations; otherwise is computed on-the-fly
+        automatically. If `None`, it is computed automatically. By default, `None`.
+    c1 : float, optional
+        Weight of the contribution of the variance function, by default `1.5078`.
+    c2 : float, optional
+        Weight of the contribution of the distance function, by default `1.4246`.
 
     Returns
     -------
-    array of shape (batch, n_target, 1)
-        The variance function acquisition term evaluated at each target point and with
-        the model of the corresponding batch.
+    array of shape (batch, n_samples, 1)
+        The myopic acquisition function evaluated at each point.
     """
     Xm = mdl.Xm_
     ym = mdl.ym_
