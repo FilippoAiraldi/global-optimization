@@ -37,6 +37,14 @@ class TestRegression(unittest.TestCase):
 
         np.testing.assert_allclose(y_hat, RESULTS["y_hat"])
 
+    def test__to_str(self) -> None:
+        mdl = Rbf("inversemultiquadric", 0.5, svd_tol=0)
+        s = mdl.__str__()
+        self.assertIsInstance(s, str)
+        self.assertIn("kernel=inversemultiquadric", s)
+        self.assertIn("eps=0.5", s)
+        self.assertIn("svd_tol=0", s)
+
 
 class TestBenchmark(unittest.TestCase):
     @parameterized.expand((False, True))
