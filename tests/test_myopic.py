@@ -48,7 +48,7 @@ class TestAcquisition(unittest.TestCase):
         X = np.array([-2.61, -1.92, -0.63, 0.38, 2]).reshape(1, -1, 1)
         y = f(X)
 
-        mdl = fit(Rbf("thinplatespline", 0.01), X, y)
+        mdl = fit(Rbf("thinplatespline", 0.01, svd_tol=0), X, y)
         x = np.linspace(-3, 3, 1000).reshape(1, -1, 1)
         y_hat = predict(mdl, x)
         dym = y.max() - y.min()  # span of observations
@@ -66,7 +66,7 @@ class TestAlgorithm(unittest.TestCase):
         problem = Simple1DProblem()
         x0 = [-2.62, -1.2, 0.14, 1.1, 2.82]
         algorithm = GO(
-            regression=Rbf("thinplatespline", 0.01),
+            regression=Rbf("thinplatespline", 0.01, svd_tol=0),
             init_points=x0,
             acquisition_fun_kwargs={"c1": 1, "c2": 0.5},
         )

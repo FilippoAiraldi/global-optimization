@@ -24,7 +24,11 @@ class TestRegression(unittest.TestCase):
         y = f(X)
         Xs, ys = np.array_split(X, 3, axis=1), np.array_split(y, 3, axis=1)
 
-        mdls = [Idw(), Rbf("inversequadratic", 0.5), Rbf("thinplatespline", 0.01)]
+        mdls = [
+            Idw(),
+            Rbf("inversequadratic", 0.5, svd_tol=0),
+            Rbf("thinplatespline", 0.01, svd_tol=0),
+        ]
         fitresults = [fit(mdl, Xs[0], ys[0]) for mdl in mdls]
         for i in range(1, len(Xs)):
             fitresults = [partial_fit(fr, Xs[i], ys[i]) for fr in fitresults]
