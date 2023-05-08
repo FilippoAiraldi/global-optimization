@@ -156,7 +156,9 @@ RBF_FUNCS: dict[RbfKernel, Callable[[Array, float], Array]] = {
     "multiquadric": lambda d2, eps: np.sqrt(1 + eps**2 * d2),
     "linear": lambda d2, eps: eps * np.sqrt(d2),
     "gaussian": lambda d2, eps: np.exp(-(eps**2) * d2),
-    "thinplatespline": lambda d2, eps: eps**2 * d2 * np.log(eps * d2 + DELTA),
+    "thinplatespline": lambda d2, eps: eps**2
+    * d2
+    * np.log(np.maximum(eps * d2, DELTA)),
     "inversemultiquadric": lambda d2, eps: 1 / np.sqrt(1 + eps**2 * d2),
 }
 
@@ -179,11 +181,11 @@ def _blockwise_inversion(
 ) -> tuple[Array, Array, Array]:
     """Performs blockwise inversion updates of RBF kernel matrices."""
     L = Minv @ Phi
-    c = np.linalg.inv(phi - Phi.transpose(0, 2, 1) @ L)
-    B = -L @ c
+    c_inv = np.linalg.inv(phi - Phi.transpose(0, 2, 1) @ L)
+    B = -L @ c_inv
     A = Minv - B @ L.transpose(0, 2, 1)
     Minv_new = np.concatenate(
-        (np.concatenate((A, B), 2), np.concatenate((B.transpose(0, 2, 1), c), 2)), 1
+        (np.concatenate((A, B), 2), np.concatenate((B.transpose(0, 2, 1), c_inv), 2)), 1
     )
 
     # update coefficients
@@ -210,7 +212,7 @@ def idw_weighting(X: Array, Xm: Array, exp_weighting: bool = False) -> Array:
         The weighiing function computed at `X` against dataset `Xm`.
     """
     d2 = _batch_sqeuclidean_cdist(X, Xm)
-    W = 1 / (d2 + DELTA)
+    W = 1 / np.maximum(d2, DELTA)
     if exp_weighting:
         W *= np.exp(-d2)
     return W
