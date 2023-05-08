@@ -29,8 +29,6 @@ from globopt.core.regression import DELTA, Idw, Rbf, fit, partial_fit
 from globopt.myopic.acquisition import acquisition
 from globopt.util.output import GlobalOptimizationOutput, PrefixedStream
 
-MAX_INIT_ITER = 100
-
 
 class GO(Algorithm):
     """Myopic Global Optimization (GO) algorithm based on RBFs and IDWs."""
