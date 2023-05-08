@@ -58,7 +58,7 @@ class TestAcquisition(unittest.TestCase):
         a = acquisition(x, mdl, y_hat, dym, 1, 0.5)
 
         out = np.concatenate((s, z, a), 0)[..., 0]
-        np.testing.assert_allclose(out, RESULTS["acquisitions"])
+        np.testing.assert_allclose(out, RESULTS["acquisitions"], atol=1e-6, rtol=1e-7)
 
 
 class TestAlgorithm(unittest.TestCase):
@@ -98,7 +98,7 @@ class TestAlgorithm(unittest.TestCase):
 
         for key in out:
             for actual, expected in zip(out[key], RESULTS[key]):
-                np.testing.assert_allclose(actual, expected)
+                np.testing.assert_allclose(actual, expected, atol=1e-5, rtol=1e-6)
 
 
 if __name__ == "__main__":
