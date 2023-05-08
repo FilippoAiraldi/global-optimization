@@ -38,7 +38,7 @@ def solve_problem(name: str, times: int) -> tuple[Problem, npt.NDArray[np.floati
     algorithm = GO(
         regression=Rbf(eps=1.0775 / n_var),
         init_points=2 * n_var,
-        acquisition_min_algorithm=PSO(pop_size=10 * n_var),
+        acquisition_min_algorithm=PSO(pop_size=10),  # size will be scaled with n_var
         acquisition_min_kwargs={
             "termination": DefaultSingleObjectiveTermination(
                 ftol=1e-4, n_max_gen=300, period=10
