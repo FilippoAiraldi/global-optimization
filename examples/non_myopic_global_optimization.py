@@ -13,7 +13,6 @@ from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.axes import Axes
 from pymoo.core.problem import Problem
 from pymoo.optimize import minimize
 from pymoo.util.normalization import NoNormalization
@@ -78,17 +77,14 @@ res = minimize(
 # plot the results
 x = np.linspace(*problem.bounds(), 500).reshape(-1, 1)  # type: ignore[call-overload]
 y = problem.evaluate(x)
-_, axs = plt.subplots(2, 2, constrained_layout=True, figsize=(8, 4))
+_, axs = plt.subplots(1, 4, constrained_layout=True, figsize=(10, 2))
 axs = axs.flatten()
-for i in range(len(axs)):
-    ax: Axes = axs[i]
-    algo: NonMyopicGO = res.history[i]
-
+for i, (ax, algo) in enumerate(zip(axs, res.history)):
     # plot true function and current sampled points
     Xm = algo.pop.get("X").reshape(-1, 1)
     ym = algo.pop.get("F").reshape(-1)
-    line = ax.plot(x, y, label="$f(x)$")[0]
-    ax.plot(Xm, ym, "o", color=line.get_color(), markersize=8)
+    c = ax.plot(x, y, label="$f(x)$")[0].get_color()
+    ax.plot(Xm, ym, "o", color=c, markersize=8)
 
     # plot current regression model prediction and acquisition function
     y_hat = predict(algo.regression, x[np.newaxis])[0]
@@ -98,7 +94,7 @@ for i in range(len(axs)):
     if i < len(axs) - 1:
         acq_min = res.history[i + 1].acquisition_min_res.opt.item()
         Xmin = acq_min.X[: problem.n_var]
-        ax.plot(Xmin, problem.evaluate(Xmin), "X", markersize=10)
+        ax.plot(Xmin, problem.evaluate(Xmin), "*", markersize=13, color="k")
 
     # set axis limits and title
     ax.set_xlim(*problem.bounds())
@@ -106,4 +102,6 @@ for i in range(len(axs)):
     ax.set_title(f"iter = {i + 1}, best cost = {ym.min():.4f}", fontsize=9)
     if i == 0:
         ax.legend()
+for j in range(i + 1, len(axs)):
+    axs[j].set_axis_off()
 plt.show()
