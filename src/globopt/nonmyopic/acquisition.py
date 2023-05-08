@@ -51,16 +51,4 @@ def acquisition(
         y_hat = predict(mdl, x_h)
         a += myopic_acquisition(x_h, mdl, y_hat, None, c1, c2)[:, 0, 0]
         mdl = partial_fit(mdl, x_h, y_hat)
-
-    # # naive implementation for testing
-    # a_ = np.zeros(n_samples)
-    # for i in range(n_samples):  # <--- this loop is batched
-    #     batch = x[i]
-    #     mdl_ = mdl
-    #     for h in range(horizon):  # <--- this loop cannot be fundamentally batched
-    #         x_ = batch[h].reshape(1, 1, -1)
-    #         y_hat_ = predict(mdl_, x_)
-    #         a_[i] += myopic_acquisition(x_, mdl_, y_hat_, None, c1, c2)
-    #         mdl_ = partial_fit(mdl_, x_, y_hat_)
-    # np.testing.assert_allclose(a, a_)
     return a
