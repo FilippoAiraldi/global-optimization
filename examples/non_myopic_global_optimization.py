@@ -17,7 +17,7 @@ from pymoo.core.problem import Problem
 from pymoo.optimize import minimize
 from pymoo.util.normalization import NoNormalization
 
-from globopt.core.regression import Array, Rbf, predict
+from globopt.core.regression import Array, Rbf, predict, DELTA
 from globopt.nonmyopic.algorithm import NonMyopicGO, acquisition
 from globopt.util.normalization import RangeNormalization
 
@@ -75,7 +75,7 @@ res = minimize(
 )
 
 # plot the results
-x = np.linspace(*problem.bounds(), 500).reshape(-1, 1)  # type: ignore[call-overload]
+x = np.linspace(*problem.bounds(), 200).reshape(-1, 1)  # type: ignore[call-overload]
 y = problem.evaluate(x)
 _, axs = plt.subplots(1, 4, constrained_layout=True, figsize=(10, 2))
 axs = axs.flatten()
@@ -86,10 +86,18 @@ for i, (ax, algo) in enumerate(zip(axs, res.history)):
     c = ax.plot(x, y, label="$f(x)$")[0].get_color()
     ax.plot(Xm, ym, "o", color=c, markersize=8)
 
-    # plot current regression model prediction and acquisition function
+    # plot current regression model's prediction
     y_hat = predict(algo.regression, x[np.newaxis])[0]
-    a = acquisition(x.reshape(-1, 1, 1), algo.regression, **algo.acquisition_fun_kwargs)
     ax.plot(x, y_hat, label=r"$\hat{f}(x)$")
+
+    # plot acquisition function and its minimum
+    h = algo.horizon
+    x_ = np.stack(np.meshgrid(*(x + i * DELTA for i in range(h))))
+    a = acquisition(
+        x_.reshape(algo.problem.n_var, h, -1).T,
+        algo.regression,
+        **algo.acquisition_fun_kwargs
+    ).reshape([x.size] * h).min(axis=tuple(range(1, h)))
     ax.plot(x.flatten(), a, label="$a(x)$")
     if i < len(axs) - 1:
         acq_min = res.history[i + 1].acquisition_min_res.opt.item()
