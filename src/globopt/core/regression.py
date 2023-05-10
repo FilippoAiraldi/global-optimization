@@ -60,7 +60,7 @@ class Rbf(NamedTuple):
     eps : float, optional
         Distance-scaling parameter for the RBF kernel, by default `1.0775`.
     svd_tol : float, optional
-        Tolerance for the singular value decomposition, by default `1e-6`.
+        Tolerance for the singular value decomposition for inversion, by default `1e-6`.
     exp_weighting : bool, optional
         Whether the weighting function should decay exponentially, by default `False`.
         This option is only used during the computation of the acquisition function but
@@ -177,11 +177,15 @@ def _linsolve_via_svd(M: Array, y: Array, tol: float = 1e-6) -> tuple[Array, Arr
 
 
 def _blockwise_inversion(
-    ym: Array, y: Array, Minv: Array, phi: Array, Phi: Array
+    ym: Array, y: Array, Minv: Array, phi: Array, Phi: Array, tol: float = 1e-6
 ) -> tuple[Array, Array, Array]:
     """Performs blockwise inversion updates of RBF kernel matrices."""
     L = Minv @ Phi
-    c_inv = np.linalg.inv(phi - Phi.transpose(0, 2, 1) @ L)
+    #
+    c = phi - Phi.transpose(0, 2, 1) @ L
+    c[np.abs(c) <= tol] = tol
+    c_inv = np.linalg.inv(c)
+    #
     B = -L @ c_inv
     A = Minv - B @ L.transpose(0, 2, 1)
     Minv_new = np.concatenate(
@@ -263,7 +267,7 @@ def _rbf_partial_fit(mdl: Rbf, X: Array, y: Array) -> Rbf:
     phi[:, np.eye(phi.shape[1], dtype=bool)] = fun(0, eps)  # type: ignore[arg-type]
 
     # update inverse of M via blockwise inversion and coefficients
-    y_new, coef_new, Minv_new = _blockwise_inversion(ym, y, Minv, phi, Phi)
+    y_new, coef_new, Minv_new = _blockwise_inversion(ym, y, Minv, phi, Phi, svd_tol)
     X_new = np.concatenate((Xm, X), 1)
     return Rbf(kernel, eps, svd_tol, exp_weighting, X_new, y_new, coef_new, Minv_new)
 
