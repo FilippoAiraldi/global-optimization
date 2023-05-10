@@ -93,7 +93,7 @@ for i, (ax, algo) in enumerate(zip(axs, res.history)):
     y_hat = predict(algo.regression, x[np.newaxis])
     a = acquisition(x[None], algo.regression, y_hat, **algo.acquisition_fun_kwargs)[0]
     ax.plot(x, y_hat[0], label=r"$\hat{f}(x)$")
-    ax.plot(x, a, label="$a(x)$")
+    ax.plot(x, a, "--", lw=2.5, label="$a(x)$")
     if len(res.history) > i + 1:
         acq_min = res.history[i + 1].acquisition_min_res.opt.item()
         ax.plot(acq_min.X, problem.evaluate(acq_min.X), "*", markersize=13, color="k")
