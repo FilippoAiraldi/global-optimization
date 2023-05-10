@@ -9,7 +9,7 @@ from pymoo.optimize import minimize
 from pymoo.problems import get_problem
 from pymoo.util.normalization import ZeroToOneNormalization
 
-from globopt.core.benchmark import Adjiman
+from globopt.benchmarking.problems import Adjiman
 from globopt.util.callback import BestSoFarCallback
 from globopt.util.normalization import NormalizedProblemWrapper, RangeNormalization
 from globopt.util.output import PrefixedStream

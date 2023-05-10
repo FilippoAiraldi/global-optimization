@@ -404,8 +404,8 @@ TESTS: dict[str, tuple[Type[Problem], int]] = {
 }
 
 
-def get_available_benchmark_tests() -> list[str]:
-    """Gets the names of all the available benchmark tests.
+def get_available_benchmark_problems() -> list[str]:
+    """Gets the names of all the available benchmark test problems.
 
     Returns
     -------
@@ -415,10 +415,10 @@ def get_available_benchmark_tests() -> list[str]:
     return list(TESTS.keys())
 
 
-def get_benchmark_test(
+def get_benchmark_problem(
     name: str, *args: Any, normalize: bool = False, **kwargs: Any
 ) -> tuple[Problem, int]:
-    """Gets an instance of a benchmark test.
+    """Gets an instance of a benchmark test problem.
 
     Parameters
     ----------

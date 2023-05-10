@@ -17,10 +17,10 @@ from pymoo.core.problem import Problem
 from pymoo.optimize import minimize
 from pymoo.util.normalization import NoNormalization
 
+from globopt.benchmarking.optimal_acquisition import optimal_acquisition
 from globopt.core.regression import Array, Rbf, predict
 from globopt.nonmyopic.algorithm import NonMyopicGO
 from globopt.util.normalization import RangeNormalization
-from globopt.util.optimal_acquisition import optimal_acquisition
 
 plt.style.use("bmh")
 
@@ -99,7 +99,7 @@ for i, (ax, algo) in enumerate(zip(axs, res.history)):
         algo.horizon,
         **algo.acquisition_fun_kwargs,
         brute_force=True,
-        joblib_verbosity=10,
+        verbosity=10,
     )
     ax.plot(x.flatten(), a, label="$a(x)$")
     if i < len(axs) - 1:

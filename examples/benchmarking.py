@@ -13,7 +13,10 @@ from pymoo.optimize import minimize
 from pymoo.termination.default import DefaultSingleObjectiveTermination
 from scipy.io import savemat
 
-from globopt.core.benchmark import get_available_benchmark_tests, get_benchmark_test
+from globopt.benchmarking.problems import (
+    get_available_benchmark_problems,
+    get_benchmark_problem,
+)
 from globopt.myopic.algorithm import GO, Rbf
 from globopt.util.callback import BestSoFarCallback
 
@@ -31,7 +34,7 @@ def fnv1a(s: str) -> int:
 
 def solve_problem(name: str, times: int) -> tuple[Problem, npt.NDArray[np.floating]]:
     # create the problem
-    problem, max_n_iter = get_benchmark_test(name)
+    problem, max_n_iter = get_benchmark_problem(name)
 
     # create the algorithm
     n_var = problem.n_var
@@ -66,7 +69,7 @@ def solve_problem(name: str, times: int) -> tuple[Problem, npt.NDArray[np.floati
 
 # run the benchmarking
 N = 100
-testnames = get_available_benchmark_tests()
+testnames = get_available_benchmark_problems()
 results = Parallel(n_jobs=-1, verbose=10)(
     delayed(solve_problem)(name, N) for name in testnames
 )

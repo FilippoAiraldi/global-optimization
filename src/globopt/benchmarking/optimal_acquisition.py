@@ -32,7 +32,7 @@ def optimal_acquisition(
     c1: float = 1.5078,
     c2: float = 1.4246,
     brute_force: bool = True,
-    joblib_verbosity: int = 0,
+    verbosity: int = 0,
 ) -> Array:
     """Helper function to compute the optimal non-myopic acquisition function.
 
@@ -57,7 +57,7 @@ def optimal_acquisition(
         decision variable and computing the optimal remaining trajectory with `PSO`. In
         both cases, processing is parallelized in an effort to speed up the computation.
         By default, `False`.
-    joblib_verbosity : int, optional
+    verbosity : int, optional
         Verbosity level for the parallel processing, by default `0`.
 
     Returns
@@ -67,8 +67,8 @@ def optimal_acquisition(
         starting from each point in `x`.
     """
     if brute_force:
-        return _optimal_acquisition_by_brute_force(x, mdl, h, c1, c2, joblib_verbosity)
-    return _optimal_acquisition_by_minimization(x, mdl, h, c1, c2, joblib_verbosity)
+        return _optimal_acquisition_by_brute_force(x, mdl, h, c1, c2, verbosity)
+    return _optimal_acquisition_by_minimization(x, mdl, h, c1, c2, verbosity)
 
 
 def _optimal_acquisition_by_brute_force(
@@ -77,7 +77,7 @@ def _optimal_acquisition_by_brute_force(
     h: int,
     c1: float = 1.5078,
     c2: float = 1.4246,
-    joblib_verbosity: int = 0,
+    verbosity: int = 0,
     chunk_size: int = 2**11,
 ) -> Array:
     """Utility to compute the optimal acquisition function by brute force search."""
@@ -91,7 +91,7 @@ def _optimal_acquisition_by_brute_force(
     chunks = map(np.asarray, batched(trajectories, chunk_size))  # n_traj = n_samples**h
 
     fun = partial(acquisition, mdl=mdl, c1=c1, c2=c2)
-    a_chunks = Parallel(n_jobs=-1, verbose=joblib_verbosity)(
+    a_chunks = Parallel(n_jobs=-1, verbose=verbosity)(
         delayed(fun)(chunk) for chunk in chunks
     )
     a = np.concatenate(a_chunks, 0)
@@ -104,7 +104,7 @@ def _optimal_acquisition_by_minimization(
     h: int,
     c1: float = 1.5078,
     c2: float = 1.4246,
-    joblib_verbosity: int = 0,
+    verbosity: int = 0,
 ) -> Array:
     """Utility to compute the optimal acquisition function by PSO minimization."""
 
@@ -130,7 +130,7 @@ def _optimal_acquisition_by_minimization(
         )
         return minimize(problem, PSO(pop_size)).opt[0].F.item()
 
-    a = Parallel(n_jobs=-1, verbose=joblib_verbosity)(
+    a = Parallel(n_jobs=-1, verbose=verbosity)(
         delayed(solve_for_one_x)(x[i]) for i in range(n_samples)
     )
     return np.asarray(a)
