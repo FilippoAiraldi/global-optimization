@@ -27,6 +27,7 @@ class NonMyopicGO(GO):
         *args: Any,
         horizon: int,
         shrink_horizon: bool = False,
+        discount: float = 1.0,
         **kwargs: Any,
     ) -> None:
         """instiantiate a new non-myopic GO algorithm.
@@ -40,12 +41,15 @@ class NonMyopicGO(GO):
             Whether to shrink the horizon when the algorithm is close to reaching the
             maximum number of iterations, if this limit is specified in the termination.
             By default, `False`.
+        discount : float, optional
+            Discount factor for the lookahead horizon. By default, `1.0`.
         args, kwargs
             See `globopt.myopic.algorithm.GO`.
         """
         super().__init__(*args, **kwargs)
         self.horizon = horizon
         self.shrink_horizon = shrink_horizon
+        self.discount = discount
 
     def _setup(self, problem: Problem, **kwargs: Any) -> None:
         super()._setup(problem, **kwargs)
@@ -53,6 +57,7 @@ class NonMyopicGO(GO):
             self.acquisition_min_algorithm.pop_size = (
                 self.acquisition_min_algorithm.pop_size * problem.n_var * self.horizon
             )
+        self.acquisition_fun_kwargs["discount"] = self.discount
 
     def _infill(self) -> Population:
         """Creates one offspring (new point to evaluate) by minimizing acquisition."""

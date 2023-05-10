@@ -63,6 +63,7 @@ algorithm = NonMyopicGO(
     regression=Rbf("thinplatespline", 0.01),
     init_points=x0,
     horizon=2,
+    discount=1.0,
     acquisition_min_kwargs={"verbose": True},
     acquisition_fun_kwargs={"c1": 1, "c2": 0.5},
 )

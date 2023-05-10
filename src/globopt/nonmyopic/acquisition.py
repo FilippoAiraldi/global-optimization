@@ -16,7 +16,11 @@ from globopt.myopic.acquisition import acquisition as myopic_acquisition
 
 
 def acquisition(
-    x: Array, mdl: RegressorType, c1: float = 1.5078, c2: float = 1.4246
+    x: Array,
+    mdl: RegressorType,
+    c1: float = 1.5078,
+    c2: float = 1.4246,
+    discount: float = 1.0,
 ) -> Array:
     """Computes the non-myopic acquisition function for IDW/RBF regression models.
 
@@ -33,6 +37,8 @@ def acquisition(
         Weight of the contribution of the variance function, by default `1.5078`.
     c2 : float, optional
         Weight of the contribution of the distance function, by default `1.4246`.
+    discount : float, optional
+        Discount factor for the lookahead horizon. By default, `1.0`.
 
     Returns
     -------
@@ -49,6 +55,7 @@ def acquisition(
     for h in range(horizon):
         x_h = x[:, h, np.newaxis, :]
         y_hat = predict(mdl, x_h)
-        a += myopic_acquisition(x_h, mdl, y_hat, None, c1, c2)[:, 0, 0]
+        a_h = myopic_acquisition(x_h, mdl, y_hat, None, c1, c2)
+        a += (discount**h) * a_h[:, 0, 0]
         mdl = partial_fit(mdl, x_h, y_hat)
     return a

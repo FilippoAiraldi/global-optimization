@@ -31,6 +31,7 @@ def optimal_acquisition(
     h: int,
     c1: float = 1.5078,
     c2: float = 1.4246,
+    discount: float = 1.0,
     brute_force: bool = True,
     verbosity: int = 0,
 ) -> Array:
@@ -49,6 +50,8 @@ def optimal_acquisition(
         Weight of the contribution of the variance function, by default `1.5078`.
     c2 : float, optional
         Weight of the contribution of the distance function, by default `1.4246`.
+    discount : float, optional
+        Discount factor for the lookahead horizon. By default, `1.0`.
     brute_force : bool, optional
         If `True`, the acquisition function will be evaluated for the `n_samples**h`
         trajectories obtained via cartesian product, and the optimal acquisition for the
@@ -66,18 +69,21 @@ def optimal_acquisition(
         The optimal non-myopic acquisition function computed for each trajectory
         starting from each point in `x`.
     """
-    if brute_force:
-        return _optimal_acquisition_by_brute_force(x, mdl, h, c1, c2, verbosity)
-    return _optimal_acquisition_by_minimization(x, mdl, h, c1, c2, verbosity)
+    return (  # type: ignore[operator]
+        _optimal_acquisition_by_brute_force
+        if brute_force
+        else _optimal_acquisition_by_minimization
+    )(x, mdl, h, c1, c2, discount, verbosity)
 
 
 def _optimal_acquisition_by_brute_force(
     x: Array,
     mdl: RegressorType,
     h: int,
-    c1: float = 1.5078,
-    c2: float = 1.4246,
-    verbosity: int = 0,
+    c1: float,
+    c2: float,
+    discount: float,
+    verbosity: int,
     chunk_size: int = 2**11,
 ) -> Array:
     """Utility to compute the optimal acquisition function by brute force search."""
@@ -90,7 +96,7 @@ def _optimal_acquisition_by_brute_force(
     trajectories = product(*(x for _ in range(h)))
     chunks = map(np.asarray, batched(trajectories, chunk_size))  # n_traj = n_samples**h
 
-    fun = partial(acquisition, mdl=mdl, c1=c1, c2=c2)
+    fun = partial(acquisition, mdl=mdl, c1=c1, c2=c2, discount=discount)
     a_chunks = Parallel(n_jobs=-1, verbose=verbosity)(delayed(fun)(c) for c in chunks)
     a = np.concatenate(a_chunks, 0)
     return a.reshape(n_samples, n_samples ** (h - 1)).min(1)
@@ -100,9 +106,10 @@ def _optimal_acquisition_by_minimization(
     x: Array,
     mdl: RegressorType,
     h: int,
-    c1: float = 1.5078,
-    c2: float = 1.4246,
-    verbosity: int = 0,
+    c1: float,
+    c2: float,
+    discount: float,
+    verbosity: int,
 ) -> Array:
     """Utility to compute the optimal acquisition function by PSO minimization."""
 
@@ -118,7 +125,7 @@ def _optimal_acquisition_by_minimization(
         # reshape from (pop_size, n_var * (h - 1)) to (pop_size, h - 1, n_var) and
         # append fixed firt decision variable
         x_ = np.concatenate((x_first, x_.reshape(pop_size, h - 1, n_var)), 1)
-        return acquisition(x_, mdl, c1, c2)
+        return acquisition(x_, mdl, c1, c2, discount)
 
     def solve_for_one_x(x_first: Array) -> float:
         x_first = np.broadcast_to(x_first, (pop_size, 1, n_var))
