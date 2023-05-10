@@ -91,9 +91,7 @@ def _optimal_acquisition_by_brute_force(
     chunks = map(np.asarray, batched(trajectories, chunk_size))  # n_traj = n_samples**h
 
     fun = partial(acquisition, mdl=mdl, c1=c1, c2=c2)
-    a_chunks = Parallel(n_jobs=-1, verbose=verbosity)(
-        delayed(fun)(chunk) for chunk in chunks
-    )
+    a_chunks = Parallel(n_jobs=-1, verbose=verbosity)(delayed(fun)(c) for c in chunks)
     a = np.concatenate(a_chunks, 0)
     return a.reshape(n_samples, n_samples ** (h - 1)).min(1)
 
