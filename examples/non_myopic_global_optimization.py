@@ -77,7 +77,7 @@ res = minimize(
 )
 
 # plot the results
-x = np.linspace(*problem.bounds(), 100).reshape(-1, 1)  # type: ignore[call-overload]
+x = np.linspace(*problem.bounds(), 60).reshape(-1, 1)  # type: ignore[call-overload]
 y = problem.evaluate(x)
 _, axs = plt.subplots(1, 4, constrained_layout=True, figsize=(10, 2))
 axs = axs.flatten()
