@@ -22,7 +22,13 @@ from globopt.nonmyopic.acquisition import Array, acquisition
 class NonMyopicGO(GO):
     """Non-myopic Global Optimization (GO) algorithm based on RBFs and IDWs."""
 
-    def __init__(self, *args: Any, horizon: int, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        *args: Any,
+        horizon: int,
+        shrink_horizon: bool = False,
+        **kwargs: Any,
+    ) -> None:
         """instiantiate a new non-myopic GO algorithm.
 
         Parameters
@@ -30,11 +36,16 @@ class NonMyopicGO(GO):
         horizon : int
             Length of the lookahead predict horizon, which grants non-myopia to the
             algorithm. If `horizon=1`, it falls back to the myopic case.
+        shrink_horizon : bool, optional
+            Whether to shrink the horizon when the algorithm is close to reaching the
+            maximum number of iterations, if this limit is specified in the termination.
+            By default, `False`.
         args, kwargs
             See `globopt.myopic.algorithm.GO`.
         """
         super().__init__(*args, **kwargs)
         self.horizon = horizon
+        self.shrink_horizon = shrink_horizon
 
     def _setup(self, problem: Problem, **kwargs: Any) -> None:
         super()._setup(problem, **kwargs)
@@ -46,9 +57,13 @@ class NonMyopicGO(GO):
     def _infill(self) -> Population:
         """Creates one offspring (new point to evaluate) by minimizing acquisition."""
 
+        # shrink horizon if needed
+        h = self.horizon
+        if self.shrink_horizon and hasattr(self.termination, "n_max_gen"):
+            h = self.horizon = min(h, self.termination.n_max_gen - self.n_iter + 1)
+
         # define acquisition function problem
         problem: Problem = self.problem  # type: ignore[annotation-unchecked]
-        h = self.horizon
         n_var = problem.n_var
         mdl = self.regression
         kwargs = self.acquisition_fun_kwargs
@@ -79,3 +94,6 @@ class NonMyopicGO(GO):
         # merged as last
         xnew = res.X[:n_var].reshape(1, n_var)
         return Population.merge(self.pop, Population.new(X=xnew))
+
+    # def _post_advance(self):
+    #     return super()._post_advance()
