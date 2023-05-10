@@ -17,9 +17,10 @@ from pymoo.core.problem import Problem
 from pymoo.optimize import minimize
 from pymoo.util.normalization import NoNormalization
 
-from globopt.core.regression import Array, Rbf, predict, DELTA
-from globopt.nonmyopic.algorithm import NonMyopicGO, acquisition
+from globopt.core.regression import Array, Rbf, predict
+from globopt.nonmyopic.algorithm import NonMyopicGO
 from globopt.util.normalization import RangeNormalization
+from globopt.util.optimal_acquisition import optimal_acquisition
 
 plt.style.use("bmh")
 
@@ -61,7 +62,7 @@ x0 = problem.normalization.forward([-2.62, -1.2, 0.14, 1.1, 2.82])
 algorithm = NonMyopicGO(
     regression=Rbf("thinplatespline", 0.01),
     init_points=x0,
-    horizon=2,  # 3 is still ok, but longer horizons tend to propage errors too much
+    horizon=2,
     acquisition_min_kwargs={"verbose": True},
     acquisition_fun_kwargs={"c1": 1, "c2": 0.5},
 )
@@ -75,7 +76,7 @@ res = minimize(
 )
 
 # plot the results
-x = np.linspace(*problem.bounds(), 200).reshape(-1, 1)  # type: ignore[call-overload]
+x = np.linspace(*problem.bounds(), 100).reshape(-1, 1)  # type: ignore[call-overload]
 y = problem.evaluate(x)
 _, axs = plt.subplots(1, 4, constrained_layout=True, figsize=(10, 2))
 axs = axs.flatten()
@@ -87,17 +88,19 @@ for i, (ax, algo) in enumerate(zip(axs, res.history)):
     ax.plot(Xm, ym, "o", color=c, markersize=8)
 
     # plot current regression model's prediction
-    y_hat = predict(algo.regression, x[np.newaxis])[0]
+    mdl = algo.regression
+    y_hat = predict(mdl, x[np.newaxis])[0]
     ax.plot(x, y_hat, label=r"$\hat{f}(x)$")
 
-    # plot acquisition function and its minimum
-    h = algo.horizon
-    x_ = np.stack(np.meshgrid(*(x + i * DELTA for i in range(h))))
-    a = acquisition(
-        x_.reshape(algo.problem.n_var, h, -1).T,
-        algo.regression,
-        **algo.acquisition_fun_kwargs
-    ).reshape([x.size] * h).min(axis=tuple(range(1, h)))
+    # plot the optimal acquisition function and its minimum
+    a = optimal_acquisition(
+        x,
+        mdl,
+        algo.horizon,
+        **algo.acquisition_fun_kwargs,
+        brute_force=True,
+        joblib_verbosity=10,
+    )
     ax.plot(x.flatten(), a, label="$a(x)$")
     if i < len(axs) - 1:
         acq_min = res.history[i + 1].acquisition_min_res.opt.item()

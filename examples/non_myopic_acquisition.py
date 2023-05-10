@@ -7,9 +7,10 @@ from pymoo.algorithms.soo.nonconvex.pso import PSO
 from pymoo.optimize import minimize
 from pymoo.problems.functional import FunctionalProblem
 
-from globopt.core.regression import DELTA, Array, Idw, RegressorType, fit, predict
+from globopt.core.regression import Array, Idw, RegressorType, fit, predict
 from globopt.myopic.acquisition import acquisition as myopic_acquisition
 from globopt.nonmyopic.acquisition import acquisition as nonmyopic_acquisition
+from globopt.util.optimal_acquisition import optimal_acquisition
 
 plt.style.use("bmh")
 
@@ -51,15 +52,7 @@ def compute_nonmyopic_acquisition(
     )
     res = minimize(problem, PSO(25 * h), verbose=True, seed=1).opt[0]
 
-    # compute the acquisition function in h-D dimensions, and then for each first x
-    # return the maximum value of the acquisition function, i.e., if the optimal policy
-    # is followed from the second query onwards
-
-    # perturb next query points just a bit to avoid numerical issues
-    x_ = np.stack(np.meshgrid(*(x + i * DELTA for i in range(h))))
-    A = obj(x_.reshape(n_var * h, -1).T).reshape([x.size] * h)
-    A_opt = A.min(axis=tuple(range(1, h)))
-    return A_opt, (res.X[:n_var], res.F)
+    return optimal_acquisition(x[0], mdl, h, c1=1, c2=0.5), (res.X[:n_var], res.F)
 
 
 # create data points - X has shape (batch, n_samples, n_var), where the batch dim can be
