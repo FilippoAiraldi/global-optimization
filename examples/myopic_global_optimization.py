@@ -76,7 +76,11 @@ res = minimize(
 # plot the results
 x = np.linspace(*problem.bounds(), 500).reshape(-1, 1)  # type: ignore[call-overload]
 y = problem.evaluate(x)
-_, axs = plt.subplots(2, 4, constrained_layout=True, figsize=(10, 4))
+n_cols = 4
+n_rows = int(np.ceil(len(res.history) / n_cols))
+_, axs = plt.subplots(
+    n_rows, n_cols, constrained_layout=True, figsize=(2.5 * n_cols, 2 * n_rows)
+)
 axs = axs.flatten()
 for i, (ax, algo) in enumerate(zip(axs, res.history)):
     # plot true function and current sampled points
