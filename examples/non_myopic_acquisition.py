@@ -72,7 +72,7 @@ mdl = fit(Rbf("thinplatespline", 0.01), X, y)
 # compute myopic acquisition function
 c1 = 1.0
 c2 = 0.5
-x = np.linspace(-3, 3, 100).reshape(1, -1, 1)
+x = np.linspace(xl, xu, 100).reshape(1, -1, 1)  # add batch dim
 myopic_results = compute_myopic_acquisition(x, mdl, c1, c2)
 
 # compute non-myopic acquisition function
@@ -81,7 +81,7 @@ discount = 1.0
 nonmyopic_results = compute_nonmyopic_acquisition(x, mdl, horizon, c1, c2, discount)
 
 # plot function and its estimate
-_, ax = plt.subplots(constrained_layout=True, figsize=(5, 4))
+_, ax = plt.subplots(constrained_layout=True, figsize=(5, 3))
 y_hat = predict(mdl, x)
 line = ax.plot(x.flatten(), f(x).flatten(), label=r"$f(x)$")[0]
 ax.plot(X.flatten(), y.flatten(), "o", label=None, color=line.get_color(), markersize=9)

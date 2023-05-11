@@ -25,7 +25,7 @@ plt.style.use("bmh")
 
 
 class Simple1DProblem(Problem):
-    """Simple scalar problem to be minimized."""
+    """Simple scalar problem to be minimized. Supports normalization."""
 
     def __init__(self, normalized: bool = True) -> None:
         if normalized:
@@ -63,7 +63,7 @@ algorithm = GO(
     init_points=x0,
     acquisition_fun_kwargs={"c1": 1, "c2": 0.5},
 )
-res = minimize(
+result = minimize(
     problem,
     algorithm,
     termination=("n_iter", 6),
@@ -76,26 +76,32 @@ res = minimize(
 x = np.linspace(*problem.bounds(), 500).reshape(-1, 1)  # type: ignore[call-overload]
 y = problem.evaluate(x)
 n_cols = 4
-n_rows = int(np.ceil(len(res.history) / n_cols))
+n_rows = int(np.ceil(len(result.history) / n_cols))
 _, axs = plt.subplots(
     n_rows, n_cols, constrained_layout=True, figsize=(2.5 * n_cols, 2 * n_rows)
 )
 axs = axs.flatten()
-for i, (ax, algo) in enumerate(zip(axs, res.history)):
+for i, (ax, algo) in enumerate(zip(axs, result.history)):
     # plot true function and current sampled points
     Xm = algo.pop.get("X").reshape(-1, 1)
     ym = algo.pop.get("F").reshape(-1)
     c = ax.plot(x, y, label="$f(x)$")[0].get_color()
     ax.plot(Xm, ym, "o", color=c, markersize=8)
 
-    # plot current regression model prediction and acquisition function
-    y_hat = predict(algo.regression, x[np.newaxis])
-    a = acquisition(x[None], algo.regression, y_hat, **algo.acquisition_fun_kwargs)[0]
+    # plot current regression model's prediction
+    mdl = algo.regression
+    y_hat = predict(mdl, x[np.newaxis])
     ax.plot(x, y_hat[0], label=r"$\hat{f}(x)$")
-    ax.plot(x, a, "--", lw=2.5, label="$a(x)$")
-    if len(res.history) > i + 1:
-        acq_min = res.history[i + 1].acquisition_min_res.opt.item()
-        ax.plot(acq_min.X, problem.evaluate(acq_min.X), "*", markersize=13, color="k")
+
+    # plot the acquisition function and its minimum, or or the best point found if the
+    # algorithm has terminated
+    a = acquisition(x[None], mdl, y_hat, **algo.acquisition_fun_kwargs)[0]
+    c = ax.plot(x, a, "--", lw=2.5, label="$a(x)$")[0].get_color()
+    if i < len(result.history) - 1:
+        acq_min = result.history[i + 1].acquisition_min_res.opt.item()
+        ax.plot(acq_min.X, acq_min.F, "*", markersize=17, color=c)
+    else:
+        ax.plot(*algo.opt.get("X", "F"), "*", markersize=17, color="k")
 
     # set axis limits and title
     ax.set_xlim(*problem.bounds())

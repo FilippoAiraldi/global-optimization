@@ -96,7 +96,8 @@ for result, ylbl, axs in zip(results, ("Myopic", "Non-myopic"), np.split(all_axs
         y_hat = predict(mdl, x[np.newaxis])[0]
         ax.plot(x, y_hat, label=r"$\hat{f}(x)$")
 
-        # plot the optimal acquisition function and its minimum
+        # plot the optimal acquisition function and its minimum, or the best point found
+        # if the algorithm has terminated
         a = optimal_acquisition(
             x,
             mdl,
@@ -105,16 +106,13 @@ for result, ylbl, axs in zip(results, ("Myopic", "Non-myopic"), np.split(all_axs
             brute_force=True,
             verbosity=10,
         )
-        ax.plot(x.flatten(), a, "--", lw=2.5, label="$a(x)$")
-
-        # plot minimum of acquisition function sampled for next iteration, or the best
-        # point found if the algorithm has terminated
+        c = ax.plot(x.flatten(), a, "--", lw=2.5, label="$a(x)$")[0].get_color()
         if i < len(result.history) - 1:
             acq_min = result.history[i + 1].acquisition_min_res.opt.item()
-            Xmin = acq_min.X[: problem.n_var]
-            ax.plot(Xmin, problem.evaluate(Xmin), "*", markersize=13, color="k")
+            Xmin, Fmin = acq_min.X[: problem.n_var], acq_min.F[: problem.n_var]
+            ax.plot(Xmin, Fmin, "*", markersize=17, color=c)
         else:
-            ax.plot(*algo.opt.get("X", "F"), "*", markersize=13, color="k")
+            ax.plot(*algo.opt.get("X", "F"), "*", markersize=17, color="k")
 
         # set axis limits and title
         ax.set_xlim(*problem.bounds())
