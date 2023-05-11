@@ -118,20 +118,8 @@ class GO(Algorithm):
         """Creates one offspring (new point to evaluate) by minimizing acquisition."""
         super()._infill()
 
-        # define acquisition function problem
-        problem: Problem = self.problem  # type: ignore[annotation-unchecked]
-        mdl = self.regression
-        kwargs = self.acquisition_fun_kwargs
-        dym = mdl.ym_.max() - mdl.ym_.min()  # span of observations
-        acq_problem = FunctionalProblem(
-            n_var=problem.n_var,
-            objs=lambda x: acquisition(x[np.newaxis], mdl, None, dym, **kwargs)[0],
-            xl=problem.xl,
-            xu=problem.xu,
-            elementwise=False,  # enables vectorized evaluation of acquisition function
-        )
-
         # solve the acquisition minimization problem
+        acq_problem = self._get_acquisition_problem()
         with PrefixedStream.prefixed_print("- - - - "):
             res = minimize(
                 acq_problem,
@@ -141,7 +129,7 @@ class GO(Algorithm):
         self.acquisition_min_res = res
 
         # return population with the new point to evaluate merged as last
-        xnew = res.X.reshape(1, problem.n_var)
+        xnew = res.X.reshape(1, acq_problem.n_var)
         return Population.merge(self.pop, Population.new(X=xnew))
 
     def _advance(self, infills: Population, **kwargs: Any) -> Optional[bool]:
@@ -152,3 +140,17 @@ class GO(Algorithm):
         ynew = infills[-1].F.reshape(1, 1, -1)
         self.regression = partial_fit(self.regression, Xnew, ynew)
         return True  # succesful iteration: True or None; failed iteration: False
+
+    def _get_acquisition_problem(self) -> FunctionalProblem:
+        """Internal utility to define the acquisition function problem."""
+        problem: Problem = self.problem  # type: ignore[annotation-unchecked]
+        mdl = self.regression
+        kwargs = self.acquisition_fun_kwargs
+        dym = mdl.ym_.max() - mdl.ym_.min()  # span of observations
+        return FunctionalProblem(
+            n_var=problem.n_var,
+            objs=lambda x: acquisition(x[np.newaxis], mdl, None, dym, **kwargs)[0],
+            xl=problem.xl,
+            xu=problem.xu,
+            elementwise=False,  # enables vectorized evaluation of acquisition function
+        )
