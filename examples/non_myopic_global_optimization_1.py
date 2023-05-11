@@ -1,5 +1,6 @@
 """
-Example of application of the GO non-myopic algorithm. The example is taken from Fig. 7
+Example of application of the GO non-myopic algorithm and comparison of it with its
+myopic counterpart. The example is taken from Fig. 7
 of [1].
 
 References
@@ -119,7 +120,7 @@ for result, ylbl, axs in zip(results, ("Myopic", "Non-myopic"), np.split(all_axs
         # set axis limits and title
         ax.set_xlim(*problem.bounds())
         ax.set_ylim(0, 2.5)
-        ax.set_title(f"iter = {i + 1}, best cost = {ym.min():.4f}", fontsize=9)
+        ax.set_title(f"iteration {i + 1}, best cost = {ym.min():.4f}", fontsize=9)
         if i == 0:
             ax.set_ylabel(ylbl, fontsize=9)
             if ylbl == "Myopic":
