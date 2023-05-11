@@ -13,7 +13,6 @@ from typing import Any, Optional, Union
 
 import numpy as np
 import numpy.typing as npt
-from pymoo.algorithms.soo.nonconvex.pso import PSO
 from pymoo.core.algorithm import Algorithm
 from pymoo.core.duplicate import DefaultDuplicateElimination
 from pymoo.core.initialization import Initialization
@@ -21,16 +20,15 @@ from pymoo.core.population import Population
 from pymoo.core.problem import Problem
 from pymoo.core.sampling import Sampling
 from pymoo.operators.sampling.lhs import LatinHypercubeSampling
-from pymoo.optimize import minimize
 from pymoo.problems.functional import FunctionalProblem
 from pymoo.util.display.output import Output
 
+from globopt.core.algorithm_base import Array, GOBaAseAlgorithm, Result
 from globopt.core.regression import DELTA, Idw, Rbf, fit, partial_fit
 from globopt.myopic.acquisition import acquisition
-from globopt.util.output import GlobalOptimizationOutput, PrefixedStream
 
 
-class GO(Algorithm):
+class GO(GOBaAseAlgorithm):
     """Myopic Global Optimization (GO) algorithm based on RBFs and IDWs."""
 
     def __init__(
@@ -73,19 +71,15 @@ class GO(Algorithm):
             sampling = LatinHypercubeSampling()
         self.sampling = sampling
         self.init_points = init_points
-        if acquisition_min_algorithm is None:
-            acquisition_min_algorithm = PSO()
-        self.acquisition_min_algorithm = acquisition_min_algorithm
-        self.acquisition_min_kwargs = acquisition_min_kwargs or {}
-        self.acquisition_fun_kwargs = acquisition_fun_kwargs or {}
-        super().__init__(output=output or GlobalOptimizationOutput(), **kwargs)
+        super().__init__(
+            acquisition_min_algorithm,
+            acquisition_min_kwargs,
+            acquisition_fun_kwargs,
+            output,
+            **kwargs,
+        )
 
-    def _setup(self, problem: Problem, **kwargs: Any) -> None:
-        """Makes sure the algorithm is set up correctly."""
-        super()._setup(problem, **kwargs)
-        self.acquisition_min_kwargs["seed"] = None  # would set seed globally (bad)
-        self.acquisition_min_kwargs["copy_algorithm"] = True
-        self.acquisition_min_kwargs["verbose"] = False  # self.verbose
+    def _internal_setup(self, problem: Problem) -> None:
         if hasattr(self.acquisition_min_algorithm, "pop_size"):
             self.acquisition_min_algorithm.pop_size = (
                 self.acquisition_min_algorithm.pop_size * problem.n_var
@@ -93,7 +87,6 @@ class GO(Algorithm):
 
     def _initialize_infill(self) -> None:
         """Initialize population (by sampling, if not provided)."""
-        super()._initialize_infill()
         problem: Problem = self.problem  # type: ignore[annotation-unchecked]
         init_points = self.init_points
 
@@ -110,39 +103,10 @@ class GO(Algorithm):
 
     def _initialize_advance(self, infills: Population, **kwargs) -> None:
         """Fits the regression model to initial data."""
-        super()._initialize_advance(infills, **kwargs)
         X, y = infills.get("X", "F")
         self.regression = fit(self.regression, X[np.newaxis], y[np.newaxis])
 
-    def _infill(self) -> Population:
-        """Creates one offspring (new point to evaluate) by minimizing acquisition."""
-        super()._infill()
-
-        # solve the acquisition minimization problem
-        acq_problem = self._get_acquisition_problem()
-        with PrefixedStream.prefixed_print("- - - - "):
-            res = minimize(
-                acq_problem,
-                self.acquisition_min_algorithm,
-                **self.acquisition_min_kwargs,
-            )
-        self.acquisition_min_res = res
-
-        # return population with the new point to evaluate merged as last
-        xnew = res.X.reshape(1, acq_problem.n_var)
-        return Population.merge(self.pop, Population.new(X=xnew))
-
-    def _advance(self, infills: Population, **kwargs: Any) -> Optional[bool]:
-        """Adds new offspring to the regression model."""
-        super()._advance(infills, **kwargs)
-        self.pop = infills
-        Xnew = infills[-1].X.reshape(1, 1, -1)
-        ynew = infills[-1].F.reshape(1, 1, -1)
-        self.regression = partial_fit(self.regression, Xnew, ynew)
-        return True  # succesful iteration: True or None; failed iteration: False
-
-    def _get_acquisition_problem(self) -> FunctionalProblem:
-        """Internal utility to define the acquisition function problem."""
+    def _get_acquisition_problem(self) -> Problem:
         problem: Problem = self.problem  # type: ignore[annotation-unchecked]
         mdl = self.regression
         kwargs = self.acquisition_fun_kwargs
@@ -154,3 +118,15 @@ class GO(Algorithm):
             xu=problem.xu,
             elementwise=False,  # enables vectorized evaluation of acquisition function
         )
+
+    def _get_new_sample_from_acquisition_result(self, result: Result) -> Array:
+        return result.X.reshape(1, self.problem.n_var)
+
+    def _advance(self, infills: Population, **kwargs: Any) -> Optional[bool]:
+        """Adds new offspring to the regression model."""
+        super()._advance(infills, **kwargs)
+        self.pop = infills
+        Xnew = infills[-1].X.reshape(1, 1, -1)
+        ynew = infills[-1].F.reshape(1, 1, -1)
+        self.regression = partial_fit(self.regression, Xnew, ynew)
+        return True  # succesful iteration: True or None; failed iteration: False
