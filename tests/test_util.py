@@ -1,7 +1,5 @@
-import sys
 import unittest
 from copy import deepcopy
-from io import StringIO
 
 import numpy as np
 from pymoo.algorithms.soo.nonconvex.ga import GA
@@ -12,7 +10,6 @@ from pymoo.util.normalization import ZeroToOneNormalization
 from globopt.benchmarking.problems import Adjiman
 from globopt.util.callback import BestSoFarCallback
 from globopt.util.normalization import NormalizedProblemWrapper, RangeNormalization
-from globopt.util.output import PrefixedStream
 from globopt.util.wrapper import Wrapper
 
 
@@ -74,30 +71,6 @@ class TestWrapper(unittest.TestCase):
         self.assertIs(obj, wrapped_obj.unwrapped)
         self.assertIs(obj, wrapped_obj.wrapped)
         self.assertEqual(obj.field, wrapped_obj.field)
-
-
-class TestPrefixedStream(unittest.TestCase):
-    def setUp(self) -> None:
-        self.capture = StringIO()
-        sys.stdout = self.capture
-
-    def tearDown(self) -> None:
-        sys.stdout = sys.__stdout__
-
-    def test__print_calls__are_prefixed(self):
-        prefix = ">>> "
-        text1 = "Hello, world!"
-        text2 = "Hoe heet je?"
-        text3 = "Mijn naam is Filippo."
-
-        print(text1)
-        with PrefixedStream.prefixed_print(prefix):
-            print(text2)
-        print(text3)
-
-        self.assertEqual(
-            self.capture.getvalue(), f"{text1}\n{prefix}{text2}\n{text3}\n"
-        )
 
 
 class TestCallback(unittest.TestCase):
