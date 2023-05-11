@@ -99,6 +99,3 @@ class NonMyopicGO(GO):
         # merged as last
         xnew = res.X[:n_var].reshape(1, n_var)
         return Population.merge(self.pop, Population.new(X=xnew))
-
-    # def _post_advance(self):
-    #     return super()._post_advance()
