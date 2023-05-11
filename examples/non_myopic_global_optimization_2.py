@@ -44,7 +44,6 @@ x0 = [0.19, 0.92]
 kwargs = {
     "regression": Idw(),
     "init_points": x0,
-    "acquisition_min_kwargs": {"verbose": True},
     "acquisition_fun_kwargs": {"c1": 1.5078, "c2": 1.4246},
 }
 algorithms = (

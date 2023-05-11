@@ -85,6 +85,7 @@ class GO(Algorithm):
         super()._setup(problem, **kwargs)
         self.acquisition_min_kwargs["seed"] = None  # would set seed globally (bad)
         self.acquisition_min_kwargs["copy_algorithm"] = True
+        self.acquisition_min_kwargs["verbose"] = False  # self.verbose
         if hasattr(self.acquisition_min_algorithm, "pop_size"):
             self.acquisition_min_algorithm.pop_size = (
                 self.acquisition_min_algorithm.pop_size * problem.n_var
