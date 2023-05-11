@@ -1,17 +1,18 @@
 """Base class for all acquisition-based Global Optimization algorithms."""
 
+from copy import deepcopy
 from typing import Any, Optional
 
 from pymoo.algorithms.soo.nonconvex.pso import PSO
 from pymoo.core.algorithm import Algorithm
 from pymoo.core.population import Population
 from pymoo.core.problem import Problem
+from pymoo.core.result import Result
 from pymoo.optimize import minimize
 from pymoo.util.display.output import Output
-from pymoo.core.result import Result
 
+from globopt.core.display import GlobalOptimizationDisplay, GlobalOptimizationOutput
 from globopt.core.regression import Array
-from globopt.util.output import GlobalOptimizationOutput
 
 
 class GOBaAseAlgorithm(Algorithm):
@@ -23,8 +24,7 @@ class GOBaAseAlgorithm(Algorithm):
         output: Output = None,
         **kwargs,
     ) -> None:
-        # TODO: adjust __init__ and its docstring
-        """instiantiate a new GO algorithm.
+        """instiantiate the base GO algorithm.
 
         Parameters
         ----------
@@ -51,14 +51,31 @@ class GOBaAseAlgorithm(Algorithm):
         self.acquisition_min_kwargs["seed"] = None  # would set seed globally (bad)
         self.acquisition_min_kwargs["copy_algorithm"] = True
 
+        verbose = kwargs.get("verbose", False)
+        progress = kwargs.get("progress", False)
+        self.display = GlobalOptimizationDisplay(self.output, progress, verbose)
+
+        acq_output = self.acquisition_min_algorithm.output
+        self.acquisition_min_kwargs["verbose"] = verbose
+        self.acquisition_min_kwargs["display"] = GlobalOptimizationDisplay(
+            acq_output,
+            progress,
+            verbose,
+            force_header=False,
+            header_prefix="\n\tINNER ITERATIONS:\n",
+            line_prefix="\t",
+        )
+        self._acq_output = acq_output
+
         self._internal_setup(problem)
 
     def _internal_setup(self, problem: Problem) -> None:
         """Custom setup for the algorithm."""
-        pass
 
     def _infill(self) -> Population:
         """Creates one offspring (new point to evaluate) by minimizing acquisition."""
+        self.acquisition_min_kwargs["display"].output = deepcopy(self._acq_output)
+
         acq_problem = self._get_acquisition_problem()
         res = minimize(
             acq_problem,
