@@ -13,7 +13,7 @@ from pymoo.optimize import minimize
 from globopt.core.regression import Array, Idw, predict
 from globopt.myopic.algorithm import GO
 from globopt.nonmyopic.algorithm import NonMyopicGO
-from globopt.nonmyopic.optimal_acquisition import optimal_acquisition
+from globopt.nonmyopic.acquisition import optimal_acquisition
 
 plt.style.use("bmh")
 

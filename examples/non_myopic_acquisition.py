@@ -10,7 +10,7 @@ from pymoo.problems.functional import FunctionalProblem
 from globopt.core.regression import Array, Rbf, RegressorType, fit, predict
 from globopt.myopic.acquisition import acquisition as myopic_acquisition
 from globopt.nonmyopic.acquisition import acquisition as nonmyopic_acquisition
-from globopt.nonmyopic.optimal_acquisition import optimal_acquisition
+from globopt.nonmyopic.acquisition import optimal_acquisition
 
 plt.style.use("bmh")
 
