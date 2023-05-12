@@ -9,6 +9,7 @@ import numpy.typing as npt
 from pymoo.core.problem import Problem
 from pymoo.util.normalization import Normalization
 
+from globopt.core.regression import Array
 from globopt.util.wrapper import Wrapper
 
 
@@ -46,7 +47,7 @@ class RangeNormalization(Normalization):
         self.xl_new = np.asarray(xl_new)
         self.xu_new = np.asarray(xu_new)
 
-    def forward(self, X: Union[float, npt.ArrayLike]) -> npt.NDArray[np.floating]:
+    def forward(self, X: Union[float, npt.ArrayLike]) -> Array:
         """Normalizes `X` from the old bounds to the new bounds.
 
         Parameters
@@ -64,7 +65,7 @@ class RangeNormalization(Normalization):
             self.xu_new - self.xl_new
         ) + self.xl_new
 
-    def backward(self, X: Union[float, npt.ArrayLike]) -> npt.NDArray[np.floating]:
+    def backward(self, X: Union[float, npt.ArrayLike]) -> Array:
         """Denormalizes `X` from the new bounds to the old bounds.
 
         Parameters
@@ -123,19 +124,17 @@ class NormalizedProblemWrapper(Problem, Wrapper[Problem]):
 
     def original_bounds(
         self,
-    ) -> tuple[npt.NDArray[np.floating], npt.NDArray[np.floating]]:
+    ) -> tuple[Array, Array]:
         """Gets the bounds of the wrapped problem."""
         return self.wrapped.bounds()
 
-    def _evaluate(
-        self, x: npt.NDArray[np.floating], out: dict[str, Any], *args, **kwargs
-    ) -> None:
+    def _evaluate(self, x: Array, out: dict[str, Any], *args, **kwargs) -> None:
         x_ = self.normalization.backward(x)
         self.wrapped._evaluate(x_, out, *args, **kwargs)
 
-    def _calc_pareto_set(self) -> Union[None, Number, npt.NDArray[np.floating]]:
+    def _calc_pareto_set(self) -> Union[None, Number, Array]:
         pf = self.wrapped._calc_pareto_set()
         return None if pf is None else self.normalization.forward(pf)
 
-    def _calc_pareto_front(self, *args, **kwargs) -> Optional[npt.NDArray[np.floating]]:
+    def _calc_pareto_front(self, *args, **kwargs) -> Optional[Array]:
         return self.wrapped._calc_pareto_front(*args, **kwargs)
