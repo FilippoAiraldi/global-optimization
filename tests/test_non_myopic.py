@@ -2,6 +2,7 @@ import pickle
 import unittest
 
 import numpy as np
+from parameterized import parameterized
 from pymoo.optimize import minimize
 
 from globopt.core.problems import Simple1DProblem
@@ -15,11 +16,14 @@ from globopt.core.regression import (
     predict,
 )
 from globopt.myopic.acquisition import acquisition as myopic_acquisition
-from globopt.nonmyopic.acquisition import acquisition
+from globopt.nonmyopic.acquisition import acquisition, optimal_acquisition
 from globopt.nonmyopic.algorithm import NonMyopicGO
 
 with open(r"tests/data_test_non_myopic.pkl", "rb") as f:
     RESULTS = pickle.load(f)
+
+# with open(r"tests/data_test_non_myopic.pkl", "wb") as f:
+#     pickle.dump({**RESULTS, "optimal_acquisition_2": nonmyopic_a}, f)
 
 
 def naive_acquisition(
@@ -57,6 +61,26 @@ class TestAcquisition(unittest.TestCase):
         x = np.random.randn(n_samples * 2, h, n_var)
 
         np.testing.assert_allclose(acquisition(x, mdl), naive_acquisition(x, mdl))
+
+    @parameterized.expand([(1,), (2,)])
+    def test_optimal_acquisition__returns_correct_values(self, h: int):
+        xl, xu = -3, +3
+        c1, c2 = 1.0, 0.5
+        f = Simple1DProblem.f
+        X = np.array([-2.62, -1.99, 0.14, 1.01, 2.62]).reshape(1, -1, 1)
+        y = f(X)
+        mdl = fit(Rbf("thinplatespline", 0.01), X, y)
+        x = np.linspace(xl, xu, 100).reshape(1, -1, 1)  # add batch dim
+
+        nonmyopic_a = optimal_acquisition(x[0], mdl, h, c1, c2, brute_force=True)
+
+        if h == 1:
+            myopic_a = myopic_acquisition(x, mdl, None, None, c1, c2).flatten()
+            np.testing.assert_allclose(nonmyopic_a, myopic_a)
+        else:
+            np.testing.assert_allclose(
+                nonmyopic_a, RESULTS[f"optimal_acquisition_{h}"], atol=1e-3, rtol=1e-3
+            )
 
 
 class TestAlgorithm(unittest.TestCase):
