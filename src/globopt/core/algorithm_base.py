@@ -82,10 +82,7 @@ class GOBaAseAlgorithm(Algorithm):
             self.acquisition_min_algorithm,
             **self.acquisition_min_kwargs,
         )
-
-        # TODO: check result object if failed
         self.acquisition_min_res = res  # for logging purposes
-
         xnew = self._get_new_sample_from_acquisition_result(res)
         return Population.merge(self.pop, Population.new(X=xnew))
 
