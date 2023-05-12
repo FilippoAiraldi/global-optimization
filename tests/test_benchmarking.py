@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 from parameterized import parameterized
 
-from globopt.benchmarking.problems import (
+from benchmarking.problems import (
     get_available_benchmark_problems,
     get_benchmark_problem,
 )

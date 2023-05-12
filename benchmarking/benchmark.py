@@ -13,7 +13,7 @@ from pymoo.optimize import minimize
 from pymoo.termination.default import DefaultSingleObjectiveTermination
 from scipy.io import savemat
 
-from globopt.benchmarking.problems import (
+from benchmarking.problems import (
     get_available_benchmark_problems,
     get_benchmark_problem,
 )
