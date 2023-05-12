@@ -387,20 +387,19 @@ class StyblinskiTang5(StyblinskiTang):
         super().__init__(5, *args, **kwargs)
 
 
-"""Dict of all the avaiable benchmark classes and their maximum evaluation number."""
-TESTS: dict[str, tuple[Type[Problem], int]] = {
-    cls.__name__.lower(): (cls, max_evals)
-    for cls, max_evals in [
-        (Ackley, 60),
-        (Adjiman, 15),
-        (Branin, 25),
-        (CamelSixHumps, 15),
-        (Hartman3, 50),
-        (Hartman6, 80),
-        (Himmelblau, 20),
-        (Rosenbrock8, 80),
-        (Step2Function5, 25),
-        (StyblinskiTang5, 60),
+TESTS: dict[str, tuple[Type[Problem], int, Literal["rbf", "idw"]]] = {
+    cls.__name__.lower(): (cls, max_evals, regressor_type)  # type: ignore[misc]
+    for cls, max_evals, regressor_type in [
+        (Ackley, 50, "rbf"),
+        (Adjiman, 10, "rbf"),
+        (Branin, 40, "rbf"),
+        (CamelSixHumps, 10, "rbf"),
+        (Hartman3, 50, "rbf"),
+        (Hartman6, 100, "rbf"),
+        (Himmelblau, 25, "rbf"),
+        (Rosenbrock8, 60, "idw"),
+        (Step2Function5, 40, "idw"),
+        (StyblinskiTang5, 60, "rbf"),
     ]
 }
 
@@ -418,7 +417,7 @@ def get_available_benchmark_problems() -> list[str]:
 
 def get_benchmark_problem(
     name: str, *args: Any, normalize: bool = False, **kwargs: Any
-) -> tuple[Problem, int]:
+) -> tuple[Problem, int, Literal["rbf", "idw"]]:
     """Gets an instance of a benchmark test problem.
 
     Parameters
@@ -433,17 +432,20 @@ def get_benchmark_problem(
 
     Returns
     -------
-    tuple of (Problem, int)
-        The problem and the maximum number of evaluations.
+    tuple of (Problem, int, str)
+        The problem, the maximum number of evaluations and the regression type suggested
+        for its optimization.
 
     Raises
     ------
     KeyError
         Raised if the name of the benchmark test is not found.
     """
-    problem_type, max_evals = TESTS[name.lower()]
+    problem_type, max_evals, regressor = TESTS[name.lower()]
     problem = problem_type(*args, **kwargs)
-    return NormalizedProblemWrapper(problem) if normalize else problem, max_evals
+    if normalize:
+        problem = NormalizedProblemWrapper(problem)
+    return problem, max_evals, regressor
 
 
 # import matplotlib.pyplot as plt
