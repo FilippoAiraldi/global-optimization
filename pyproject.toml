@@ -22,10 +22,6 @@ classifiers = [
 dependencies = [
     "pymoo >= 0.6.0.1",
     "typing_extensions >= 4.5.0",
-]
-
-[project.optional-dependencies]
-benchmarking = [
     "joblib >= 1.2.0",
 ]
 

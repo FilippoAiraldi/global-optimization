@@ -7,10 +7,10 @@ from pymoo.algorithms.soo.nonconvex.pso import PSO
 from pymoo.optimize import minimize
 from pymoo.problems.functional import FunctionalProblem
 
-from globopt.benchmarking.optimal_acquisition import optimal_acquisition
 from globopt.core.regression import Array, Rbf, RegressorType, fit, predict
 from globopt.myopic.acquisition import acquisition as myopic_acquisition
 from globopt.nonmyopic.acquisition import acquisition as nonmyopic_acquisition
+from globopt.nonmyopic.optimal_acquisition import optimal_acquisition
 
 plt.style.use("bmh")
 
