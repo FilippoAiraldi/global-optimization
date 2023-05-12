@@ -93,22 +93,26 @@ for i, (ax, algo) in enumerate(zip(axs, result.history)):
     y_hat = predict(mdl, x[np.newaxis])
     ax.plot(x, y_hat[0], label=r"$\hat{f}(x)$")
 
-    # plot the acquisition function and its minimum, or or the best point found if the
+    # plot the acquisition function and its minimum, or the best point found if the
     # algorithm has terminated
-    a = acquisition(x[None], mdl, y_hat, **algo.acquisition_fun_kwargs)[0]
-    c = ax.plot(x, a, "--", lw=2.5, label="$a(x)$")[0].get_color()
     if i < len(result.history) - 1:
+        a = acquisition(x[None], mdl, y_hat, **algo.acquisition_fun_kwargs)[0]
         acq_min = result.history[i + 1].acquisition_min_res.opt.item()
-        ax.plot(acq_min.X, acq_min.F, "*", markersize=17, color=c)
+
+        ax_ = ax.twinx()
+        c = ax_.plot(x, a, "--", lw=2.5, label="$a(x)$", color="C2")[0].get_color()
+        ax_.plot(acq_min.X, acq_min.F, "*", markersize=13, color=c)
+        ax_.set_axis_off()
+        ylim = ax_.get_ylim()
+        ax_.set_ylim(ylim[0] - 0.1, ylim[1] + np.diff(ylim) * 0.7)
     else:
-        ax.plot(*algo.opt.get("X", "F"), "*", markersize=17, color="k")
+        ax.plot(*algo.opt.get("X", "F"), "*", markersize=17, color="C4")
 
     # set axis limits and title
     ax.set_xlim(*problem.bounds())
-    ax.set_ylim(0, 2.5)
+    ylim = (0.1, 2.4)
+    ax.set_ylim(ylim[0] - np.diff(ylim) * 0.1, ylim[1])
     ax.set_title(f"iter = {i + 1}, best cost = {ym.min():.4f}", fontsize=9)
-    if i == 0:
-        ax.legend()
 for j in range(i + 1, len(axs)):
     axs[j].set_axis_off()
 plt.show()

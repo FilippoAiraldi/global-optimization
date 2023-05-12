@@ -98,30 +98,30 @@ for result, ylbl, axs in zip(results, ("Myopic", "Non-myopic"), np.split(all_axs
 
         # plot the optimal acquisition function and its minimum, or the best point found
         # if the algorithm has terminated
-        a = optimal_acquisition(
-            x,
-            mdl,
-            getattr(algo, "horizon", 1),
-            **algo.acquisition_fun_kwargs,
-            brute_force=True,
-            verbosity=10,
-        )
-        c = ax.plot(x.flatten(), a, "--", lw=2.5, label="$a(x)$")[0].get_color()
         if i < len(result.history) - 1:
+            h = getattr(algo, "horizon", 1)
+            a = optimal_acquisition(
+                x, mdl, h, **algo.acquisition_fun_kwargs, verbosity=10
+            )
             acq_min = result.history[i + 1].acquisition_min_res.opt.item()
-            Xmin, Fmin = acq_min.X[: problem.n_var], acq_min.F[: problem.n_var]
-            ax.plot(Xmin, Fmin, "*", markersize=17, color=c)
+            p = acq_min.X[: problem.n_var], acq_min.F[: problem.n_var]
+
+            ax_ = ax.twinx()
+            c = ax_.plot(x[:, 0], a, "--", label="$a(x)$", color="C2")[0].get_color()
+            ax_.plot(*p, "*", markersize=13, color=c)
+            ax_.set_axis_off()
+            ylim = ax_.get_ylim()
+            ax_.set_ylim(ylim[0] - 0.1, ylim[1] + np.diff(ylim) * 0.7)
         else:
-            ax.plot(*algo.opt.get("X", "F"), "*", markersize=17, color="k")
+            ax.plot(*algo.opt.get("X", "F"), "*", markersize=17, color="C4")
 
         # set axis limits and title
         ax.set_xlim(*problem.bounds())
-        ax.set_ylim(0, 2.5)
+        ylim = (0.1, 2.4)
+        ax.set_ylim(ylim[0] - np.diff(ylim) * 0.1, ylim[1])
         ax.set_title(f"iteration {i + 1}, best cost = {ym.min():.4f}", fontsize=9)
         if i == 0:
             ax.set_ylabel(ylbl, fontsize=9)
-            if ylbl == "Myopic":
-                ax.legend()
     for j in range(i + 1, axs.size):
         axs[j].set_axis_off()
 plt.show()
