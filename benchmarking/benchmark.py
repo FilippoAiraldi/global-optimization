@@ -44,7 +44,7 @@ def solve_problem(
     # TODO: these values are to be fine-tuned
     eps, c1, c2 = 1.0775 / n_var, 1.5078 / n_var, 1.4246 / n_var
     kwargs = {
-        "regressor": Rbf("inversequadratic", eps=eps) if regression == "rbf" else Idw(),
+        "regressor": Rbf(eps=eps) if regression == "rbf" else Idw(),
         "init_points": 2 * n_var,
         "acquisition_min_algorithm": PSO(pop_size=10),  # size will be scaled with n_var
         "acquisition_min_kwargs": {
