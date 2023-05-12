@@ -9,53 +9,20 @@ References
 """
 
 
-from typing import Any
-
 import matplotlib.pyplot as plt
 import numpy as np
-from pymoo.core.problem import Problem
 from pymoo.optimize import minimize
-from pymoo.util.normalization import NoNormalization
 
-from globopt.core.regression import Array, Rbf, predict
+from globopt.core.problems import Simple1DProblem
+from globopt.core.regression import Rbf, predict
 from globopt.myopic.algorithm import GO, acquisition
-from globopt.util.normalization import RangeNormalization
 
 plt.style.use("bmh")
 
 
-class Simple1DProblem(Problem):
-    """Simple scalar problem to be minimized. Supports normalization."""
-
-    def __init__(self, normalized: bool = True) -> None:
-        if normalized:
-            xl, xu = -1, 1
-            self.normalization = RangeNormalization(-3, 3, xl, xu)
-        else:
-            xl, xu = -3, 3
-            self.normalization = NoNormalization()
-        super().__init__(n_var=1, n_obj=1, xl=xl, xu=xu, type_var=float)
-
-    def _evaluate(self, x: Array, out: dict[str, Any], *_, **__) -> None:
-        x = self.normalization.backward(x)
-        out["F"] = (
-            (1 + x * np.sin(2 * x) * np.cos(3 * x) / (1 + x**2)) ** 2
-            + x**2 / 12
-            + x / 10
-        )
-
-    def _calc_pareto_front(self) -> float:
-        """Returns the global minimum of the problem."""
-        return 0.279504
-
-    def _calc_pareto_set(self) -> float:
-        """Returns the global minimizer of the problem."""
-        return self.normalization.forward(-0.959769).item()
-
-
 # instantiate problem and create starting training data
-problem = Simple1DProblem(normalized=False)
-x0 = problem.normalization.forward([-2.62, -1.2, 0.14, 1.1, 2.82])
+problem = Simple1DProblem()
+x0 = [-2.62, -1.2, 0.14, 1.1, 2.82]
 
 # instantiate algorithm and then run the optimization
 algorithm = GO(

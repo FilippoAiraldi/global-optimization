@@ -6,6 +6,7 @@ from scipy.io import loadmat
 
 from globopt.core.problems import (
     get_available_benchmark_problems,
+    get_available_simple_problems,
     get_benchmark_problem,
 )
 from globopt.core.regression import Idw, Rbf, fit, partial_fit, predict
@@ -52,7 +53,7 @@ class TestRegression(unittest.TestCase):
 class TestBenchmark(unittest.TestCase):
     @parameterized.expand((False, True))
     def test__pareto_set_and_front(self, normalized: bool):
-        testnames = get_available_benchmark_problems()
+        testnames = get_available_benchmark_problems() + get_available_simple_problems()
         for name in testnames:
             pbl, _, _ = get_benchmark_problem(name, normalize=normalized)
             ps = pbl.pareto_set()

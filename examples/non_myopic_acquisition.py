@@ -7,6 +7,7 @@ from pymoo.algorithms.soo.nonconvex.pso import PSO
 from pymoo.optimize import minimize
 from pymoo.problems.functional import FunctionalProblem
 
+from globopt.core.problems import Simple1DProblem
 from globopt.core.regression import Array, Rbf, RegressorType, fit, predict
 from globopt.myopic.acquisition import acquisition as myopic_acquisition
 from globopt.nonmyopic.acquisition import acquisition as nonmyopic_acquisition
@@ -16,14 +17,7 @@ plt.style.use("bmh")
 
 # define the function and its domain
 xl, xu = -3, +3
-
-
-def f(x):
-    return (
-        (1 + x * np.sin(2 * x) * np.cos(3 * x) / (1 + x**2)) ** 2
-        + x**2 / 12
-        + x / 10
-    )
+f = Simple1DProblem.f
 
 
 # create functions for computing and optimizing the myopic and non-myopic acquisitions

@@ -10,41 +10,17 @@ References
 """
 
 
-from typing import Any
-
 import matplotlib.pyplot as plt
 import numpy as np
-from pymoo.core.problem import Problem
 from pymoo.optimize import minimize
 
-from globopt.core.regression import Array, Rbf, predict
+from globopt.core.problems import Simple1DProblem
+from globopt.core.regression import Rbf, predict
 from globopt.myopic.algorithm import GO
 from globopt.nonmyopic.acquisition import optimal_acquisition
 from globopt.nonmyopic.algorithm import NonMyopicGO
 
 plt.style.use("bmh")
-
-
-class Simple1DProblem(Problem):
-    """Simple scalar problem to be minimized."""
-
-    def __init__(self) -> None:
-        super().__init__(n_var=1, n_obj=1, xl=-3, xu=+3, type_var=float)
-
-    def _evaluate(self, x: Array, out: dict[str, Any], *_, **__) -> None:
-        out["F"] = (
-            (1 + x * np.sin(2 * x) * np.cos(3 * x) / (1 + x**2)) ** 2
-            + x**2 / 12
-            + x / 10
-        )
-
-    def _calc_pareto_front(self) -> float:
-        """Returns the global minimum of the problem."""
-        return 0.279504
-
-    def _calc_pareto_set(self) -> float:
-        """Returns the global minimizer of the problem."""
-        return -0.959769
 
 
 # instantiate problem and create starting training data

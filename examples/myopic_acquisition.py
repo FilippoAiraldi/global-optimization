@@ -15,6 +15,7 @@ from pymoo.algorithms.soo.nonconvex.pso import PSO
 from pymoo.optimize import minimize
 from pymoo.problems.functional import FunctionalProblem
 
+from globopt.core.problems import Simple1DProblem
 from globopt.core.regression import Rbf, RegressorType, fit, predict
 from globopt.myopic.acquisition import (
     _idw_distance,
@@ -27,15 +28,7 @@ plt.style.use("bmh")
 
 # define the function and its domain
 xl, xu = -3, +3
-
-
-def f(x):
-    return (
-        (1 + x * np.sin(2 * x) * np.cos(3 * x) / (1 + x**2)) ** 2
-        + x**2 / 12
-        + x / 10
-    )
-
+f = Simple1DProblem.f
 
 # create data points - X has shape (batch, n_samples, n_var), where the batch dim can be
 # used to fit multiple models at once. Here, it is 1

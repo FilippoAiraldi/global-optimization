@@ -3,14 +3,12 @@ Another example comparing the myopic and non-myopic GO algorithms.
 """
 
 
-from typing import Any
-
 import matplotlib.pyplot as plt
 import numpy as np
-from pymoo.core.problem import Problem
 from pymoo.optimize import minimize
 
-from globopt.core.regression import Array, Idw, predict
+from globopt.core.problems import AnotherSimple1DProblem
+from globopt.core.regression import Idw, predict
 from globopt.myopic.algorithm import GO
 from globopt.nonmyopic.acquisition import optimal_acquisition
 from globopt.nonmyopic.algorithm import NonMyopicGO
@@ -18,26 +16,8 @@ from globopt.nonmyopic.algorithm import NonMyopicGO
 plt.style.use("bmh")
 
 
-class Simple1DProblem(Problem):
-    """Simple scalar problem to be minimized."""
-
-    def __init__(self) -> None:
-        super().__init__(n_var=1, n_obj=1, xl=0, xu=1, type_var=float)
-
-    def _evaluate(self, x: Array, out: dict[str, Any], *_, **__) -> None:
-        out["F"] = x + np.sin(4.5 * np.pi * x)
-
-    def _calc_pareto_front(self) -> float:
-        """Returns the global minimum of the problem."""
-        return -0.669169468
-
-    def _calc_pareto_set(self) -> float:
-        """Returns the global minimizer of the problem."""
-        return 0.328325636
-
-
 # instantiate problem and create starting training data
-problem = Simple1DProblem()
+problem = AnotherSimple1DProblem()
 x0 = [0.19, 0.92]
 
 # instantiate myopic and non-myopic algorithms and then run them on the problem

@@ -387,6 +387,56 @@ class StyblinskiTang5(StyblinskiTang):
         super().__init__(5, *args, **kwargs)
 
 
+class Simple1DProblem(Problem):
+    """Simple scalar problem to be minimized. Taken from [1].
+
+    References
+    ----------
+    [1] A. Bemporad. Global optimization via inverse distance weighting and radial basis
+        functions. Computational Optimization and Applications, 77(2):571–595, 2020
+    """
+
+    def __init__(self) -> None:
+        super().__init__(n_var=1, n_obj=1, xl=-3, xu=+3, vtype=float)
+
+    def _evaluate(self, x: Array, out: dict[str, Any], *_, **__) -> None:
+        out["F"] = self.f(x)
+
+    def _calc_pareto_front(self) -> float:
+        return 0.279504
+
+    def _calc_pareto_set(self) -> float:
+        return -0.959769
+
+    @staticmethod
+    def f(x: Array) -> Array:
+        return (
+            (1 + x * np.sin(2 * x) * np.cos(3 * x) / (1 + x**2)) ** 2
+            + x**2 / 12
+            + x / 10
+        )
+
+
+class AnotherSimple1DProblem(Problem):
+    """Another Simple scalar problem to be minimized."""
+
+    def __init__(self) -> None:
+        super().__init__(n_var=1, n_obj=1, xl=0, xu=1, vtype=float)
+
+    def _evaluate(self, x: Array, out: dict[str, Any], *_, **__) -> None:
+        out["F"] = self.f(x)
+
+    def _calc_pareto_front(self) -> float:
+        return -0.669169468
+
+    def _calc_pareto_set(self) -> float:
+        return 0.328325636
+
+    @staticmethod
+    def f(x: Array) -> Array:
+        return x + np.sin(4.5 * np.pi * x)
+
+
 TESTS: dict[str, tuple[Type[Problem], int, Literal["rbf", "idw"]]] = {
     cls.__name__.lower(): (cls, max_evals, regressor_type)  # type: ignore[misc]
     for cls, max_evals, regressor_type in [
@@ -400,6 +450,8 @@ TESTS: dict[str, tuple[Type[Problem], int, Literal["rbf", "idw"]]] = {
         (Rosenbrock8, 60, "idw"),
         (Step2Function5, 40, "idw"),
         (StyblinskiTang5, 60, "rbf"),
+        (Simple1DProblem, 20, "rbf"),
+        (AnotherSimple1DProblem, 20, "idw"),
     ]
 }
 
@@ -412,7 +464,18 @@ def get_available_benchmark_problems() -> list[str]:
     list of str
         Names of all the available benchmark tests.
     """
-    return list(TESTS.keys())
+    return list(TESTS.keys() - get_available_simple_problems())
+
+
+def get_available_simple_problems() -> list[str]:
+    """Gets the names of all the simple test problems.
+
+    Returns
+    -------
+    list of str
+        Names of all the available simpler tests.
+    """
+    return ["simple1dproblem", "anothersimple1dproblem"]
 
 
 def get_benchmark_problem(

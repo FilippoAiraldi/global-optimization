@@ -1,11 +1,10 @@
 import pickle
 import unittest
-from typing import Any
 
 import numpy as np
-from pymoo.core.problem import Problem
 from pymoo.optimize import minimize
 
+from globopt.core.problems import Simple1DProblem
 from globopt.core.regression import (
     Array,
     Idw,
@@ -45,20 +44,6 @@ def f(x):
         + x**2 / 12
         + x / 10
     )
-
-
-class Simple1DProblem(Problem):
-    def __init__(self) -> None:
-        super().__init__(n_var=1, n_obj=1, xl=-3, xu=3, type_var=float)
-
-    def _evaluate(self, x: np.ndarray, out: dict[str, Any], *_, **__) -> None:
-        out["F"] = f(x)
-
-    def _calc_pareto_front(self) -> float:
-        return 0.279504
-
-    def _calc_pareto_set(self) -> float:
-        return -0.959769
 
 
 class TestAcquisition(unittest.TestCase):

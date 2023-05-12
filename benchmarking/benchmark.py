@@ -15,6 +15,7 @@ from scipy.io import savemat
 
 from globopt.core.problems import (
     get_available_benchmark_problems,
+    get_available_simple_problems,
     get_benchmark_problem,
 )
 from globopt.core.regression import Array, Idw, Rbf
@@ -158,7 +159,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--problems",
-        choices=["all"] + get_available_benchmark_problems(),
+        choices=["all"]
+        + get_available_benchmark_problems()
+        + get_available_simple_problems(),
         nargs="+",
         default=["all"],
         help="Problems to include in the benchmarking.",
