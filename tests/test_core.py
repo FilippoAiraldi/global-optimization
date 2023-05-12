@@ -54,7 +54,7 @@ class TestBenchmark(unittest.TestCase):
     def test__pareto_set_and_front(self, normalized: bool):
         testnames = get_available_benchmark_problems()
         for name in testnames:
-            pbl, _ = get_benchmark_problem(name, normalize=normalized)
+            pbl, _, _ = get_benchmark_problem(name, normalize=normalized)
             ps = pbl.pareto_set()
             pf = pbl.pareto_front()
             pf_actual = pbl.evaluate(ps)
