@@ -104,6 +104,7 @@ if __name__ == "__main__":
         study_name=f"{args.problem}_iter{iters}_trial{args.n_trials}_seed{args.seed}",
         storage="sqlite:///benchmarking/fine-tunings.db",
         sampler=sampler,
+        pruner=optuna.pruners.NopPruner(),
     )
 
     # run the optimization
