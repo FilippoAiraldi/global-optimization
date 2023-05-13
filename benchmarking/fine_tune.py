@@ -107,7 +107,7 @@ if __name__ == "__main__":
     study = optuna.create_study(
         study_name=study_name,
         storage="sqlite:///benchmarking/fine-tunings.db",
-        sampler=optuna.samplers.TPESampler(seed=args.seed),
+        sampler=optuna.samplers.CmaEsSampler(seed=args.seed),
         pruner=optuna.pruners.NopPruner(),
         direction="minimize",
     )
