@@ -99,11 +99,11 @@ if __name__ == "__main__":
     problem, iters, _ = get_benchmark_problem(args.problem)
 
     # create the study
-    sampler = optuna.samplers.TPESampler(seed=10)
+    study_name = f"{args.problem}_iters_{iters}_trials_{args.n_trials}_seed_{args.seed}"
     study = optuna.create_study(
-        study_name=f"{args.problem}_iter{iters}_trial{args.n_trials}_seed{args.seed}",
+        study_name=study_name,
         storage="sqlite:///benchmarking/fine-tunings.db",
-        sampler=sampler,
+        sampler=optuna.samplers.TPESampler(seed=args.seed),
         pruner=optuna.pruners.NopPruner(),
     )
 
