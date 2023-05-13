@@ -90,7 +90,7 @@ if __name__ == "__main__":
         required=True,
     )
     parser.add_argument(
-        "--n-trials", type=int, default=100, help="Number of trials to run."
+        "--n-trials", type=int, default=400, help="Number of trials to run."
     )
     parser.add_argument("--seed", type=int, default=1909, help="RNG seed.")
     args = parser.parse_args()
@@ -99,12 +99,13 @@ if __name__ == "__main__":
     problem, iters, _ = get_benchmark_problem(args.problem)
 
     # create the study
-    study_name = f"{args.problem}_iters_{iters}_trials_{args.n_trials}_seed_{args.seed}"
+    study_name = f"{args.problem}-iters-{iters}-trials-{args.n_trials}-seed-{args.seed}"
     study = optuna.create_study(
         study_name=study_name,
         storage="sqlite:///benchmarking/fine-tunings.db",
         sampler=optuna.samplers.TPESampler(seed=args.seed),
         pruner=optuna.pruners.NopPruner(),
+        direction="minimize",
     )
 
     # run the optimization
