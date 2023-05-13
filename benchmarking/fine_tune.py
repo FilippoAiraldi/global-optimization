@@ -18,23 +18,29 @@ from globopt.core.regression import Rbf
 from globopt.nonmyopic.algorithm import NonMyopicGO
 
 
-class ReportBestSoFarToOptunaCallback(Callback):
-    """Callback for reporting the current best solution found so far to optuna."""
-
-    def __init__(self, trial: optuna.trial.Trial) -> None:
-        super().__init__()
-        self.trial = trial
-
-    def notify(self, algorithm: Algorithm) -> None:
-        self.trial.report(algorithm.opt[0].F.item(), algorithm.n_iter - 1)
-        if self.trial.should_prune():
-            raise optuna.TrialPruned()
-
-
 def fnv1a(s: str) -> int:
     """Hashes a string using the FNV-1a algorithm."""
     FNV_OFFSET, FNV_PRIME = 2166136261, 16777619
     return sum((FNV_OFFSET ^ b) * FNV_PRIME**i for i, b in enumerate(s.encode()))
+
+
+class TrackOptunaObjectiveCallback(Callback):
+    """
+    Callback for computing and reporting the current performance to the optuna trial.
+    """
+
+    def __init__(self, trial: optuna.trial.Trial) -> None:
+        super().__init__()
+        self.trial = trial
+        self.total = 0.0
+
+    def notify(self, algorithm: Algorithm) -> None:
+        iter = algorithm.n_iter - 1
+        if iter >= algorithm.termination.n_max_gen // 2:
+            self.total += (iter + 1) * algorithm.opt[0].F.item()
+            self.trial.report(self.total, iter)
+            if self.trial.should_prune():
+                raise optuna.TrialPruned()
 
 
 def objective(
@@ -64,15 +70,13 @@ def objective(
     )
 
     # run the minimization
+    callback = TrackOptunaObjectiveCallback(trial)
+    seed = (seed + trial.number ^ fnv1a(problem.__class__.__name__)) % 2**32
     res = minimize(
-        problem,
-        algorithm,
-        termination=("n_iter", max_iter),
-        callback=ReportBestSoFarToOptunaCallback(trial),
-        verbose=False,
-        seed=(seed + trial.number ^ fnv1a(problem.__class__.__name__)) % 2**32,
+        problem, algorithm, ("n_iter", max_iter), callback=callback, seed=seed,
     )
-    return res.opt[0].F.item()
+    trial.set_user_attr("final-minimum", res.opt[0].F.item())
+    return callback.total
 
 
 if __name__ == "__main__":
