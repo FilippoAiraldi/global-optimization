@@ -42,11 +42,11 @@ def objective(
 ) -> float:
     # suggest algorithm's parameters
     n_var = problem.n_var
-    c1 = trial.suggest_float("c1", 0.1, 10.0) / n_var
-    c2 = trial.suggest_float("c2", 0.1, 10.0) / n_var
-    eps = trial.suggest_float("eps", 0.01, 10.0) / n_var
-    horizon = trial.suggest_int("horizon", 1, 5)
-    discount = trial.suggest_float("discount", 0.5, 1.0)
+    c1 = trial.suggest_float("c1", 0.0, 3.0) / n_var
+    c2 = trial.suggest_float("c2", 0.0, 3.0) / n_var
+    eps = trial.suggest_float("eps", 0.1, 3.0) / n_var
+    horizon = trial.suggest_int("horizon", 2, 5)
+    discount = trial.suggest_float("discount", 0.6, 1.0)
 
     # instantiate algorithm and problem
     algorithm = NonMyopicGO(
