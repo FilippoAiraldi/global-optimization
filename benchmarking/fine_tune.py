@@ -26,28 +26,23 @@ def fnv1a(s: str) -> int:
 
 
 class TrackOptunaObjectiveCallback(Callback):
-    """
-    Callback for computing and reporting the current performance to the optuna trial.
-    """
+    """Callback for computing the current performance of an optuna trial."""
 
-    def __init__(self, trial: optuna.trial.Trial) -> None:
+    def __init__(self) -> None:
         super().__init__()
-        self.trial = trial
         self.total = 0.0
 
     def notify(self, algorithm: Algorithm) -> None:
         iter = algorithm.n_iter - 1
         if iter >= algorithm.termination.n_max_gen // 2:
             self.total += (iter + 1) * algorithm.opt[0].F.item()
-            self.trial.report(self.total, iter)
-            if self.trial.should_prune():
-                raise optuna.TrialPruned()
 
 
 def objective(
     problem: Problem,
     regression: Literal["rbf", "idw"],
     max_iter: int,
+    N: int,
     seed: int,
     trial: optuna.trial.Trial,
 ) -> float:
@@ -79,18 +74,26 @@ def objective(
         discount=discount,
     )
 
-    # run the minimization
-    callback = TrackOptunaObjectiveCallback(trial)
-    seed = (seed + trial.number ^ fnv1a(problem.__class__.__name__)) % 2**32
-    res = minimize(
-        problem,
-        algorithm,
-        ("n_iter", max_iter),
-        callback=callback,
-        seed=seed,
-    )
-    trial.set_user_attr("final-minimum", res.opt[0].F.item())
-    return callback.total
+    # run the minimization N times
+    total = 0.0
+    final_minimum = float("inf")
+    for n in range(N):
+        callback = TrackOptunaObjectiveCallback()
+        res = minimize(
+            problem,
+            algorithm,
+            ("n_iter", max_iter),
+            callback=callback,
+            seed=(seed + n + trial.number ^ fnv1a(problem.__class__.__name__)) % 2**32,
+        )
+        final_minimum = min(final_minimum, res.opt[0].F.item())
+        total += callback.total
+        trial.report(total, n)
+        if trial.should_prune():
+            raise optuna.TrialPruned()
+
+    trial.set_user_attr("final-minimum", final_minimum)
+    return total
 
 
 if __name__ == "__main__":
@@ -108,12 +111,16 @@ if __name__ == "__main__":
         required=True,
     )
     parser.add_argument(
-        "--n-trials", type=int, default=400, help="Number of trials to run."
+        "--n-trials", type=int, default=20, help="Number of trials to run."
+    )
+    parser.add_argument(
+        "--n-avg", type=int, default=20, help="Number of runs per trial for averaging.",
     )
     parser.add_argument("--seed", type=int, default=1909, help="RNG seed.")
     args = parser.parse_args()
     problem = args.problem
     n_trials = args.n_trials
+    n_avg = args.n_avg
     seed = args.seed
 
     # instantiate the problem to fine tune the algorithm to
@@ -124,7 +131,7 @@ if __name__ == "__main__":
     pruner = optuna.pruners.NopPruner()
     storage = "sqlite:///benchmarking/fine-tunings.db"
     study_name = (
-        f"{problem}-trials-{n_trials}-seed-{seed}"
+        f"{problem}-trials-{n_trials}-avg{n_avg}-seed-{seed}"
         + f"-sampler-{sampler.__class__.__name__[:-7].lower()}"
         + f"-pruner-{pruner.__class__.__name__[:-6].lower()}"
     )
@@ -133,7 +140,7 @@ if __name__ == "__main__":
     )
 
     # run the optimization
-    obj = partial(objective, problem_instance, regression, iters, seed)
+    obj = partial(objective, problem_instance, regression, iters, n_avg, seed)
     study.optimize(obj, n_trials=n_trials, n_jobs=-1)
 
     # print the results - saving is done automatically in the db
