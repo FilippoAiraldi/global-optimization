@@ -84,7 +84,8 @@ def objective(
             algorithm,
             ("n_iter", max_iter),
             callback=callback,
-            seed=(seed + n + trial.number ^ fnv1a(problem.__class__.__name__)) % 2**32,
+            seed=(seed + n + trial.number ^ fnv1a(problem.__class__.__name__))
+            % 2**32,
         )
         final_minimum = min(final_minimum, res.opt[0].F.item())
         total += callback.total
@@ -114,7 +115,10 @@ if __name__ == "__main__":
         "--n-trials", type=int, default=20, help="Number of trials to run."
     )
     parser.add_argument(
-        "--n-avg", type=int, default=20, help="Number of runs per trial for averaging.",
+        "--n-avg",
+        type=int,
+        default=20,
+        help="Number of runs per trial for averaging.",
     )
     parser.add_argument("--seed", type=int, default=1909, help="RNG seed.")
     args = parser.parse_args()
@@ -131,7 +135,7 @@ if __name__ == "__main__":
     pruner = optuna.pruners.NopPruner()
     storage = "sqlite:///benchmarking/fine-tunings.db"
     study_name = (
-        f"{problem}-trials-{n_trials}-avg{n_avg}-seed-{seed}"
+        f"{problem}-trials-{n_trials}-avg-{n_avg}-seed-{seed}"
         + f"-sampler-{sampler.__class__.__name__[:-7].lower()}"
         + f"-pruner-{pruner.__class__.__name__[:-6].lower()}"
     )
