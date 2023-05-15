@@ -1,5 +1,6 @@
 import argparse
 from functools import partial
+from typing import Literal
 
 import optuna
 from pymoo.algorithms.soo.nonconvex.pso import PSO
@@ -14,7 +15,7 @@ from globopt.core.problems import (
     get_available_simple_problems,
     get_benchmark_problem,
 )
-from globopt.core.regression import Rbf
+from globopt.core.regression import Idw, Rbf
 from globopt.nonmyopic.algorithm import NonMyopicGO
 
 
@@ -44,19 +45,28 @@ class TrackOptunaObjectiveCallback(Callback):
 
 
 def objective(
-    problem: Problem, max_iter: int, seed: int, trial: optuna.trial.Trial
+    problem: Problem,
+    regression: Literal["rbf", "idw"],
+    max_iter: int,
+    seed: int,
+    trial: optuna.trial.Trial,
 ) -> float:
     # suggest algorithm's parameters
     n_var = problem.n_var
     c1 = trial.suggest_float("c1", 0.0, 3.0) / n_var
     c2 = trial.suggest_float("c2", 0.0, 3.0) / n_var
-    eps = trial.suggest_float("eps", 0.1, 3.0) / n_var
     horizon = trial.suggest_int("horizon", 2, 5)
     discount = trial.suggest_float("discount", 0.6, 1.0)
+    trial.suggest_discrete_uniform
+    if regression == "rbf":
+        eps = trial.suggest_float("eps", 0.1, 3.0) / n_var
+        regressor = Rbf(eps=eps)
+    else:
+        regressor = Idw()  # type: ignore
 
     # instantiate algorithm and problem
     algorithm = NonMyopicGO(
-        regressor=Rbf(eps=eps),
+        regressor=regressor,
         init_points=2 * n_var,
         acquisition_min_algorithm=PSO(pop_size=10),  # size will be scaled with n_var
         acquisition_min_kwargs={
@@ -123,7 +133,7 @@ if __name__ == "__main__":
     )
 
     # run the optimization
-    obj = partial(objective, problem_instance, iters, seed)
+    obj = partial(objective, problem_instance, regression, iters, seed)
     study.optimize(obj, n_trials=n_trials, n_jobs=-1)
 
     # print the results - saving is done automatically in the db
