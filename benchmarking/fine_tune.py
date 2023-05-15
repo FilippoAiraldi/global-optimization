@@ -102,26 +102,30 @@ if __name__ == "__main__":
     )
     parser.add_argument("--seed", type=int, default=1909, help="RNG seed.")
     args = parser.parse_args()
+    problem = args.problem
+    n_trials = args.n_trials
+    seed = args.seed
 
     # instantiate the problem to fine tune the algorithm to
-    problem, iters, _ = get_benchmark_problem(args.problem)
+    problem_instance, iters, regression = get_benchmark_problem(problem)
 
     # create the study
+    sampler = optuna.samplers.RandomSampler(seed=seed)
+    pruner = optuna.pruners.NopPruner()
+    storage = "sqlite:///benchmarking/fine-tunings.db"
     study_name = (
-        f"{args.problem}-iters-{iters}-trials-{args.n_trials}-seed-{args.seed}-3"
+        f"{problem}-trials-{n_trials}-seed-{seed}"
+        + f"-sampler-{sampler.__class__.__name__[:-7].lower()}"
+        + f"-pruner-{pruner.__class__.__name__[:-6].lower()}"
     )
     study = optuna.create_study(
-        study_name=study_name,
-        storage="sqlite:///benchmarking/fine-tunings.db",
-        sampler=optuna.samplers.RandomSampler(seed=args.seed),
-        pruner=optuna.pruners.NopPruner(),
-        direction="minimize",
+        storage=storage, sampler=sampler, pruner=pruner, study_name=study_name
     )
 
     # run the optimization
-    obj = partial(objective, problem, iters, args.seed)
-    study.optimize(obj, n_trials=args.n_trials, show_progress_bar=True, n_jobs=1)
+    obj = partial(objective, problem_instance, iters, seed)
+    study.optimize(obj, n_trials=n_trials, n_jobs=-1)
 
     # print the results - saving is done automatically in the db
-    print("BEST PARAMS:", study.best_params)
+    print("BEST VALUE:", study.best_value, "\nBEST PARAMS:", study.best_params)
     # optuna-dashboard sqlite:///benchmarking/fine-tunings.db
