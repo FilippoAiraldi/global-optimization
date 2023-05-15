@@ -73,7 +73,11 @@ def objective(
     callback = TrackOptunaObjectiveCallback(trial)
     seed = (seed + trial.number ^ fnv1a(problem.__class__.__name__)) % 2**32
     res = minimize(
-        problem, algorithm, ("n_iter", max_iter), callback=callback, seed=seed,
+        problem,
+        algorithm,
+        ("n_iter", max_iter),
+        callback=callback,
+        seed=seed,
     )
     trial.set_user_attr("final-minimum", res.opt[0].F.item())
     return callback.total
@@ -103,11 +107,13 @@ if __name__ == "__main__":
     problem, iters, _ = get_benchmark_problem(args.problem)
 
     # create the study
-    study_name = f"{args.problem}-iters-{iters}-trials-{args.n_trials}-seed-{args.seed}"
+    study_name = (
+        f"{args.problem}-iters-{iters}-trials-{args.n_trials}-seed-{args.seed}-3"
+    )
     study = optuna.create_study(
         study_name=study_name,
         storage="sqlite:///benchmarking/fine-tunings.db",
-        sampler=optuna.samplers.CmaEsSampler(seed=args.seed),
+        sampler=optuna.samplers.RandomSampler(seed=args.seed),
         pruner=optuna.pruners.NopPruner(),
         direction="minimize",
     )
@@ -117,5 +123,5 @@ if __name__ == "__main__":
     study.optimize(obj, n_trials=args.n_trials, show_progress_bar=True, n_jobs=1)
 
     # print the results - saving is done automatically in the db
-    print(study.best_params)
+    print("BEST PARAMS:", study.best_params)
     # optuna-dashboard sqlite:///benchmarking/fine-tunings.db
