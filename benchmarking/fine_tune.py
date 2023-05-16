@@ -145,7 +145,7 @@ if __name__ == "__main__":
 
     # run the optimization
     obj = partial(objective, problem_instance, regression, iters, n_avg, seed)
-    study.optimize(obj, n_trials=n_trials, n_jobs=-1)
+    study.optimize(obj, n_trials=n_trials, n_jobs=-1, show_progress_bar=True)
 
     # print the results - saving is done automatically in the db
     print("BEST VALUE:", study.best_value, "\nBEST PARAMS:", study.best_params)
