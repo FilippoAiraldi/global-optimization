@@ -45,7 +45,7 @@ def get_algorithm(h: int, n_var: int, regression: Literal["rbf", "idw"]) -> Algo
         cls = NonMyopicGO  # type: ignore[assignment]
         c1, c2, eps = 1.0887, 2.7034, 1.8473
         kwargs = {"horizon": h, "discount": 0.8277}
-        c1, c2, eps = 1.2389, 2.5306, 0.8609
+        # c1, c2, eps = 1.2389, 2.5306, 0.8609
         # kwargs = {"horizon": h, "discount": 0.8151}
     termination = DefaultSingleObjectiveTermination(ftol=1e-4, n_max_gen=300, period=10)
     return cls(
@@ -88,7 +88,7 @@ def run_benchmarks(
         print(f"Solving {name.upper()}, iteration {n_trial + 1}")
         return f"{name}_h{h}", run_benchmark(name, h, seed + n_trial)
 
-    results: list[tuple[str, list[float]]] = Parallel(n_jobs=1, verbose=10)(
+    results: list[tuple[str, list[float]]] = Parallel(n_jobs=-1, verbose=10)(
         delayed(_run)(name, h, trial)
         for name, h, trial in product(problem_names, horizons, range(n_trials))
     )
@@ -143,7 +143,7 @@ def plot_results(data_: dict[str, Array]) -> None:
         ax.xaxis.set_major_locator(MaxNLocator(nbins=5, integer=True))
     for ax in axs[-1]:
         ax.set_xlabel("number of function evaluations")
-    fig.legend(loc='outside lower center', ncol=len(next(iter(data.values()))))
+    fig.legend(loc="outside lower center", ncol=len(next(iter(data.values()))))
     plt.show()
 
 
