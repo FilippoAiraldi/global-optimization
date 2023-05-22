@@ -15,7 +15,7 @@ from globopt.core.display import GlobalOptimizationDisplay, GlobalOptimizationOu
 from globopt.core.regression import Array
 
 
-class GOBaAseAlgorithm(Algorithm):
+class GOBaseAlgorithm(Algorithm):
     def __init__(
         self,
         acquisition_min_algorithm: Algorithm = None,

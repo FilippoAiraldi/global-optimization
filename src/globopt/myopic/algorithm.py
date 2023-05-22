@@ -23,12 +23,12 @@ from pymoo.operators.sampling.lhs import LatinHypercubeSampling
 from pymoo.problems.functional import FunctionalProblem
 from pymoo.util.display.output import Output
 
-from globopt.core.algorithm_base import Array, GOBaAseAlgorithm, Result
+from globopt.core.algorithm_base import Array, GOBaseAlgorithm, Result
 from globopt.core.regression import DELTA, Idw, Rbf, fit, partial_fit
 from globopt.myopic.acquisition import acquisition
 
 
-class GO(GOBaAseAlgorithm):
+class GO(GOBaseAlgorithm):
     """Myopic Global Optimization (GO) algorithm based on RBFs and IDWs."""
 
     def __init__(
