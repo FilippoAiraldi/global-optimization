@@ -1,12 +1,10 @@
 import argparse
 from datetime import datetime
-from itertools import groupby, product, zip_longest
+from itertools import groupby, product
 from typing import Literal
 
-import matplotlib.pyplot as plt
 import numpy as np
 from joblib import Parallel, delayed
-from matplotlib.ticker import MaxNLocator
 from pymoo.algorithms.soo.nonconvex.pso import PSO
 from pymoo.optimize import minimize
 from pymoo.termination.default import DefaultSingleObjectiveTermination
@@ -21,8 +19,6 @@ from globopt.core.regression import Array, Idw, Rbf
 from globopt.myopic.algorithm import GO, Algorithm
 from globopt.nonmyopic.algorithm import NonMyopicGO
 from globopt.util.callback import BestSoFarCallback
-
-plt.style.use("bmh")
 
 MAX_SEED = 2**32
 BENCHMARK_PROBLEMS = get_available_benchmark_problems()
@@ -101,56 +97,10 @@ def run_benchmarks(
     return data
 
 
-def plot_results(data_: dict[str, Array]) -> None:
-    data: dict[str, dict[int, Array]] = {}
-    for k, v in data_.items():
-        name, h_name = k.split("_")
-        h = int(h_name[1:])
-        if name not in data:
-            data[name] = {}
-        data[name][h] = v
-
-    n_rows = 2
-    n_cols = np.ceil(len(data) / n_rows).astype(int)
-    fig, axs = plt.subplots(n_cols, n_rows, constrained_layout=True)
-    axs = np.atleast_2d(axs)
-    for i, (ax, problem_name) in enumerate(zip_longest(axs.flat, data.keys())):
-        if problem_name is None:
-            # if there are more axes than results, set the axis off
-            ax.set_axis_off()
-            continue
-
-        for horizon, results in data[problem_name].items():
-            # compute the average, worst and best solution
-            evals = np.arange(1, results.shape[1] + 1)
-            avg = results.mean(axis=0)
-            worst = results.max(axis=0)
-            best = results.min(axis=0)
-
-            # plot the results
-            lbl = f"h={horizon}" if i == 0 else None
-            c = ax.plot(evals, avg, label=lbl)[0].get_color()
-            ax.plot(evals, worst, color=c, lw=0.25)
-            ax.plot(evals, best, color=c, lw=0.25)
-            ax.fill_between(evals, worst, best, alpha=0.2, color=c)
-
-        # plot the optimal point
-        problem = get_benchmark_problem(problem_name)[0]
-        fmin = np.full(results.shape[1], problem.pareto_front())
-        ax.plot(evals, fmin, "--", color="grey", zorder=-10000)
-        ax.set_title(problem.__class__.__name__.lower(), fontsize=11)
-        ax.set_xlim(1, evals[-1])
-        ax.xaxis.set_major_locator(MaxNLocator(nbins=5, integer=True))
-    for ax in axs[-1]:
-        ax.set_xlabel("number of function evaluations")
-    fig.legend(loc="outside lower center", ncol=len(next(iter(data.values()))))
-    plt.show()
-
-
 if __name__ == "__main__":
     # parse the arguments
     parser = argparse.ArgumentParser(
-        description="Fine-tuning of GO strategies via Bayesian Optimization.",
+        description="Benchmarking of GO strategies on synthetic problems.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
@@ -171,16 +121,7 @@ if __name__ == "__main__":
         "--n-trials", type=int, default=30, help="Number of trials to run per problem."
     )
     parser.add_argument("--seed", type=int, default=1909, help="RNG seed.")
-    parser.add_argument(
-        "--plot",
-        action="store_true",
-        help="Plots the results at the end of the run.",
-    )
     args = parser.parse_args()
 
     # run the benchmarks
     results = run_benchmarks(args.problems, args.horizons, args.n_trials, args.seed)
-
-    # plot the results, if requested
-    if args.plot:
-        plot_results(results)
