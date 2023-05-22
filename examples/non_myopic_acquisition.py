@@ -7,23 +7,17 @@ from pymoo.algorithms.soo.nonconvex.pso import PSO
 from pymoo.optimize import minimize
 from pymoo.problems.functional import FunctionalProblem
 
-from globopt.benchmarking.optimal_acquisition import optimal_acquisition
+from globopt.core.problems import Simple1DProblem
 from globopt.core.regression import Array, Rbf, RegressorType, fit, predict
 from globopt.myopic.acquisition import acquisition as myopic_acquisition
 from globopt.nonmyopic.acquisition import acquisition as nonmyopic_acquisition
+from globopt.nonmyopic.acquisition import optimal_acquisition
 
 plt.style.use("bmh")
 
 # define the function and its domain
 xl, xu = -3, +3
-
-
-def f(x):
-    return (
-        (1 + x * np.sin(2 * x) * np.cos(3 * x) / (1 + x**2)) ** 2
-        + x**2 / 12
-        + x / 10
-    )
+f = Simple1DProblem.f
 
 
 # create functions for computing and optimizing the myopic and non-myopic acquisitions
@@ -72,7 +66,7 @@ mdl = fit(Rbf("thinplatespline", 0.01), X, y)
 # compute myopic acquisition function
 c1 = 1.0
 c2 = 0.5
-x = np.linspace(-3, 3, 100).reshape(1, -1, 1)
+x = np.linspace(xl, xu, 100).reshape(1, -1, 1)  # add batch dim
 myopic_results = compute_myopic_acquisition(x, mdl, c1, c2)
 
 # compute non-myopic acquisition function
@@ -81,7 +75,7 @@ discount = 1.0
 nonmyopic_results = compute_nonmyopic_acquisition(x, mdl, horizon, c1, c2, discount)
 
 # plot function and its estimate
-_, ax = plt.subplots(constrained_layout=True, figsize=(5, 4))
+_, ax = plt.subplots(constrained_layout=True, figsize=(5, 3))
 y_hat = predict(mdl, x)
 line = ax.plot(x.flatten(), f(x).flatten(), label=r"$f(x)$")[0]
 ax.plot(X.flatten(), y.flatten(), "o", label=None, color=line.get_color(), markersize=9)

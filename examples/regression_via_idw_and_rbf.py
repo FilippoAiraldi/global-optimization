@@ -11,17 +11,13 @@ References
 import matplotlib.pyplot as plt
 import numpy as np
 
+from globopt.core.problems import Simple1DProblem
 from globopt.core.regression import Idw, Rbf, RegressorType, fit, partial_fit, predict
 
 plt.style.use("bmh")
 
 
-def f(x):
-    return (
-        (1 + x * np.sin(2 * x) * np.cos(3 * x) / (1 + x**2)) ** 2
-        + x**2 / 12
-        + x / 10
-    )
+f = Simple1DProblem.f
 
 
 # create data points - X has shape (batch, n_samples, n_var), where the batch dim can be
@@ -48,10 +44,10 @@ y_hat = [predict(mdl, x).squeeze() for mdl in mdls]
 # plot model predictions
 x = x.flatten()
 _, ax = plt.subplots(constrained_layout=True, figsize=(7, 3))
+ax.plot(X.squeeze(), y.squeeze(), "o", markersize=9, color="C0")
 ax.plot(x, f(x), label="f(x)", lw=3)
 for mdl, y_hat_ in zip(mdls, y_hat):
     ax.plot(x, y_hat_, label=str(mdl))
-ax.plot(X.squeeze(), y.squeeze(), "o")
 ax.set_xlabel("x")
 ax.set_xlim(-3, 3)
 ax.set_ylim(0, 2.5)

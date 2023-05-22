@@ -11,11 +11,10 @@ References
 from typing import Any
 
 import numpy as np
-from pymoo.core.population import Population
 from pymoo.core.problem import Problem
 from pymoo.problems.functional import FunctionalProblem
 
-from globopt.myopic.algorithm import GO, PrefixedStream, minimize
+from globopt.myopic.algorithm import GO, Result
 from globopt.nonmyopic.acquisition import Array, acquisition
 
 
@@ -51,17 +50,14 @@ class NonMyopicGO(GO):
         self.shrink_horizon = shrink_horizon
         self.discount = discount
 
-    def _setup(self, problem: Problem, **kwargs: Any) -> None:
-        super()._setup(problem, **kwargs)
+    def _internal_setup(self, problem: Problem) -> None:
         if hasattr(self.acquisition_min_algorithm, "pop_size"):
             self.acquisition_min_algorithm.pop_size = (
                 self.acquisition_min_algorithm.pop_size * problem.n_var * self.horizon
             )
         self.acquisition_fun_kwargs["discount"] = self.discount
 
-    def _infill(self) -> Population:
-        """Creates one offspring (new point to evaluate) by minimizing acquisition."""
-
+    def _get_acquisition_problem(self) -> Problem:
         # shrink horizon if needed
         h = self.horizon
         if self.shrink_horizon and hasattr(self.termination, "n_max_gen"):
@@ -78,7 +74,7 @@ class NonMyopicGO(GO):
             x = x.reshape(-1, h, n_var)
             return acquisition(x, mdl, **kwargs)
 
-        acq_problem = FunctionalProblem(
+        return FunctionalProblem(
             n_var=n_var * h,
             objs=obj,
             xl=np.tile(problem.xl, h),
@@ -86,19 +82,7 @@ class NonMyopicGO(GO):
             elementwise=False,  # enables vectorized evaluation of acquisition function
         )
 
-        # solve the acquisition minimization problem
-        with PrefixedStream.prefixed_print("- - - - "):
-            res = minimize(
-                acq_problem,
-                self.acquisition_min_algorithm,
-                **self.acquisition_min_kwargs,
-            )
-        self.acquisition_min_res = res
-
-        # return population with the first point of the optimal trajectory to evaluate
-        # merged as last
-        xnew = res.X[:n_var].reshape(1, n_var)
-        return Population.merge(self.pop, Population.new(X=xnew))
-
-    # def _post_advance(self):
-    #     return super()._post_advance()
+    def _get_new_sample_from_acquisition_result(self, result: Result) -> Array:
+        # from the optimal trajectory, take only the first point
+        n_var = self.problem.n_var
+        return result.X[:n_var].reshape(1, n_var)

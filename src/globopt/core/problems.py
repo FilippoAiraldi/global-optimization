@@ -23,6 +23,7 @@ from pymoo.problems.single import Ackley as Ackley_original
 from pymoo.problems.single import Himmelblau as Himmelblau_original
 from pymoo.problems.single import Rosenbrock as Rosenbrock_original
 
+from globopt.core.regression import Array
 from globopt.util.normalization import NormalizedProblemWrapper
 
 # in some problems do not return 0 as pareto front, as this produces a bug in which
@@ -73,7 +74,7 @@ class Adjiman(Problem):
     ) -> None:
         super().__init__(n_var=2, n_obj=1, xl=xl, xu=xu, vtype=float)
 
-    def _evaluate(self, x: npt.NDArray[np.floating], out: dict, *_, **__) -> None:
+    def _evaluate(self, x: Array, out: dict, *_, **__) -> None:
         x1 = x[:, 0]
         x2 = x[:, 1]
         out["F"] = anp.cos(x1) * anp.sin(x2) - x1 / (anp.square(x2) + 1)
@@ -81,7 +82,7 @@ class Adjiman(Problem):
     def _calc_pareto_front(self) -> float:
         return -2.02181
 
-    def _calc_pareto_set(self) -> npt.NDArray[np.floating]:
+    def _calc_pareto_set(self) -> Array:
         return np.asarray([2, 0.10578])
 
 
@@ -111,7 +112,7 @@ class Branin(Problem):
         super().__init__(n_var=2, n_obj=1, xl=xl, xu=xu, vtype=float)
         self.a, self.b, self.c, self.r, self.s, self.t = a, b, c, r, s, t
 
-    def _evaluate(self, x: npt.NDArray[np.floating], out: dict, *_, **__) -> None:
+    def _evaluate(self, x: Array, out: dict, *_, **__) -> None:
         x1 = x[:, 0]
         x2 = x[:, 1]
         out["F"] = (
@@ -123,7 +124,7 @@ class Branin(Problem):
     def _calc_pareto_front(self) -> float:
         return 0.3978873
 
-    def _calc_pareto_set(self) -> npt.NDArray[np.floating]:
+    def _calc_pareto_set(self) -> Array:
         return np.asarray(
             [
                 [-np.pi, 12.275],
@@ -152,7 +153,7 @@ class CamelSixHumps(Problem):
     ) -> None:
         super().__init__(n_var=2, n_obj=1, xl=xl, xu=xu, vtype=float)
 
-    def _evaluate(self, x: npt.NDArray[np.floating], out: dict, *_, **__) -> None:
+    def _evaluate(self, x: Array, out: dict, *_, **__) -> None:
         x1 = x[:, 0]
         x2 = x[:, 1]
         x1_2 = anp.square(x1)
@@ -166,7 +167,7 @@ class CamelSixHumps(Problem):
     def _calc_pareto_front(self) -> float:
         return -1.031628453489877
 
-    def _calc_pareto_set(self) -> npt.NDArray[np.floating]:
+    def _calc_pareto_set(self) -> Array:
         return np.asarray(
             [
                 [-0.08984201368301331, 0.7126564032704135],
@@ -227,14 +228,14 @@ class Hartman(Problem):
         self.c = np.asarray([1, 1.2, 3, 3.2])
         self.P = P
 
-    def _evaluate(self, x: npt.NDArray[np.floating], out: dict, *_, **__) -> None:
+    def _evaluate(self, x: Array, out: dict, *_, **__) -> None:
         exponent = -(self.A * np.square(x[:, None, :] - self.P)).sum(axis=-1)
         out["F"] = -(self.c * anp.exp(exponent)).sum(axis=-1)
 
     def _calc_pareto_front(self) -> float:
         return -3.86278214782076 if self.n_var == 3 else -3.32236801141551
 
-    def _calc_pareto_set(self) -> npt.NDArray[np.floating]:
+    def _calc_pareto_set(self) -> Array:
         return np.asarray(
             [0.1140, 0.556, 0.852]
             if self.n_var == 3
@@ -264,7 +265,7 @@ class Himmelblau(Himmelblau_original):
     def _calc_pareto_front(self) -> float:
         return ALMOSTZERO
 
-    def _calc_pareto_set(self) -> npt.NDArray[np.floating]:
+    def _calc_pareto_set(self) -> Array:
         return np.asarray(
             [
                 [3, 2],
@@ -298,7 +299,7 @@ class Rosenbrock(Rosenbrock_original):
         self.xl = np.full(n_var, xl)
         self.xu = np.full(n_var, xu)
 
-    def _evaluate(self, x: npt.NDArray[np.floating], out: dict, *_, **__) -> None:
+    def _evaluate(self, x: Array, out: dict, *_, **__) -> None:
         x_i = x[:, :-1]
         x_i_1 = x[:, 1:]
         out["F"] = (
@@ -308,7 +309,7 @@ class Rosenbrock(Rosenbrock_original):
     def _calc_pareto_front(self) -> float:
         return ALMOSTZERO
 
-    def _calc_pareto_set(self) -> npt.NDArray[np.floating]:
+    def _calc_pareto_set(self) -> Array:
         return np.full(self.n_var, 1.0)
 
 
@@ -334,13 +335,13 @@ class Step2Function(Problem):
     ) -> None:
         super().__init__(n_var=n_var, n_obj=1, xl=xl, xu=xu, vtype=float)
 
-    def _evaluate(self, x: npt.NDArray[np.floating], out: dict, *_, **__) -> None:
+    def _evaluate(self, x: Array, out: dict, *_, **__) -> None:
         out["F"] = np.square(np.floor(x + 0.5)).sum(axis=-1)
 
     def _calc_pareto_front(self) -> float:
         return ALMOSTZERO
 
-    def _calc_pareto_set(self) -> npt.NDArray[np.floating]:
+    def _calc_pareto_set(self) -> Array:
         return np.zeros(self.n_var)
 
 
@@ -369,7 +370,7 @@ class StyblinskiTang(Problem):
     ) -> None:
         super().__init__(n_var=n_var, n_obj=1, xl=xl, xu=xu, vtype=float)
 
-    def _evaluate(self, x: npt.NDArray[np.floating], out: dict, *_, **__) -> None:
+    def _evaluate(self, x: Array, out: dict, *_, **__) -> None:
         x_2 = anp.square(x)
         x_4 = anp.square(x_2)
         out["F"] = 0.5 * (x_4 - 16 * x_2 + 5 * x).sum(axis=-1)
@@ -377,7 +378,7 @@ class StyblinskiTang(Problem):
     def _calc_pareto_front(self) -> float:
         return -39.16599 * self.n_var
 
-    def _calc_pareto_set(self) -> npt.NDArray[np.floating]:
+    def _calc_pareto_set(self) -> Array:
         return np.full(self.n_var, -2.903534)
 
 
@@ -386,20 +387,71 @@ class StyblinskiTang5(StyblinskiTang):
         super().__init__(5, *args, **kwargs)
 
 
-"""Dict of all the avaiable benchmark classes and their maximum evaluation number."""
-TESTS: dict[str, tuple[Type[Problem], int]] = {
-    cls.__name__.lower(): (cls, max_evals)
-    for cls, max_evals in [
-        (Ackley, 60),
-        (Adjiman, 15),
-        (Branin, 25),
-        (CamelSixHumps, 15),
-        (Hartman3, 50),
-        (Hartman6, 80),
-        (Himmelblau, 20),
-        (Rosenbrock8, 80),
-        (Step2Function5, 25),
-        (StyblinskiTang5, 60),
+class Simple1DProblem(Problem):
+    """Simple scalar problem to be minimized. Taken from [1].
+
+    References
+    ----------
+    [1] A. Bemporad. Global optimization via inverse distance weighting and radial basis
+        functions. Computational Optimization and Applications, 77(2):571–595, 2020
+    """
+
+    def __init__(self) -> None:
+        super().__init__(n_var=1, n_obj=1, xl=-3, xu=+3, vtype=float)
+
+    def _evaluate(self, x: Array, out: dict[str, Any], *_, **__) -> None:
+        out["F"] = self.f(x)
+
+    def _calc_pareto_front(self) -> float:
+        return 0.279504
+
+    def _calc_pareto_set(self) -> float:
+        return -0.959769
+
+    @staticmethod
+    def f(x: Array) -> Array:
+        return (
+            (1 + x * np.sin(2 * x) * np.cos(3 * x) / (1 + x**2)) ** 2
+            + x**2 / 12
+            + x / 10
+        )
+
+
+class AnotherSimple1DProblem(Problem):
+    """Another Simple scalar problem to be minimized."""
+
+    def __init__(self) -> None:
+        super().__init__(n_var=1, n_obj=1, xl=0, xu=1, vtype=float)
+
+    def _evaluate(self, x: Array, out: dict[str, Any], *_, **__) -> None:
+        out["F"] = self.f(x)
+
+    def _calc_pareto_front(self) -> float:
+        return -0.669169468
+
+    def _calc_pareto_set(self) -> float:
+        return 0.328325636
+
+    @staticmethod
+    def f(x: Array) -> Array:
+        return x + np.sin(4.5 * np.pi * x)
+
+
+TESTS: dict[str, tuple[Type[Problem], int, Literal["rbf", "idw"]]] = {
+    cls.__name__.lower(): (cls, max_evals, regressor_type)  # type: ignore[misc]
+    for cls, max_evals, regressor_type in [
+        (Ackley, 50, "rbf"),
+        (Adjiman, 10, "rbf"),
+        (Branin, 40, "rbf"),
+        (CamelSixHumps, 10, "rbf"),
+        (Hartman3, 50, "rbf"),
+        (Hartman6, 100, "rbf"),
+        (Himmelblau, 25, "rbf"),
+        (Rosenbrock8, 60, "idw"),
+        (Step2Function5, 40, "idw"),
+        (StyblinskiTang5, 60, "rbf"),
+        (Simple1DProblem, 20, "rbf"),
+        (AnotherSimple1DProblem, 20, "idw"),
     ]
 }
 
@@ -412,12 +464,23 @@ def get_available_benchmark_problems() -> list[str]:
     list of str
         Names of all the available benchmark tests.
     """
-    return list(TESTS.keys())
+    return list(TESTS.keys() - get_available_simple_problems())
+
+
+def get_available_simple_problems() -> list[str]:
+    """Gets the names of all the simple test problems.
+
+    Returns
+    -------
+    list of str
+        Names of all the available simpler tests.
+    """
+    return ["simple1dproblem", "anothersimple1dproblem"]
 
 
 def get_benchmark_problem(
     name: str, *args: Any, normalize: bool = False, **kwargs: Any
-) -> tuple[Problem, int]:
+) -> tuple[Problem, int, Literal["rbf", "idw"]]:
     """Gets an instance of a benchmark test problem.
 
     Parameters
@@ -432,17 +495,20 @@ def get_benchmark_problem(
 
     Returns
     -------
-    tuple of (Problem, int)
-        The problem and the maximum number of evaluations.
+    tuple of (Problem, int, str)
+        The problem, the maximum number of evaluations and the regression type suggested
+        for its optimization.
 
     Raises
     ------
     KeyError
         Raised if the name of the benchmark test is not found.
     """
-    problem_type, max_evals = TESTS[name.lower()]
+    problem_type, max_evals, regressor = TESTS[name.lower()]
     problem = problem_type(*args, **kwargs)
-    return NormalizedProblemWrapper(problem) if normalize else problem, max_evals
+    if normalize:
+        problem = NormalizedProblemWrapper(problem)
+    return problem, max_evals, regressor
 
 
 # import matplotlib.pyplot as plt
