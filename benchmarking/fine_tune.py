@@ -1,5 +1,6 @@
 import argparse
 from functools import partial
+from typing import Literal
 
 import optuna
 from pymoo.algorithms.soo.nonconvex.pso import PSO
@@ -14,21 +15,8 @@ from globopt.core.problems import (
     get_available_simple_problems,
     get_benchmark_problem,
 )
-from globopt.core.regression import Rbf
+from globopt.core.regression import Idw, Rbf
 from globopt.nonmyopic.algorithm import NonMyopicGO
-
-
-class ReportBestSoFarToOptunaCallback(Callback):
-    """Callback for reporting the current best solution found so far to optuna."""
-
-    def __init__(self, trial: optuna.trial.Trial) -> None:
-        super().__init__()
-        self.trial = trial
-
-    def notify(self, algorithm: Algorithm) -> None:
-        self.trial.report(algorithm.opt[0].F.item(), algorithm.n_iter - 1)
-        if self.trial.should_prune():
-            raise optuna.TrialPruned()
 
 
 def fnv1a(s: str) -> int:
@@ -37,20 +25,43 @@ def fnv1a(s: str) -> int:
     return sum((FNV_OFFSET ^ b) * FNV_PRIME**i for i, b in enumerate(s.encode()))
 
 
+class TrackOptunaObjectiveCallback(Callback):
+    """Callback for computing the current performance of an optuna trial."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.total = 0.0
+
+    def notify(self, algorithm: Algorithm) -> None:
+        iter = algorithm.n_iter - 1
+        if iter >= algorithm.termination.n_max_gen // 2:
+            self.total += (iter + 1) * algorithm.opt[0].F.item()
+
+
 def objective(
-    problem: Problem, max_iter: int, seed: int, trial: optuna.trial.Trial
+    problem: Problem,
+    regression: Literal["rbf", "idw"],
+    max_iter: int,
+    N: int,
+    seed: int,
+    trial: optuna.trial.Trial,
 ) -> float:
     # suggest algorithm's parameters
     n_var = problem.n_var
-    c1 = trial.suggest_float("c1", 0.1, 10.0) / n_var
-    c2 = trial.suggest_float("c2", 0.1, 10.0) / n_var
-    eps = trial.suggest_float("eps", 0.01, 10.0) / n_var
-    horizon = trial.suggest_int("horizon", 1, 5)
-    discount = trial.suggest_float("discount", 0.5, 1.0)
+    c1 = trial.suggest_float("c1", 0.0, 3.0) / n_var
+    c2 = trial.suggest_float("c2", 0.0, 3.0) / n_var
+    horizon = trial.suggest_int("horizon", 2, 5)
+    discount = trial.suggest_float("discount", 0.6, 1.0)
+    trial.suggest_discrete_uniform
+    if regression == "rbf":
+        eps = trial.suggest_float("eps", 0.1, 3.0) / n_var
+        regressor = Rbf(eps=eps)
+    else:
+        regressor = Idw()  # type: ignore
 
     # instantiate algorithm and problem
     algorithm = NonMyopicGO(
-        regressor=Rbf(eps=eps),
+        regressor=regressor,
         init_points=2 * n_var,
         acquisition_min_algorithm=PSO(pop_size=10),  # size will be scaled with n_var
         acquisition_min_kwargs={
@@ -63,16 +74,27 @@ def objective(
         discount=discount,
     )
 
-    # run the minimization
-    res = minimize(
-        problem,
-        algorithm,
-        termination=("n_iter", max_iter),
-        callback=ReportBestSoFarToOptunaCallback(trial),
-        verbose=False,
-        seed=(seed + trial.number ^ fnv1a(problem.__class__.__name__)) % 2**32,
-    )
-    return res.opt[0].F.item()
+    # run the minimization N times
+    total = 0.0
+    final_minimum = float("inf")
+    for n in range(N):
+        callback = TrackOptunaObjectiveCallback()
+        res = minimize(
+            problem,
+            algorithm,
+            ("n_iter", max_iter),
+            callback=callback,
+            seed=(seed + n + trial.number ^ fnv1a(problem.__class__.__name__))
+            % 2**32,
+        )
+        final_minimum = min(final_minimum, res.opt[0].F.item())
+        total += callback.total
+        trial.report(total, n)
+        if trial.should_prune():
+            raise optuna.TrialPruned()
+
+    trial.set_user_attr("final-minimum", final_minimum)
+    return total
 
 
 if __name__ == "__main__":
@@ -90,27 +112,41 @@ if __name__ == "__main__":
         required=True,
     )
     parser.add_argument(
-        "--n-trials", type=int, default=100, help="Number of trials to run."
+        "--n-trials", type=int, default=20, help="Number of trials to run."
+    )
+    parser.add_argument(
+        "--n-avg",
+        type=int,
+        default=20,
+        help="Number of runs per trial for averaging.",
     )
     parser.add_argument("--seed", type=int, default=1909, help="RNG seed.")
     args = parser.parse_args()
+    problem = args.problem
+    n_trials = args.n_trials
+    n_avg = args.n_avg
+    seed = args.seed
 
     # instantiate the problem to fine tune the algorithm to
-    problem, iters, _ = get_benchmark_problem(args.problem)
+    problem_instance, iters, regression = get_benchmark_problem(problem)
 
     # create the study
-    sampler = optuna.samplers.TPESampler(seed=10)
+    sampler = optuna.samplers.TPESampler(seed=seed)
+    pruner = optuna.pruners.NopPruner()
+    storage = "sqlite:///benchmarking/fine-tunings.db"
+    study_name = (
+        f"{problem}-trials-{n_trials}-avg-{n_avg}-seed-{seed}"
+        + f"-sampler-{sampler.__class__.__name__[:-7].lower()}"
+        + f"-pruner-{pruner.__class__.__name__[:-6].lower()}"
+    )
     study = optuna.create_study(
-        study_name=f"{args.problem}_iter{iters}_trial{args.n_trials}_seed{args.seed}",
-        storage="sqlite:///benchmarking/fine-tunings.db",
-        sampler=sampler,
-        pruner=optuna.pruners.NopPruner(),
+        storage=storage, sampler=sampler, pruner=pruner, study_name=study_name
     )
 
     # run the optimization
-    obj = partial(objective, problem, iters, args.seed)
-    study.optimize(obj, n_trials=args.n_trials, show_progress_bar=True, n_jobs=1)
+    obj = partial(objective, problem_instance, regression, iters, n_avg, seed)
+    study.optimize(obj, n_trials=n_trials, n_jobs=1, show_progress_bar=True)
 
     # print the results - saving is done automatically in the db
-    print(study.best_params)
+    print("BEST VALUE:", study.best_value, "\nBEST PARAMS:", study.best_params)
     # optuna-dashboard sqlite:///benchmarking/fine-tunings.db
