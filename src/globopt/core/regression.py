@@ -123,24 +123,27 @@ DELTA = 1e-9
 
 def _batch_sqeuclidean_cdist(X: Array, Y: Array) -> Array:
     """Computes the squared ecludian distance matrices for 3D tensors."""
+    # return np.asarray([cdist(X[i], Y[i], "sqeuclidean") for i in range(X.shape[0])])
     B = X.shape[0]
     out = np.empty((B, X.shape[1], Y.shape[1]), dtype=X.dtype)
-    return np.stack(
-        [_distance_pybind.cdist_sqeuclidean(X[i], Y[i], out=out[i]) for i in range(B)]
-    )
+    for i in range(B):
+        _distance_pybind.cdist_sqeuclidean(X[i], Y[i], out=out[i])
+    return out
 
 
 def _batch_sqeuclidean_pdist(X: Array) -> Array:
     """Computes the pairwise squared ecludian distance matrices for 3D tensors."""
+    # return np.asarray([pdist(X[i], "sqeuclidean") for i in range(X.shape[0])])
     B, nx = X.shape[:2]
     out = np.empty((B, (nx - 1) * nx // 2), dtype=X.dtype)
-    return np.stack(
-        [_distance_pybind.pdist_sqeuclidean(X[i], out=out[i]) for i in range(B)]
-    )
+    for i in range(B):
+        _distance_pybind.pdist_sqeuclidean(X[i], out=out[i])
+    return out
 
 
 def _batch_squareform(D: Array) -> Array:
     """Converts a batch of pairwise distance matrices to distance matrices."""
+    # return np.asarray([squareform(D[i]) for i in range(D.shape[0])])
     B, n = D.shape
     d = int(0.5 * (np.sqrt(8 * n + 1) + 1))
     M = np.zeros((B, d, d), dtype=D.dtype)
@@ -168,10 +171,10 @@ def _linsolve_via_svd(M: Array, y: Array, tol: float = 1e-6) -> tuple[Array, Arr
     B, n, _ = y.shape
     U, S, VT = np.linalg.svd(M)
     #
-    S = S.reshape(B, 1, n)
     S[S <= tol] = np.inf
+    Sinv = 1 / S.reshape(B, 1, n)
     #
-    Minv = (VT.transpose((0, 2, 1)) / S) @ U.transpose(0, 2, 1)
+    Minv = (VT.transpose((0, 2, 1)) * Sinv) @ U.transpose(0, 2, 1)
     coef = Minv @ y
     return coef, Minv
 
