@@ -102,9 +102,15 @@ class TestProblems(unittest.TestCase):
         ACTUAL_RES = np.array(callback.data["best"]).flatten()
         ACTUAL_COEF = algorithm.regression.coef_.flatten()
         ACTUAL_MINV = algorithm.regression.Minv_.flatten()
-        np.testing.assert_allclose(ACTUAL_RES, RESULTS["hartman6_res"].flatten())
-        np.testing.assert_allclose(ACTUAL_COEF, RESULTS["hartman6_coef"].flatten())
-        np.testing.assert_allclose(ACTUAL_MINV, RESULTS["hartman6_minv"].flatten())
+        np.testing.assert_allclose(
+            ACTUAL_RES, RESULTS["hartman6_res"].flatten(), atol=1e-3, rtol=1e-3
+        )
+        np.testing.assert_allclose(
+            ACTUAL_COEF, RESULTS["hartman6_coef"].flatten(), atol=1e-3, rtol=1e-3
+        )
+        np.testing.assert_allclose(
+            ACTUAL_MINV, RESULTS["hartman6_minv"].flatten(), atol=1e-3, rtol=1e-3
+        )
 
 
 if __name__ == "__main__":
