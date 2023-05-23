@@ -56,7 +56,6 @@ def get_algorithm(h: int, n_var: int, regression: Literal["rbf", "idw"]) -> Algo
 
 def run_benchmark(problem_name: str, h: int, seed: int) -> list[float]:
     """Solves the problem with the given horizon and seed."""
-    seed += (h ^ fnv1a(problem_name)) % MAX_SEED
     problem, max_n_iter, regression = get_benchmark_problem(problem_name)
     algorithm = get_algorithm(h, problem.n_var, regression)
     callback = BestSoFarCallback()
@@ -67,7 +66,7 @@ def run_benchmark(problem_name: str, h: int, seed: int) -> list[float]:
         copy_algorithm=False,  # no need to copy the algorithm, it is freshly created
         callback=callback,
         verbose=False,
-        seed=seed,
+        seed=(seed ^ fnv1a(problem_name)) % MAX_SEED,
     )
     return callback.data["best"]
 
