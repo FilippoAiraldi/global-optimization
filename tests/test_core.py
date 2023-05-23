@@ -1,5 +1,6 @@
 import unittest
 from itertools import product
+from sys import platform
 
 import numpy as np
 from parameterized import parameterized
@@ -17,7 +18,7 @@ from globopt.core.regression import Idw, Rbf, fit, partial_fit, predict
 from globopt.myopic.algorithm import GO
 from globopt.util.callback import BestSoFarCallback
 
-RESULTS = loadmat(r"tests/data_test_core.mat")
+RESULTS = loadmat(f"tests/data_test_core_{platform}.mat")
 
 
 def f(x):
@@ -94,7 +95,7 @@ class TestProblems(unittest.TestCase):
             termination=("n_iter", RESULTS["hartman6_res"].size),
             callback=callback,
             copy_algorithm=False,
-            verbose=False,
+            verbose=True,
             seed=2088275051,
         )
 
