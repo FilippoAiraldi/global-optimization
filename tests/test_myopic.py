@@ -54,6 +54,7 @@ class TestAlgorithm(unittest.TestCase):
             regression=Rbf("thinplatespline", 0.01, svd_tol=0),
             init_points=x0,
             acquisition_fun_kwargs={"c1": 1, "c2": 0.5},
+            acquisition_min_kwargs={"verbose": True},
         )
 
         res = minimize(

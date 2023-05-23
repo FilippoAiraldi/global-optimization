@@ -9,9 +9,12 @@ from pymoo.core.population import Population
 from pymoo.core.problem import Problem
 from pymoo.core.result import Result
 from pymoo.optimize import minimize
-from pymoo.util.display.output import Output
 
-from globopt.core.display import GlobalOptimizationDisplay, GlobalOptimizationOutput
+from globopt.core.display import (
+    GlobalOptimizationDisplay,
+    GlobalOptimizationOutput,
+    Output,
+)
 from globopt.core.regression import Array
 
 
@@ -53,18 +56,22 @@ class GOBaseAlgorithm(Algorithm):
 
         verbose = kwargs.get("verbose", False)
         progress = kwargs.get("progress", False)
-        self.display = GlobalOptimizationDisplay(self.output, progress, verbose)
-
         acq_output = self.acquisition_min_algorithm.output
-        self.acquisition_min_kwargs["verbose"] = verbose
-        self.acquisition_min_kwargs["display"] = GlobalOptimizationDisplay(
-            acq_output,
-            progress,
-            verbose,
-            force_header=False,
-            header_prefix="\n\tINNER ITERATIONS:\n",
-            line_prefix="\t",
-        )
+        if not verbose:
+            self.acquisition_min_kwargs["display"] = None
+            self.acquisition_min_kwargs["verbose"] = False
+        elif not self.acquisition_min_kwargs.get("verbose", False):
+            self.acquisition_min_kwargs["display"] = None
+        else:
+            self.display = GlobalOptimizationDisplay(self.output, progress, verbose)
+            self.acquisition_min_kwargs["display"] = GlobalOptimizationDisplay(
+                acq_output,
+                progress,
+                verbose,
+                force_header=False,
+                header_prefix="\n\tINNER ITERATIONS:\n",
+                line_prefix="\t",
+            )
         self._acq_output = acq_output
 
         self._internal_setup(problem)
@@ -74,7 +81,8 @@ class GOBaseAlgorithm(Algorithm):
 
     def _infill(self) -> Population:
         """Creates one offspring (new point to evaluate) by minimizing acquisition."""
-        self.acquisition_min_kwargs["display"].output = deepcopy(self._acq_output)
+        if acq_min_disaply := self.acquisition_min_kwargs["display"]:
+            acq_min_disaply.output = deepcopy(self._acq_output)
 
         acq_problem = self._get_acquisition_problem()
         res = minimize(
