@@ -172,9 +172,9 @@ def _linsolve_via_svd(M: Array, y: Array, tol: float = 1e-6) -> tuple[Array, Arr
     U, S, VT = np.linalg.svd(M)
     #
     S[S <= tol] = np.inf
-    Sinv = 1 / S.reshape(B, 1, n)
+    S = S.reshape(B, 1, n)
     #
-    Minv = (VT.transpose((0, 2, 1)) * Sinv) @ U.transpose(0, 2, 1)
+    Minv = (VT.transpose((0, 2, 1)) / S) @ U.transpose(0, 2, 1)
     coef = Minv @ y
     return coef, Minv
 
