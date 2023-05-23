@@ -115,6 +115,12 @@ if __name__ == "__main__":
         required=True,
     )
     parser.add_argument(
+        "--sampler",
+        choices=["random", "tpe", "cmaes"],
+        help="Optuna sampler to use.",
+        required=True,
+    )
+    parser.add_argument(
         "--n-trials", type=int, default=20, help="Number of trials to run."
     )
     parser.add_argument(
@@ -134,7 +140,12 @@ if __name__ == "__main__":
     problem_instance, iters, regression = get_benchmark_problem(problem)
 
     # create the study
-    sampler = optuna.samplers.TPESampler(seed=seed)
+    if args.sampler == "random":
+        sampler = optuna.samplers.RandomSampler(seed=seed)
+    elif args.sampler == "tpe":
+        sampler = optuna.samplers.TPESampler(seed=seed)
+    else:
+        sampler = optuna.samplers.CmaEsSampler(seed=seed)
     pruner = optuna.pruners.NopPruner()
     storage = "sqlite:///benchmarking/results/fine-tunings.db"
     study_name = (
