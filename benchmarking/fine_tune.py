@@ -61,7 +61,7 @@ def objective(
 
     # instantiate algorithm and problem
     algorithm = NonMyopicGO(
-        regressor=regressor,
+        regression=regressor,
         init_points=2 * n_var,
         acquisition_min_algorithm=PSO(pop_size=10),  # size will be scaled with n_var
         acquisition_min_kwargs={

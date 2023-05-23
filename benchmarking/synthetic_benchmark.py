@@ -45,7 +45,7 @@ def get_algorithm(h: int, n_var: int, regression: Literal["rbf", "idw"]) -> Algo
         # kwargs = {"horizon": h, "discount": 0.8151}
     termination = DefaultSingleObjectiveTermination(ftol=1e-4, n_max_gen=300, period=10)
     return cls(
-        regressor=Rbf(eps=eps / n_var) if regression == "rbf" else Idw(),
+        regression=Rbf(eps=eps / n_var) if regression == "rbf" else Idw(),
         init_points=2 * n_var,
         acquisition_min_algorithm=PSO(pop_size=10),  # size will be scaled with n_var
         acquisition_min_kwargs={"termination": termination},
