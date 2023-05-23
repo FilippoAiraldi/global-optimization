@@ -133,7 +133,7 @@ if __name__ == "__main__":
     # create the study
     sampler = optuna.samplers.TPESampler(seed=seed)
     pruner = optuna.pruners.NopPruner()
-    storage = "sqlite:///benchmarking/fine-tunings.db"
+    storage = "sqlite:///benchmarking/results/fine-tunings.db"
     study_name = (
         f"{problem}-trials-{n_trials}-avg-{n_avg}-seed-{seed}"
         + f"-sampler-{sampler.__class__.__name__[:-7].lower()}"
@@ -149,4 +149,4 @@ if __name__ == "__main__":
 
     # print the results - saving is done automatically in the db
     print("BEST VALUE:", study.best_value, "\nBEST PARAMS:", study.best_params)
-    # optuna-dashboard sqlite:///benchmarking/fine-tunings.db
+    # optuna-dashboard sqlite:///benchmarking/results/fine-tunings.db
