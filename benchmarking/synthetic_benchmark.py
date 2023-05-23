@@ -21,9 +21,9 @@ from globopt.nonmyopic.algorithm import NonMyopicGO
 from globopt.util.callback import BestSoFarCallback
 
 MAX_SEED = 2**32
+FNV_OFFSET, FNV_PRIME = 2166136261, 16777619
 BENCHMARK_PROBLEMS = get_available_benchmark_problems()
 SIMPLE_PROBLEMS = get_available_simple_problems()
-FNV_OFFSET, FNV_PRIME = 2166136261, 16777619
 
 
 def fnv1a(s: str) -> int:
