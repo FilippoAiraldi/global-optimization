@@ -80,10 +80,10 @@ def run_benchmarks(
         problem_names = BENCHMARK_PROBLEMS
 
     def _run(name: str, h: int, n_trial: int) -> tuple[str, list[float]]:
-        print(f"Solving {name.upper()}, iteration {n_trial + 1}")
+        print(f"Solving {name.upper()}, h={h}, iter={n_trial + 1}")
         return f"{name}_h{h}", run_benchmark(name, h, seed + n_trial)
 
-    results: list[tuple[str, list[float]]] = Parallel(n_jobs=-1, verbose=10)(
+    results: list[tuple[str, list[float]]] = Parallel(n_jobs=-1, verbose=100)(
         delayed(_run)(name, h, trial)
         for name, h, trial in product(problem_names, horizons, range(n_trials))
     )
