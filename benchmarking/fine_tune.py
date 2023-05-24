@@ -143,9 +143,9 @@ if __name__ == "__main__":
     if args.sampler == "random":
         sampler = optuna.samplers.RandomSampler(seed=seed)
     elif args.sampler == "tpe":
-        sampler = optuna.samplers.TPESampler(seed=seed)
+        sampler = optuna.samplers.TPESampler(seed=seed)  # type: ignore[assignment]
     else:
-        sampler = optuna.samplers.CmaEsSampler(seed=seed)
+        sampler = optuna.samplers.CmaEsSampler(seed=seed)  # type: ignore[assignment]
     pruner = optuna.pruners.NopPruner()
     storage = "sqlite:///benchmarking/results/fine-tunings.db"
     study_name = (
