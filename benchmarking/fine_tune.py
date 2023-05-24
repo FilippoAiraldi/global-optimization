@@ -1,3 +1,9 @@
+"""
+Fine-tuning, i.e., hyperparameter selection, of non-myopic Global Optimization
+strategies via Optuna's Bayesian Optimization and other algorithms.
+"""
+
+
 import argparse
 from functools import partial
 from typing import Literal
@@ -30,8 +36,16 @@ def fnv1a(s: str) -> int:
     return sum((FNV_OFFSET ^ b) * FNV_PRIME**i for i, b in enumerate(s.encode()))
 
 
-class TrackOptunaObjectiveCallback(Callback):
-    """Callback for computing the current performance of an optuna trial."""
+class TrackSecondHalfObjectiveCallback(Callback):
+    """
+    Callback for computing the current objective of an optuna trial according to the
+    performance of the optimization strategy in the second half of the run, as per [1].
+
+    References
+    ----------
+    [1] A. Bemporad. Global optimization via inverse distance weighting and radial basis
+        functions. Computational Optimization and Applications, 77(2):571–595, 2020
+    """
 
     def __init__(self) -> None:
         super().__init__()
@@ -43,7 +57,7 @@ class TrackOptunaObjectiveCallback(Callback):
             self.total += (iter + 1) * algorithm.opt[0].F.item()
 
 
-def objective(
+def optimize(
     problem: Problem,
     regression: Literal["rbf", "idw"],
     max_iter: int,
@@ -84,7 +98,7 @@ def objective(
     final_minimum = float("inf")
     seed += trial.number ^ fnv1a(problem.__class__.__name__)
     for n in range(N):
-        callback = TrackOptunaObjectiveCallback()
+        callback = TrackSecondHalfObjectiveCallback()
         res = minimize(
             problem,
             algorithm,
@@ -147,18 +161,20 @@ if __name__ == "__main__":
     else:
         sampler = optuna.samplers.CmaEsSampler(seed=seed)  # type: ignore[assignment]
     pruner = optuna.pruners.NopPruner()
-    storage = "sqlite:///benchmarking/results/fine-tunings.db"
     study_name = (
         f"{problem}-trials-{n_trials}-avg-{n_avg}-seed-{seed}"
         + f"-sampler-{sampler.__class__.__name__[:-7].lower()}"
         + f"-pruner-{pruner.__class__.__name__[:-6].lower()}"
     )
     study = optuna.create_study(
-        storage=storage, sampler=sampler, pruner=pruner, study_name=study_name
+        study_name=study_name,
+        storage="sqlite:///benchmarking/results/fine-tunings.db",
+        sampler=sampler,
+        pruner=pruner,
     )
 
     # run the optimization
-    obj = partial(objective, problem_instance, regression, iters, n_avg, seed)
+    obj = partial(optimize, problem_instance, regression, iters, n_avg, seed)
     study.optimize(obj, n_trials=n_trials, n_jobs=1, show_progress_bar=True)
 
     # print the results - saving is done automatically in the db

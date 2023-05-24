@@ -1,3 +1,9 @@
+"""
+Benchmarking of myopic and non-myopic Global Optimization strategies on synthetic
+problems.
+"""
+
+
 import argparse
 from datetime import datetime
 from itertools import groupby, product

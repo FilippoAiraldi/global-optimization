@@ -1,3 +1,9 @@
+"""
+Visualization and summary of results of benchmarking of myopic and non-myopic Global
+Optimization strategies on synthetic problems.
+"""
+
+
 import argparse
 from itertools import zip_longest
 from typing import Optional
