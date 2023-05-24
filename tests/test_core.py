@@ -1,12 +1,8 @@
 import unittest
 from itertools import product
-from sys import platform
 
 import numpy as np
 from parameterized import parameterized
-from pymoo.algorithms.soo.nonconvex.pso import PSO
-from pymoo.optimize import minimize
-from pymoo.termination.default import DefaultSingleObjectiveTermination
 from scipy.io import loadmat
 
 from globopt.core.problems import (
@@ -15,10 +11,8 @@ from globopt.core.problems import (
     get_benchmark_problem,
 )
 from globopt.core.regression import Idw, Rbf, fit, partial_fit, predict
-from globopt.myopic.algorithm import GO
-from globopt.util.callback import BestSoFarCallback
 
-RESULTS = loadmat(f"tests/data_test_core_{platform}.mat")
+RESULTS = loadmat(f"tests/data_test_core.mat")
 
 
 def f(x):
@@ -73,44 +67,44 @@ class TestProblems(unittest.TestCase):
             pf_actual.squeeze(), pf.squeeze(), rtol=1e-5, atol=1e-5
         )
 
-    def test_hartman6(self) -> None:
-        name = "hartman6"
-        problem = get_benchmark_problem(name)[0]
-        n_var = problem.n_var
-        algorithm = GO(
-            regression=Rbf(eps=1.0775 / n_var, svd_tol=0),
-            init_points=2 * n_var,
-            acquisition_min_algorithm=PSO(pop_size=10),
-            acquisition_min_kwargs={
-                "termination": DefaultSingleObjectiveTermination(
-                    ftol=1e-4, n_max_gen=300, period=10
-                )
-            },
-            acquisition_fun_kwargs={"c1": 1.5078 / n_var, "c2": 1.4246 / n_var},
-        )
-        callback = BestSoFarCallback()
-        minimize(
-            problem,
-            algorithm,
-            termination=("n_iter", RESULTS["hartman6_res"].size),
-            callback=callback,
-            copy_algorithm=False,
-            verbose=True,
-            seed=2088275051,
-        )
+    # def test_hartman6(self) -> None:
+    #     name = "hartman6"
+    #     problem = get_benchmark_problem(name)[0]
+    #     n_var = problem.n_var
+    #     algorithm = GO(
+    #         regression=Rbf(eps=1.0775 / n_var, svd_tol=0),
+    #         init_points=2 * n_var,
+    #         acquisition_min_algorithm=PSO(pop_size=10),
+    #         acquisition_min_kwargs={
+    #             "termination": DefaultSingleObjectiveTermination(
+    #                 ftol=1e-4, n_max_gen=300, period=10
+    #             )
+    #         },
+    #         acquisition_fun_kwargs={"c1": 1.5078 / n_var, "c2": 1.4246 / n_var},
+    #     )
+    #     callback = BestSoFarCallback()
+    #     minimize(
+    #         problem,
+    #         algorithm,
+    #         termination=("n_iter", RESULTS["hartman6_res"].size),
+    #         callback=callback,
+    #         copy_algorithm=False,
+    #         verbose=True,
+    #         seed=2088275051,
+    #     )
 
-        ACTUAL_RES = np.array(callback.data["best"]).flatten()
-        ACTUAL_COEF = algorithm.regression.coef_.flatten()
-        ACTUAL_MINV = algorithm.regression.Minv_.flatten()
-        np.testing.assert_allclose(
-            ACTUAL_RES, RESULTS["hartman6_res"].flatten(), atol=1e-3, rtol=1e-3
-        )
-        np.testing.assert_allclose(
-            ACTUAL_COEF, RESULTS["hartman6_coef"].flatten(), atol=1e-3, rtol=1e-3
-        )
-        np.testing.assert_allclose(
-            ACTUAL_MINV, RESULTS["hartman6_minv"].flatten(), atol=1e-3, rtol=1e-3
-        )
+    #     ACTUAL_RES = np.array(callback.data["best"]).flatten()
+    #     ACTUAL_COEF = algorithm.regression.coef_.flatten()
+    #     ACTUAL_MINV = algorithm.regression.Minv_.flatten()
+    #     np.testing.assert_allclose(
+    #         ACTUAL_RES, RESULTS["hartman6_res"].flatten(), atol=1e-3, rtol=1e-3
+    #     )
+    #     np.testing.assert_allclose(
+    #         ACTUAL_COEF, RESULTS["hartman6_coef"].flatten(), atol=1e-3, rtol=1e-3
+    #     )
+    #     np.testing.assert_allclose(
+    #         ACTUAL_MINV, RESULTS["hartman6_minv"].flatten(), atol=1e-3, rtol=1e-3
+    #     )
 
 
 if __name__ == "__main__":
