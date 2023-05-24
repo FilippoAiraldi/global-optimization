@@ -19,9 +19,14 @@ from globopt.core.regression import Idw, Rbf
 from globopt.nonmyopic.algorithm import NonMyopicGO
 
 
+MAX_SEED = 2**32
+FNV_OFFSET, FNV_PRIME = 2166136261, 16777619
+BENCHMARK_PROBLEMS = get_available_benchmark_problems()
+SIMPLE_PROBLEMS = get_available_simple_problems()
+
+
 def fnv1a(s: str) -> int:
     """Hashes a string using the FNV-1a algorithm."""
-    FNV_OFFSET, FNV_PRIME = 2166136261, 16777619
     return sum((FNV_OFFSET ^ b) * FNV_PRIME**i for i, b in enumerate(s.encode()))
 
 
@@ -77,6 +82,7 @@ def objective(
     # run the minimization N times
     total = 0.0
     final_minimum = float("inf")
+    seed += trial.number ^ fnv1a(problem.__class__.__name__)
     for n in range(N):
         callback = TrackOptunaObjectiveCallback()
         res = minimize(
@@ -84,8 +90,7 @@ def objective(
             algorithm,
             ("n_iter", max_iter),
             callback=callback,
-            seed=(seed + n + trial.number ^ fnv1a(problem.__class__.__name__))
-            % 2**32,
+            seed=(seed * (n + 1)) % MAX_SEED,
         )
         final_minimum = min(final_minimum, res.opt[0].F.item())
         total += callback.total
@@ -105,9 +110,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--problem",
-        choices=["all"]
-        + get_available_benchmark_problems()
-        + get_available_simple_problems(),
+        choices=["all"] + BENCHMARK_PROBLEMS + SIMPLE_PROBLEMS,
         help="Problem to fine tune the algorithm to.",
         required=True,
     )
