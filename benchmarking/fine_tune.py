@@ -25,7 +25,6 @@ from globopt.core.regression import Idw, Rbf
 from globopt.nonmyopic.algorithm import NonMyopicGO
 from globopt.util.callback import BestSoFarCallback
 
-
 MAX_SEED = 2**32
 FNV_OFFSET, FNV_PRIME = 2166136261, 16777619
 BENCHMARK_PROBLEMS = get_available_benchmark_problems()
@@ -96,7 +95,6 @@ def optimize(
     )
 
     if objective == "gap":
-
         f_opt = problem.pareto_front().item()
 
         def run_once(seed: int) -> tuple[float, float]:
