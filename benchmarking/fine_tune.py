@@ -23,6 +23,7 @@ from globopt.core.problems import (
 )
 from globopt.core.regression import Idw, Rbf
 from globopt.nonmyopic.algorithm import NonMyopicGO
+from globopt.util.callback import BestSoFarCallback
 
 
 MAX_SEED = 2**32
@@ -59,6 +60,7 @@ class TrackSecondHalfObjectiveCallback(Callback):
 
 def optimize(
     problem: Problem,
+    objective: Literal["gap", "second-half"],
     regression: Literal["rbf", "idw"],
     max_iter: int,
     N: int,
@@ -93,21 +95,36 @@ def optimize(
         discount=discount,
     )
 
+    if objective == "gap":
+
+        f_opt = problem.pareto_front().item()
+
+        def run_once(seed: int) -> tuple[float, float]:
+            callback = BestSoFarCallback()
+            minimize(
+                problem, algorithm, ("n_iter", max_iter), callback=callback, seed=seed
+            )
+            f_init = callback.data["best"][0]
+            f_final = callback.data["best"][-1]
+            return (f_init - f_final) / (f_init - f_opt), f_final
+
+    else:
+
+        def run_once(seed: int) -> tuple[float, float]:
+            callback = TrackSecondHalfObjectiveCallback()
+            res = minimize(
+                problem, algorithm, ("n_iter", max_iter), callback=callback, seed=seed
+            )
+            return callback.total, res.opt[0].F.item()
+
     # run the minimization N times
+    seed += trial.number ^ fnv1a(problem.__class__.__name__)
     total = 0.0
     final_minimum = float("inf")
-    seed += trial.number ^ fnv1a(problem.__class__.__name__)
     for n in range(N):
-        callback = TrackSecondHalfObjectiveCallback()
-        res = minimize(
-            problem,
-            algorithm,
-            ("n_iter", max_iter),
-            callback=callback,
-            seed=(seed * (n + 1)) % MAX_SEED,
-        )
-        final_minimum = min(final_minimum, res.opt[0].F.item())
-        total += callback.total
+        contribution, this_minimum = run_once((seed * (n + 1)) % MAX_SEED)
+        final_minimum = min(final_minimum, this_minimum)
+        total += contribution / N
         trial.report(total, n)
         if trial.should_prune():
             raise optuna.TrialPruned()
@@ -129,6 +146,12 @@ if __name__ == "__main__":
         required=True,
     )
     parser.add_argument(
+        "--objective",
+        choices=["gap", "second-half"],
+        help="Objective to optimize.",
+        required=True,
+    )
+    parser.add_argument(
         "--sampler",
         choices=["random", "tpe", "cmaes"],
         help="Optuna sampler to use.",
@@ -146,6 +169,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=1909, help="RNG seed.")
     args = parser.parse_args()
     problem = args.problem
+    objective = args.objective
     n_trials = args.n_trials
     n_avg = args.n_avg
     seed = args.seed
@@ -162,19 +186,20 @@ if __name__ == "__main__":
         sampler = optuna.samplers.CmaEsSampler(seed=seed)  # type: ignore[assignment]
     pruner = optuna.pruners.NopPruner()
     study_name = (
-        f"{problem}-trials-{n_trials}-avg-{n_avg}-seed-{seed}"
+        f"{problem}-objective-{objective}-trials-{n_trials}-avg-{n_avg}-seed-{seed}"
         + f"-sampler-{sampler.__class__.__name__[:-7].lower()}"
         + f"-pruner-{pruner.__class__.__name__[:-6].lower()}"
     )
     study = optuna.create_study(
         study_name=study_name,
         storage="sqlite:///benchmarking/results/fine-tunings.db",
+        direction="maximize" if objective == "gap" else "minimize",
         sampler=sampler,
         pruner=pruner,
     )
 
     # run the optimization
-    obj = partial(optimize, problem_instance, regression, iters, n_avg, seed)
+    obj = partial(optimize, problem_instance, objective, regression, iters, n_avg, seed)
     study.optimize(obj, n_trials=n_trials, n_jobs=1, show_progress_bar=True)
 
     # print the results - saving is done automatically in the db
