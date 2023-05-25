@@ -1,5 +1,5 @@
 """
-Fine-tuning, i.e., hyperparameter selection, of non-myopic Global Optimization
+Fine-tuning, i.e., hyperparameter optimization, of non-myopic Global Optimization
 strategies via Optuna's Bayesian Optimization and other algorithms.
 """
 
@@ -190,7 +190,7 @@ if __name__ == "__main__":
     )
     study = optuna.create_study(
         study_name=study_name,
-        storage="sqlite:///benchmarking/results/fine-tunings.db",
+        storage="sqlite:///hyperparameters/hpo.db",
         direction="maximize" if objective == "gap" else "minimize",
         sampler=sampler,
         pruner=pruner,
@@ -202,4 +202,4 @@ if __name__ == "__main__":
 
     # print the results - saving is done automatically in the db
     print("BEST VALUE:", study.best_value, "\nBEST PARAMS:", study.best_params)
-    # optuna-dashboard sqlite:///benchmarking/results/fine-tunings.db
+    # optuna-dashboard sqlite:///hyperparameters/hpo.db

@@ -88,8 +88,9 @@ def print_summary(data: dict[str, dict[int, Array]], tabletitle: Optional[str]) 
     problem_names = sorted(data.keys())
     table = PrettyTable()
     table.field_names = ["Function name", ""] + horizons
-    table.title = tabletitle
     table.float_format = ".3"
+    if tabletitle is not None:
+        table.title = tabletitle
 
     for problem_name in problem_names:
         f_opt = get_benchmark_problem(problem_name)[0].pareto_front().item()
