@@ -65,8 +65,8 @@ def plot_results(data: dict[str, dict[int, Array]], figtitle: Optional[str]) -> 
             # plot the results
             lbl = f"h={horizon}" if i == 0 else None
             c = ax.plot(evals, avg, label=lbl)[0].get_color()
-            ax.plot(evals, worst, color=c, lw=0.25)
-            ax.plot(evals, best, color=c, lw=0.25)
+            # ax.plot(evals, worst, color=c, lw=0.25)
+            # ax.plot(evals, best, color=c, lw=0.25)
             ax.fill_between(evals, worst, best, alpha=0.2, color=c)
 
         # plot the optimal point
@@ -88,7 +88,6 @@ def print_summary(data: dict[str, dict[int, Array]], tabletitle: Optional[str]) 
     problem_names = sorted(data.keys())
     table = PrettyTable()
     table.field_names = ["Function name", ""] + horizons
-    table.float_format = ".3"
     if tabletitle is not None:
         table.title = tabletitle
 
