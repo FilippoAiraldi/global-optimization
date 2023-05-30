@@ -64,7 +64,7 @@ def plot_results(data: dict[str, dict[int, Array]], figtitle: Optional[str]) -> 
 
             # plot the results
             lbl = f"h={horizon}" if i == 0 else None
-            c = ax.plot(evals, avg, label=lbl)[0].get_color()
+            c = ax.plot(evals, avg, label=lbl, lw=0.75)[0].get_color()
             # ax.plot(evals, worst, color=c, lw=0.25)
             # ax.plot(evals, best, color=c, lw=0.25)
             ax.fill_between(evals, worst, best, alpha=0.2, color=c)
