@@ -102,8 +102,8 @@ def print_summary(data: dict[str, dict[int, Array]], tabletitle: Optional[str]) 
         best_mean = np.argmax(means)
         best_median = np.argmax(medians)
 
-        means_str = [f"{m:.3f}" for m in means]
-        medians_str = [f"{m:.3f}" for m in medians]
+        means_str = [f"{m:.6f}" for m in means]
+        medians_str = [f"{m:.6f}" for m in medians]
         means_str[best_mean] = f"\033[1;34;40m{means_str[best_mean]}\033[0m"
         medians_str[best_median] = f"\033[1;34;40m{medians_str[best_median]}\033[0m"
         table.add_row([problem_name, "mean"] + means_str)
