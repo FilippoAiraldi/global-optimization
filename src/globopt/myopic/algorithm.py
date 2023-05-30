@@ -107,13 +107,19 @@ class GO(GOBaseAlgorithm):
         self.regression = fit(self.regression, X[np.newaxis], y[np.newaxis])
 
     def _get_acquisition_problem(self) -> Problem:
-        problem: Problem = self.problem  # type: ignore[annotation-unchecked]
+        problem: Problem = self.problem
         mdl = self.regression
-        kwargs = self.acquisition_fun_kwargs
-        dym = mdl.ym_.max() - mdl.ym_.min()  # span of observations
+        dym = mdl.ym_.max((1, 2), keepdims=True) - mdl.ym_.min((1, 2), keepdims=True)
+
+        def obj(x: Array) -> Array:
+            # add batch axis to x
+            return acquisition(
+                x[np.newaxis], mdl, None, dym, **self.acquisition_fun_kwargs
+            )[0]
+
         return FunctionalProblem(
             n_var=problem.n_var,
-            objs=lambda x: acquisition(x[np.newaxis], mdl, None, dym, **kwargs)[0],
+            objs=obj,
             xl=problem.xl,
             xu=problem.xu,
             elementwise=False,  # enables vectorized evaluation of acquisition function

@@ -171,7 +171,7 @@ def _optimal_acquisition_by_minimization(
     x_lb, x_ub = x.min(0), x.max(0)
     if n_var == 1:
         x_lb, x_ub = x_lb.item(), x_ub.item()  # without this, it crashes
-    pop_size = 25 * (h - 1)
+    pop_size = 25 * h
 
     def obj(x_first: Array, x_: Array) -> Array:
         # reshape from (pop_size, n_var * (h - 1)) to (pop_size, h - 1, n_var) and

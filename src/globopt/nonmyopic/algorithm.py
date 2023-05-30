@@ -64,15 +64,14 @@ class NonMyopicGO(GO):
             h = self.horizon = min(h, self.termination.n_max_gen - self.n_iter + 1)
 
         # define acquisition function problem
-        problem: Problem = self.problem  # type: ignore[annotation-unchecked]
+        problem: Problem = self.problem
         n_var = problem.n_var
-        mdl = self.regression
-        kwargs = self.acquisition_fun_kwargs
 
         def obj(x: Array) -> Array:
-            # transform x_ from (n_samples, n_var * h) to (n_samples, h, n_var)
-            x = x.reshape(-1, h, n_var)
-            return acquisition(x, mdl, **kwargs)
+            # transform x from (n_samples, n_var * h) to (n_samples, h, n_var)
+            return acquisition(
+                x.reshape(-1, h, n_var), self.regression, **self.acquisition_fun_kwargs
+            )
 
         return FunctionalProblem(
             n_var=n_var * h,

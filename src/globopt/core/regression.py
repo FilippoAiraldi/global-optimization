@@ -346,7 +346,7 @@ def predict(mdl: RegressorType, X: Array) -> Array:
 
 def repeat(mdl: RegressorType, n: int) -> RegressorType:
     """Repeats a regressor model `n` times, so that `n` regressions can be computed in
-    parallel per batch.
+    batch.
 
     Parameters
     ----------
