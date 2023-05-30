@@ -46,7 +46,7 @@ def get_algorithm(h: int, n_var: int, regression: Literal["rbf", "idw"]) -> Algo
     else:
         cls = NonMyopicGO  # type: ignore[assignment]
         c1, c2, eps = 1.0887, 2.7034, 1.8473
-        kwargs = {"horizon": h, "discount": 0.8277}
+        kwargs = {"horizon": h, "discount": 0.8277, "shrink_horizon": True}
         # c1, c2, eps = 1.2389, 2.5306, 0.8609
         # kwargs = {"horizon": h, "discount": 0.8151}
     termination = DefaultSingleObjectiveTermination(ftol=1e-4, n_max_gen=300, period=10)
