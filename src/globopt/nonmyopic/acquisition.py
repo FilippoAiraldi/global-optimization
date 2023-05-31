@@ -113,6 +113,8 @@ def optimal_acquisition(
         The optimal non-myopic acquisition function computed for each trajectory
         starting from each point in `x`.
     """
+    if h == 1:
+        return myopic_acquisition(np.expand_dims(x, 0), mdl, c1=c1, c2=c2).reshape(-1)
     return (  # type: ignore[operator]
         _optimal_acquisition_by_brute_force
         if brute_force
@@ -171,7 +173,7 @@ def _optimal_acquisition_by_minimization(
     x_lb, x_ub = x.min(0), x.max(0)
     if n_var == 1:
         x_lb, x_ub = x_lb.item(), x_ub.item()  # without this, it crashes
-    pop_size = 25 * h
+    pop_size = 20 * (h - 1)
 
     def obj(x_first: Array, x_: Array) -> Array:
         # reshape from (pop_size, n_var * (h - 1)) to (pop_size, h - 1, n_var) and
