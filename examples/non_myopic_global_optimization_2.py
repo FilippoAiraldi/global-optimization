@@ -28,7 +28,7 @@ kwargs = {
 }
 algorithms = (
     GO(**kwargs),  # type: ignore[arg-type]
-    NonMyopicGO(horizon=2, discount=1.0, **kwargs),  # type: ignore[arg-type]
+    NonMyopicGO(horizon=2, discount=1.0, **kwargs, shrink_horizon=True),
 )
 ITERS = 4
 results = (
@@ -53,6 +53,7 @@ _, all_axs = plt.subplots(
 )
 for result, ylbl, axs in zip(results, ("Myopic", "Non-myopic"), np.split(all_axs, 2)):
     axs = axs.flatten()
+    axs[0].set_ylabel(ylbl, fontsize=9)
     for i, (ax, algo) in enumerate(zip(axs, result.history)):
         # plot true function and current sampled points
         Xm = algo.pop.get("X").reshape(-1, 1)
@@ -66,13 +67,15 @@ for result, ylbl, axs in zip(results, ("Myopic", "Non-myopic"), np.split(all_axs
         ax.plot(x, y_hat, label=r"$\hat{f}(x)$")
 
         # plot the optimal acquisition function and its minimum, or the best point found
-        # if the algorithm has terminated
-        if i < len(result.history) - 1:
-            h = getattr(algo, "horizon", 1)
+        # if the algorithm has terminated (to do this, we have to access the next
+        # iteration of the algorithm)
+        if i + 1 < len(result.history):
+            next_algo = result.history[i + 1]
+            h = getattr(next_algo, "horizon", 1)
             a = optimal_acquisition(
-                x, mdl, h, **algo.acquisition_fun_kwargs, verbosity=10
+                x, mdl, h, **algo.acquisition_fun_kwargs, verbosity=0
             )
-            acq_min = result.history[i + 1].acquisition_min_res.opt.item()
+            acq_min = next_algo.acquisition_min_res.opt.item()
             p = acq_min.X[: problem.n_var], acq_min.F[: problem.n_var]
 
             ax_ = ax.twinx()
@@ -89,8 +92,6 @@ for result, ylbl, axs in zip(results, ("Myopic", "Non-myopic"), np.split(all_axs
         ylim = (-0.9, 2.2)
         ax.set_ylim(ylim[0] - np.diff(ylim) * 0.1, ylim[1])
         ax.set_title(f"iteration {i + 1}, best cost = {ym.min():.4f}", fontsize=9)
-        if i == 0:
-            ax.set_ylabel(ylbl, fontsize=9)
     for j in range(i + 1, axs.size):
         axs[j].set_axis_off()
 plt.show()
