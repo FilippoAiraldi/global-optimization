@@ -37,8 +37,8 @@ class DPStageCostCallback(Callback):
         is_non_myopic = isinstance(algorithm, NonMyopicGO)
         assert is_myopic or is_non_myopic, "Algorithm is not a GO instance."
         if self._prev_regression is not None:
-            # save the stage cost, i.e., the acquistion, of choosing the new sample
-            # given the current regression model
+            # save the stage cost, i.e., the acquistion, of having chosen the new sample
+            # given the previous regression model
             if is_non_myopic:
                 x_new = algorithm.acquisition_min_res.X[: algorithm.problem.n_var]
                 kwargs = algorithm.acquisition_fun_kwargs
