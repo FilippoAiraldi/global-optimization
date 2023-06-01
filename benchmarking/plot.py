@@ -83,7 +83,53 @@ def plot_results(data: dict[str, dict[int, Array]], figtitle: Optional[str]) -> 
     # fig.savefig("results.pdf")
 
 
-def print_summary(data: dict[str, dict[int, Array]], tabletitle: Optional[str]) -> None:
+def plot_gaps(data: dict[str, dict[int, Array]], figtitle: Optional[str]) -> None:
+    """Plots the gaps in the given dictionary."""
+    n_cols = 2
+    n_rows = np.ceil(len(data) / n_cols).astype(int)
+    fig, axs = plt.subplots(
+        n_rows, n_cols, constrained_layout=True, figsize=(n_cols * 3.5, n_rows * 1.75)
+    )
+    axs = np.atleast_2d(axs)
+    for i, (ax, problem_name) in enumerate(zip_longest(axs.flat, sorted(data.keys()))):
+        if problem_name is None:
+            # if there are more axes than results, set the axis off
+            ax.set_axis_off()
+            continue
+
+        problem = get_benchmark_problem(problem_name)[0]
+        f_opt = problem.pareto_front().item()
+
+        for horizon, results in data[problem_name].items():
+            # compute the average, worst and best gaps
+            evals = np.arange(1, results.shape[1] + 1)
+            gaps = (results[:, 0, None] - results) / (results[:, 0, None] - f_opt)
+            avg = gaps.mean(axis=0)
+            worst = gaps.max(axis=0)
+            best = gaps.min(axis=0)
+
+            # plot the gaps
+            lbl = f"h={horizon}" if i == 0 else None
+            c = ax.plot(evals, avg, label=lbl, lw=1.0)[0].get_color()
+            # ax.plot(evals, worst, color=c, lw=0.25)
+            # ax.plot(evals, best, color=c, lw=0.25)
+            ax.fill_between(evals, worst, best, alpha=0.2, color=c)
+
+        # embellish
+        ax.set_title(problem.__class__.__name__.lower(), fontsize=11)
+        ax.set_xlim(1, evals[-1])
+        ax.set_ylim(0, 1)
+        ax.xaxis.set_major_locator(MaxNLocator(nbins=5, integer=True))
+    for ax in axs[-1]:
+        ax.set_xlabel("number of function evaluations")
+    fig.legend(loc="outside lower center", ncol=len(next(iter(data.values()))))
+    fig.suptitle(figtitle, fontsize=12)
+    # fig.savefig("gaps.pdf")
+
+
+def print_gaps_summary(
+    data: dict[str, dict[int, Array]], tabletitle: Optional[str]
+) -> None:
     """Prints the summary of the results in the given dictionary."""
     horizons = [f"h={h}" for h in next(iter(data.values())).keys()]
     problem_names = sorted(data.keys())
@@ -143,6 +189,7 @@ if __name__ == "__main__":
         title = filename if include_title else None
         if not args.no_plot:
             plot_results(data, title)
+            plot_gaps(data, title)
         if not args.no_summary:
-            print_summary(data, title)
+            print_gaps_summary(data, title)
     plt.show()
