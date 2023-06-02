@@ -475,7 +475,7 @@ def get_available_simple_problems() -> list[str]:
     list of str
         Names of all the available simpler tests.
     """
-    return ["simple1dproblem", "anothersimple1dproblem"]
+    return [Simple1DProblem.__name__.lower(), AnotherSimple1DProblem.__name__.lower()]
 
 
 def get_benchmark_problem(
