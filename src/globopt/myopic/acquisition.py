@@ -76,7 +76,8 @@ def acquisition(
         target points for which to compute the acquisition, and `n_var` is the number of
         features/variables of each point.
     mdl : Idw or Rbf
-        Fitted model to use for computing the acquisition function.
+        Fitted model (or batch of fitted models) to use for computing the acquisition
+        function.
     y_hat : array of shape (batch, n_samples, 1), optional
         Predictions of the regression model at `x`. If `None`, they are computed based
         on the fitted `mdl`. If pre-computed, can be provided to speed up computations;
@@ -100,7 +101,7 @@ def acquisition(
     if y_hat is None:
         y_hat = predict(mdl, x)
     if dym is None:
-        dym = ym.max((1, 2), keepdims=True) - ym.min((1, 2), keepdims=True)
+        dym = ym.ptp((1, 2), keepdims=True)
 
     W = idw_weighting(x, Xm, mdl.exp_weighting)
     s = _idw_variance(y_hat, ym, W)

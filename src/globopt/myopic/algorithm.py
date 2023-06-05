@@ -109,7 +109,7 @@ class GO(GOBaseAlgorithm):
     def _get_acquisition_problem(self) -> Problem:
         problem: Problem = self.problem
         mdl = self.regression
-        dym = mdl.ym_.max((1, 2), keepdims=True) - mdl.ym_.min((1, 2), keepdims=True)
+        dym = mdl.ym_.ptp((1, 2), keepdims=True)
 
         def obj(x: Array) -> Array:
             # add batch axis to x
