@@ -3,6 +3,7 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
+from joblib import Parallel
 from pymoo.algorithms.soo.nonconvex.pso import PSO
 from pymoo.optimize import minimize
 from pymoo.problems.functional import FunctionalProblem
@@ -11,7 +12,6 @@ from globopt.core.problems import Simple1DProblem
 from globopt.core.regression import Array, Rbf, RegressorType, fit, predict
 from globopt.myopic.acquisition import acquisition as myopic_acquisition
 from globopt.nonmyopic.acquisition import acquisition as nonmyopic_acquisition
-from globopt.nonmyopic.acquisition import optimal_acquisition
 
 plt.style.use("bmh")
 
@@ -26,51 +26,62 @@ f = Simple1DProblem.f
 def compute_myopic_acquisition(
     x: Array, mdl: RegressorType, c1: float, c2: float
 ) -> tuple[Array, tuple[float, float]]:
+    # compute the myopic acquisition function for x
     X, y = mdl.Xm_, mdl.ym_
-    dym = y.max() - y.min()
+    dym = y.ptp()
+    a = myopic_acquisition(x, mdl, None, dym, c1, c2)
+
+    # find the minimium of the myopic acquisition function
     n_var = X.shape[-1]
-
-    def obj(x_: Array) -> Array:
-        return myopic_acquisition(x_[np.newaxis], mdl, None, dym, c1, c2)[0]
-
-    problem = FunctionalProblem(n_var=n_var, objs=obj, xl=xl, xu=xu, elementwise=False)
+    problem = FunctionalProblem(
+        n_var,
+        lambda x_: myopic_acquisition(x_, mdl, None, dym, c1, c2),
+        xl=xl,
+        xu=xu,
+        elementwise=False,
+    )
     res = minimize(problem, PSO(25), verbose=True, seed=1).opt[0]
-    a = obj(x[0])
     return a, (res.X, res.F)
 
 
 def compute_nonmyopic_acquisition(
     x: Array, mdl: RegressorType, h: int, c1: float, c2: float, discount: float
 ) -> tuple[Array, tuple[float, float]]:
-    n_var = mdl.Xm_.shape[-1]
+    # compute the non-myopic acquisition function for x
+    with Parallel(n_jobs=-1, batch_size=8, verbose=10) as parallel:
+        a = nonmyopic_acquisition(
+            x, mdl, h, discount, c1, c2, xl=xl, xu=xu, parallel=parallel
+        )
 
-    def obj(x_: Array) -> Array:
-        # transform x_ from (n_samples, n_var * h) to (n_samples, h, n_var)
-        x_ = x_.reshape(-1, h, n_var)
-        return nonmyopic_acquisition(x_, mdl, c1, c2, discount)
+        # find the minimium of the myopic acquisition function
+        parallel.verbose = 0
+        n_var = X.shape[-1]
+        problem = FunctionalProblem(
+            n_var,
+            lambda x_: nonmyopic_acquisition(
+                x_, mdl, h, discount, c1, c2, xl=xl, xu=xu, parallel=parallel
+            ),
+            xl=xl,
+            xu=xu,
+            elementwise=False,
+        )
+        res = minimize(problem, PSO(25), verbose=True, seed=1).opt[0]
+        return a, (res.X, res.F)
 
-    problem = FunctionalProblem(
-        n_var=n_var * h, objs=obj, xl=xl, xu=xu, elementwise=False
-    )
-    res = minimize(problem, PSO(25 * h), verbose=True, seed=1).opt[0]
-    a = optimal_acquisition(x[0], mdl, h, c1=c1, c2=c2, brute_force=True, verbosity=10)
-    return a, (res.X[:n_var], res.F)
 
-
-# create data points - X has shape (batch, n_samples, n_var), where the batch dim can be
-# used to fit multiple models at once. Here, it is 1
-X = np.array([-2.62, -1.99, 0.14, 1.01, 2.62]).reshape(1, -1, 1)
-y = f(X)
+# create data points - X has shape (n_samples, n_var)
+X = np.array([-2.62, -1.99, 0.14, 1.01, 2.62]).reshape(-1, 1)
+y = f(X).reshape(-1)
 mdl = fit(Rbf("thinplatespline", 0.01), X, y)
 
 # compute myopic acquisition function
 c1 = 1.0
 c2 = 0.5
-x = np.linspace(xl, xu, 100).reshape(1, -1, 1)  # add batch dim
+x = np.linspace(xl, xu, 500).reshape(-1, 1)
 myopic_results = compute_myopic_acquisition(x, mdl, c1, c2)
 
 # compute non-myopic acquisition function
-horizon = 2
+horizon = 3
 discount = 1.0
 nonmyopic_results = compute_nonmyopic_acquisition(x, mdl, horizon, c1, c2, discount)
 

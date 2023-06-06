@@ -9,43 +9,85 @@ References
 """
 
 
-from functools import partial
-from itertools import islice, product
-from typing import Any, Iterable, Iterator, Optional
-from joblib import Parallel
+from typing import Any, Optional
 
 import numpy as np
+import numpy.typing as npt
 from joblib import Parallel, delayed
 from pymoo.algorithms.soo.nonconvex.pso import PSO
+from pymoo.core.algorithm import Algorithm
 from pymoo.optimize import minimize
 from pymoo.problems.functional import FunctionalProblem
+from pymoo.termination.default import DefaultSingleObjectiveTermination
 
-from globopt.core.regression import Array, RegressorType, partial_fit, predict, repeat
+from globopt.core.regression import Array, RegressorType, partial_fit, predict
 from globopt.myopic.acquisition import acquisition as myopic_acquisition
+
+
+def _rollout(
+    x: Array,
+    y_hat: Array,
+    mdl: RegressorType,
+    horizon: int,
+    discount: float,
+    c1: float,
+    c2: float,
+    algorithm: Algorithm,
+    xl: Optional[npt.ArrayLike],
+    xu: Optional[npt.ArrayLike],
+    **minimize_kwargs: Any,
+) -> float:
+    """Rollouts the base greedy/myopic policy from the given point, using the regression
+    to predict the evolution of the dynamics of the optimization problem."""
+    n_var = x.size
+    mdl = partial_fit(mdl, x.reshape(1, n_var), y_hat.reshape(1))
+    y_min = mdl.ym_.min()
+    y_max = mdl.ym_.max()
+    a = 0.0
+    for h in range(1, horizon):
+        dym = y_max - y_min
+        problem = FunctionalProblem(
+            n_var,
+            lambda x_: myopic_acquisition(x_, mdl, None, dym, c1, c2),
+            xl=xl,
+            xu=xu,
+            elementwise=False,
+        )
+        res = minimize(problem, algorithm, verbose=False, **minimize_kwargs).opt[0]
+        a += res.F.item() * discount**h
+
+        # add new point to the regression model
+        x = res.X.reshape(1, n_var)
+        y_hat = predict(mdl, x)
+        mdl = partial_fit(mdl, x, y_hat)
+        y_min = min(y_min, y_hat)
+        y_max = max(y_max, y_hat)
+    return a
 
 
 def acquisition(
     x: Array,
     mdl: RegressorType,
     horizon: int,
+    discount: float = 1.0,
     c1: float = 1.5078,
     c2: float = 1.4246,
-    discount: float = 1.0,
-    seed: Optional[int] = None,
+    base_algorithm: Algorithm = None,
+    xl: Optional[npt.ArrayLike] = None,
+    xu: Optional[npt.ArrayLike] = None,
     parallel: Parallel = None,
+    **minimize_kwargs: Any,
 ) -> Array:
     """Computes the non-myopic acquisition function for IDW/RBF regression models.
 
     Parameters
     ----------
-    x : array of shape (1, n_samples, n_var)
+    x : array of shape (n_samples, n_var)
         Array of points for which to compute the acquisition. `n_samples` is the number
         of target points for which to compute the acquisition, and `n_var` is the number
-        of features/variables of each point. The `batch` dimension is  fixed to 1, since
-        batched computations are not supported.
+        of features/variables of each point.
     mdl : RegressorType
-        Fitted model to use for computing the acquisition function. Batched models are
-        not supported.
+        Fitted model to use for computing the acquisition function.
     horizon : int
         Length of the lookahead/non-myopic horizon.
     c1 : float, optional
@@ -58,165 +100,27 @@ def acquisition(
     Returns
     -------
     array of shape (n_samples,)
-        The non-myopic acquisition function computed for each trajectory in input `x`.
+        The non-myopic acquisition function computed for each `x`.
     """
-    batch, n_samples, _ = x.shape
-    assert batch == 1, "Regression model must be non-batched."
     if parallel is None:
-        parallel = Parallel(n_jobs=1)
-
-    # add cost associated to the one-step lookahead
-    y_hat = predict(mdl, x)
-    a = myopic_acquisition(x, mdl, y_hat, None, c1, c2).reshape(-1)
-
-    # repeat the regressor along the sample dim, reshape arrays to match batch size and
-    # simulate multiple rollout trajectories in parallel
-    mdl = repeat(mdl, n_samples)
-    mdl = partial_fit(mdl, x.transpose((1, 0, 2)), y_hat.transpose((1, 0, 2)))
-
-    # loop over the rollout horizon
-    for h in range(1, horizon):
-        # minimize new acquisition function for each of the samples
-
-        # get y_hat at the new samples
-
-        # partial_fit the model with the new samples
-
-        # accummulate the acquisition function value in array a
-
-        pass
-
-    # a = np.zeros(n_samples, dtype=float)
-    # for h in range(horizon):
-    #     x_h = x[:, h, np.newaxis, :]
-    #     y_hat = predict(mdl, x_h)
-    #     a_h = myopic_acquisition(x_h, mdl, y_hat, None, c1, c2)
-    #     a += (discount**h) * a_h[:, 0, 0]
-    #     mdl = partial_fit(mdl, x_h, y_hat)
-    return a
-
-
-def optimal_acquisition(
-    x: Array,
-    mdl: RegressorType,
-    h: int,
-    c1: float = 1.5078,
-    c2: float = 1.4246,
-    discount: float = 1.0,
-    brute_force: bool = True,
-    verbosity: int = 0,
-) -> Array:
-    """Helper function to compute the optimal non-myopic acquisition function.
-
-    Parameters
-    ----------
-    x : array of shape (n_samples, n_var)
-        Array of decision variables `x` for which to compute the acquisition.
-        `n_samples` and `n_var` is the number of features/variables per point in `x`.
-    mdl : RegressorType
-        The fitted model to use for computing the acquisition function.
-    h : int
-        Horizon over which to project `x` and compute the acquisition function.
-    c1 : float, optional
-        Weight of the contribution of the variance function, by default `1.5078`.
-    c2 : float, optional
-        Weight of the contribution of the distance function, by default `1.4246`.
-    discount : float, optional
-        Discount factor for the lookahead horizon. By default, `1.0`.
-    brute_force : bool, optional
-        If `True`, the acquisition function will be evaluated for the `n_samples**h`
-        trajectories obtained via cartesian product, and the optimal acquisition for the
-        first decision variable will be returned. If `False`, instead of the brute force
-        search, the acquisition function is computed by fixing each `x` as the first
-        decision variable and computing the optimal remaining trajectory with `PSO`. In
-        both cases, processing is parallelized in an effort to speed up the computation.
-        By default, `False`.
-    verbosity : int, optional
-        Verbosity level for the parallel processing, by default `0`.
-
-    Returns
-    -------
-    array of shape (n_samples,)
-        The optimal non-myopic acquisition function computed for each trajectory
-        starting from each point in `x`.
-    """
-    if h == 1:
-        return myopic_acquisition(np.expand_dims(x, 0), mdl, c1=c1, c2=c2).reshape(-1)
-    return (  # type: ignore[operator]
-        _optimal_acquisition_by_brute_force
-        if brute_force
-        else _optimal_acquisition_by_minimization
-    )(x, mdl, h, c1, c2, discount, verbosity)
-
-
-def _batched(iterable: Iterable[Any], n: int) -> Iterator[Any]:
-    # taken from https://docs.python.org/3/library/itertools.html#itertools-recipes
-    it = iter(iterable)
-    while batch := tuple(islice(it, n)):
-        yield batch
-
-
-def _optimal_acquisition_by_brute_force(
-    x: Array,
-    mdl: RegressorType,
-    h: int,
-    c1: float,
-    c2: float,
-    discount: float,
-    verbosity: int,
-    chunk_size: int = 2**11,
-) -> Array:
-    """Utility to compute the optimal acquisition function by brute force search."""
-    # enumerate all trajectories of length h (n_trajectories, h, n_var), evaluate the
-    # acquisition function for each trajectory, and return the best for each x. The
-    # computations are sped up by chunkifying the trajectories and evaluating the
-    # acquisition function for each chunk in parallel
-
-    n_samples = x.shape[0]
-    trajectories = product(*(x for _ in range(h)))
-    chunks = map(
-        np.asarray, _batched(trajectories, chunk_size)
-    )  # n_traj = n_samples**h
-
-    fun = partial(acquisition, mdl=mdl, c1=c1, c2=c2, discount=discount)
-    a_chunks = Parallel(n_jobs=-1, verbose=verbosity)(delayed(fun)(c) for c in chunks)
-    a = np.concatenate(a_chunks, 0)
-    return a.reshape(n_samples, n_samples ** (h - 1)).min(1)
-
-
-def _optimal_acquisition_by_minimization(
-    x: Array,
-    mdl: RegressorType,
-    h: int,
-    c1: float,
-    c2: float,
-    discount: float,
-    verbosity: int,
-) -> Array:
-    """Utility to compute the optimal acquisition function by PSO minimization."""
-    # in a for loop, fix each x as the first decision variable and compute the optimal
-    # remaining trajectory with PSO
-    n_samples, n_var = x.shape
-    x_lb, x_ub = x.min(0), x.max(0)
-    if n_var == 1:
-        x_lb, x_ub = x_lb.item(), x_ub.item()  # without this, it crashes
-    pop_size = 20 * (h - 1)
-
-    def obj(x_first: Array, x_: Array) -> Array:
-        # reshape from (pop_size, n_var * (h - 1)) to (pop_size, h - 1, n_var) and
-        # append fixed firt decision variable
-        x_ = np.concatenate((x_first, x_.reshape(pop_size, h - 1, n_var)), 1)
-        return acquisition(x_, mdl, c1, c2, discount)
-
-    def solve_for_one_x(x_first: Array) -> float:
-        x_first = np.broadcast_to(x_first, (pop_size, 1, n_var))
-        obj_ = partial(obj, x_first)
-        problem = FunctionalProblem(
-            n_var=n_var * (h - 1), objs=obj_, xl=x_lb, xu=x_ub, elementwise=False
+        parallel = Parallel(n_jobs=-1, verbose=0)  # 10 for debugging
+    if base_algorithm is None:
+        base_algorithm = PSO()
+    if "termination" not in minimize_kwargs:
+        minimize_kwargs["termination"] = DefaultSingleObjectiveTermination(
+            ftol=1e-4, n_max_gen=300, period=10
         )
-        return minimize(problem, PSO(pop_size)).opt[0].F.item()
 
-    a = Parallel(n_jobs=-1, verbose=verbosity)(
-        delayed(solve_for_one_x)(x[i]) for i in range(n_samples)
+    # compute the cost associated to the one-step lookahead
+    y_hat = predict(mdl, x)
+    a = myopic_acquisition(x, mdl, y_hat, None, c1, c2)
+    if horizon == 1:
+        return a
+
+    # for each sample, compute the rollout policy by rolling out the base myopic policy
+    # and add its cost to the one-step lookahead cost
+    serial_fun = lambda x, y: _rollout(
+        x, y, mdl, horizon, discount, c1, c2, base_algorithm, xl, xu, **minimize_kwargs
     )
-    return np.asarray(a)
+    a += np.asarray(parallel(delayed(serial_fun)(x_, y_) for x_, y_ in zip(x, y_hat)))
+    return a
