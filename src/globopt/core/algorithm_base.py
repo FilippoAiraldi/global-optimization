@@ -74,11 +74,6 @@ class GOBaseAlgorithm(Algorithm):
             )
         self._acq_output = acq_output
 
-        self._internal_setup(problem)
-
-    def _internal_setup(self, problem: Problem) -> None:
-        """Custom setup for the algorithm."""
-
     def _infill(self) -> Population:
         """Creates one offspring (new point to evaluate) by minimizing acquisition."""
         if acq_min_disaply := self.acquisition_min_kwargs["display"]:

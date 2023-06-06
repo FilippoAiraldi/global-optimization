@@ -75,7 +75,7 @@ def acquisition(
     base_algorithm: Algorithm = None,
     xl: Optional[npt.ArrayLike] = None,
     xu: Optional[npt.ArrayLike] = None,
-    parallel: Parallel = None,
+    parallel: Optional[Parallel] = None,
     **minimize_kwargs: Any,
 ) -> Array:
     """Computes the non-myopic acquisition function for IDW/RBF regression models.
@@ -90,12 +90,23 @@ def acquisition(
         Fitted model to use for computing the acquisition function.
     horizon : int
         Length of the lookahead/non-myopic horizon.
+    discount : float, optional
+        Discount factor of the MPD along the horizon. By default, `1.0`.
     c1 : float, optional
         Weight of the contribution of the variance function, by default `1.5078`.
     c2 : float, optional
         Weight of the contribution of the distance function, by default `1.4246`.
-    discount : float, optional
-        Discount factor for the lookahead horizon. By default, `1.0`.
+    base_algorithm : Algorithm, optional
+        Algorithm to use for the rollout policy. By default, `PSO`.
+    xl, xu : array_like of shape (n_var,), optional
+        Lower and upper bounds on each variable to bound the search in the
+        `base_algorithm`.
+    parallel : Parallel, optional
+        Parallel object to use for parallel computation. By default,
+        `Parallel(n_jobs=-1, verbose=0)` is used.
+    minimize_kwargs : dict, optional
+        Additional keyword arguments to pass to the `minimize` function of each rollout
+        policy optimization problem.
 
     Returns
     -------
@@ -122,5 +133,5 @@ def acquisition(
     serial_fun = lambda x, y: _rollout(
         x, y, mdl, horizon, discount, c1, c2, base_algorithm, xl, xu, **minimize_kwargs
     )
-    a += np.asarray(parallel(delayed(serial_fun)(x_, y_) for x_, y_ in zip(x, y_hat)))
-    return a
+    a_rollout = parallel(delayed(serial_fun)(x_, y_) for x_, y_ in zip(x, y_hat))
+    return np.add(a, a_rollout)

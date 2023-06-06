@@ -77,7 +77,7 @@ mdl = fit(Rbf("thinplatespline", 0.01), X, y)
 # compute myopic acquisition function
 c1 = 1.0
 c2 = 0.5
-x = np.linspace(xl, xu, 500).reshape(-1, 1)
+x = np.linspace(xl, xu, 300).reshape(-1, 1)
 myopic_results = compute_myopic_acquisition(x, mdl, c1, c2)
 
 # compute non-myopic acquisition function

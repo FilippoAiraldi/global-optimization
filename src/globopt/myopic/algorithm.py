@@ -79,7 +79,8 @@ class GO(GOBaseAlgorithm):
             **kwargs,
         )
 
-    def _internal_setup(self, problem: Problem) -> None:
+    def _setup(self, problem: Problem, **kwargs: Any) -> None:
+        super()._setup(problem, **kwargs)
         if hasattr(self.acquisition_min_algorithm, "pop_size"):
             self.acquisition_min_algorithm.pop_size = (
                 self.acquisition_min_algorithm.pop_size * problem.n_var
@@ -110,13 +111,9 @@ class GO(GOBaseAlgorithm):
         problem: Problem = self.problem
         mdl = self.regression
         dym = mdl.ym_.ptp()
-
-        def obj(x: Array) -> Array:
-            return acquisition(x, mdl, None, dym, **self.acquisition_fun_kwargs)
-
         return FunctionalProblem(
-            n_var=problem.n_var,
-            objs=obj,
+            problem.n_var,
+            lambda x: acquisition(x, mdl, None, dym, **self.acquisition_fun_kwargs),
             xl=problem.xl,
             xu=problem.xu,
             elementwise=False,  # enables vectorized evaluation of acquisition function
