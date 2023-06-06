@@ -20,10 +20,9 @@ plt.style.use("bmh")
 f = Simple1DProblem.f
 
 
-# create data points - X has shape (batch, n_samples, n_var), where the batch dim can be
-# used to fit multiple models at once. Here, it is 1
-X = np.array([-2.61, -1.92, -0.63, 0.38, 2]).reshape(1, -1, 1)
-y = f(X)
+# create data points - X has shape (n_samples, n_var)
+X = np.array([-2.61, -1.92, -0.63, 0.38, 2]).reshape(-1, 1)
+y = f(X).reshape(-1)
 
 # fit regression models to first 3 data points
 mdls: list[RegressorType] = [
@@ -32,13 +31,13 @@ mdls: list[RegressorType] = [
     Rbf("inversequadratic", 0.5),
     Rbf("thinplatespline", 0.01),
 ]
-mdls = [fit(mdl, X[:, :3], y[:, :3]) for mdl in mdls]
+mdls = [fit(mdl, X[:3], y[:3]) for mdl in mdls]
 
 # partially fit regression models to remaining data points
-mdls = [partial_fit(mdl, X[:, 3:], y[:, 3:]) for mdl in mdls]
+mdls = [partial_fit(mdl, X[3:], y[3:]) for mdl in mdls]
 
 # predict values over all domain via the fitted models
-x = np.linspace(-3, 3, 1000).reshape(1, -1, 1)  # again, add batch dim
+x = np.linspace(-3, 3, 1000).reshape(-1, 1)
 y_hat = [predict(mdl, x).squeeze() for mdl in mdls]
 
 # plot model predictions
