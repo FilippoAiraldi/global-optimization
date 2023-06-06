@@ -41,7 +41,7 @@ result = minimize(
 
 # plot the results
 x = np.linspace(*problem.bounds(), 500).reshape(-1, 1)  # type: ignore[call-overload]
-y = problem.evaluate(x)
+y = problem.evaluate(x).reshape(-1)
 n_cols = 4
 n_rows = int(np.ceil(len(result.history) / n_cols))
 _, axs = plt.subplots(
@@ -52,23 +52,23 @@ for i, (ax, algo) in enumerate(zip(axs, result.history)):
     # plot true function and current sampled points
     Xm = algo.pop.get("X").reshape(-1, 1)
     ym = algo.pop.get("F").reshape(-1)
-    c = ax.plot(x, y, label="$f(x)$")[0].get_color()
+    c = ax.plot(x.reshape(-1), y, label="$f(x)$")[0].get_color()
     ax.plot(Xm, ym, "o", color=c, markersize=8)
 
     # plot current regression model's prediction
     mdl = algo.regression
-    y_hat = predict(mdl, x[np.newaxis])
-    ax.plot(x, y_hat[0], label=r"$\hat{f}(x)$")
+    y_hat = predict(mdl, x)
+    ax.plot(x.reshape(-1), y_hat, label=r"$\hat{f}(x)$")
 
     # plot the acquisition function and its minimum, or the best point found if the
     # algorithm has terminated
     if i < len(result.history) - 1:
-        a = acquisition(x[None], mdl, y_hat, **algo.acquisition_fun_kwargs)[0]
+        a = acquisition(x, mdl, y_hat, **algo.acquisition_fun_kwargs)
         acq_min = result.history[i + 1].acquisition_min_res.opt.item()
 
         ax_ = ax.twinx()
-        c = ax_.plot(x, a, "--", lw=2.5, label="$a(x)$", color="C2")[0].get_color()
-        ax_.plot(acq_min.X, acq_min.F, "*", markersize=13, color=c)
+        line = ax_.plot(x.reshape(-1), a, "--", lw=2.5, label="$a(x)$", color="C2")
+        ax_.plot(acq_min.X, acq_min.F, "*", markersize=13, color=line[0].get_color())
         ax_.set_axis_off()
         ylim = ax_.get_ylim()
         ax_.set_ylim(ylim[0] - 0.1, ylim[1] + np.diff(ylim) * 0.7)

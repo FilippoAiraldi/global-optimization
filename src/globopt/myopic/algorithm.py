@@ -104,18 +104,15 @@ class GO(GOBaseAlgorithm):
     def _initialize_advance(self, infills: Population, **kwargs) -> None:
         """Fits the regression model to initial data."""
         X, y = infills.get("X", "F")
-        self.regression = fit(self.regression, X[np.newaxis], y[np.newaxis])
+        self.regression = fit(self.regression, X, y.reshape(-1))
 
     def _get_acquisition_problem(self) -> Problem:
         problem: Problem = self.problem
         mdl = self.regression
-        dym = mdl.ym_.ptp((1, 2), keepdims=True)
+        dym = mdl.ym_.ptp()
 
         def obj(x: Array) -> Array:
-            # add batch axis to x
-            return acquisition(
-                x[np.newaxis], mdl, None, dym, **self.acquisition_fun_kwargs
-            )[0]
+            return acquisition(x, mdl, None, dym, **self.acquisition_fun_kwargs)
 
         return FunctionalProblem(
             n_var=problem.n_var,
@@ -132,7 +129,7 @@ class GO(GOBaseAlgorithm):
         """Adds new offspring to the regression model."""
         super()._advance(infills, **kwargs)
         self.pop = infills
-        Xnew = infills[-1].X.reshape(1, 1, -1)
-        ynew = infills[-1].F.reshape(1, 1, -1)
+        Xnew = infills[-1].X.reshape(1, -1)
+        ynew = infills[-1].F
         self.regression = partial_fit(self.regression, Xnew, ynew)
         return True  # succesful iteration: True or None; failed iteration: False

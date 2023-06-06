@@ -69,18 +69,16 @@ class TestAlgorithm(unittest.TestCase):
         x = np.linspace(*problem.bounds(), 500).reshape(-1, 1)
         out: dict[int, tuple[np.ndarray, ...]] = {}
         for i, algo in enumerate(res.history, start=1):
-            y_hat = predict(algo.regression, x[np.newaxis])
+            y_hat = predict(algo.regression, x)
             Xm = algo.pop.get("X").reshape(-1, 1)
             ym = algo.pop.get("F").reshape(-1)
-            a = acquisition(
-                x[np.newaxis], algo.regression, y_hat, **algo.acquisition_fun_kwargs
-            )
+            a = acquisition(x, algo.regression, y_hat, **algo.acquisition_fun_kwargs)
             acq_min = (
                 algo.acquisition_min_res.opt.item().X
                 if hasattr(algo, "acquisition_min_res")
                 else np.nan
             )
-            out[i] = (y_hat.squeeze(), Xm, ym, a.squeeze(), acq_min)
+            out[i] = (y_hat, Xm, ym, a, acq_min)
 
         for key in out:
             for actual, expected in zip(out[key], RESULTS[key]):
