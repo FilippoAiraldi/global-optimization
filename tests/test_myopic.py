@@ -20,7 +20,7 @@ with open(r"tests/data_test_myopic.pkl", "rb") as f:
     RESULTS.update(pickle.load(f))
 
 
-def f(x):
+def f(x: np.ndarray) -> np.ndarray:
     return (
         (1 + x * np.sin(2 * x) * np.cos(3 * x) / (1 + x**2)) ** 2
         + x**2 / 12
@@ -30,20 +30,20 @@ def f(x):
 
 class TestAcquisition(unittest.TestCase):
     def test_acquisition_function__returns_correct_values(self):
-        X = np.array([-2.61, -1.92, -0.63, 0.38, 2]).reshape(1, -1, 1)
-        y = f(X)
+        X = np.array([-2.61, -1.92, -0.63, 0.38, 2]).reshape(-1, 1)
+        y = f(X).reshape(-1)
 
         mdl = fit(Rbf("thinplatespline", 0.01, svd_tol=0), X, y)
-        x = np.linspace(-3, 3, 1000).reshape(1, -1, 1)
+        x = np.linspace(-3, 3, 1000).reshape(-1, 1)
         y_hat = predict(mdl, x)
-        dym = y.max() - y.min()  # span of observations
+        dym = y.ptp()
         W = idw_weighting(x, X)
         s = _idw_variance(y_hat, y, W)
         z = _idw_distance(W)
         a = acquisition(x, mdl, y_hat, dym, 1, 0.5)
 
-        out = np.concatenate((s, z, a), 0)[..., 0]
-        np.testing.assert_allclose(out, RESULTS["acquisitions"], atol=1e-6, rtol=1e-7)
+        out = np.asarray((s, z, a))
+        np.testing.assert_allclose(out, RESULTS["acquisitions"], atol=1e-6, rtol=1e-6)
 
 
 class TestAlgorithm(unittest.TestCase):

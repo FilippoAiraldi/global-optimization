@@ -35,7 +35,7 @@ def _idw_variance(y_hat: Array, ym: Array, W: Array) -> Array:
     """
     V = W / W.sum(1, keepdims=True)
     sqdiff = np.square(ym.reshape(-1, 1) - y_hat.reshape(1, -1))
-    return np.sqrt(np.diag(V.T @ sqdiff))
+    return np.sqrt(np.diag(V @ sqdiff))
 
 
 def _idw_distance(W: Array) -> Array:
@@ -51,7 +51,7 @@ def _idw_distance(W: Array) -> Array:
     array
         The distance function acquisition term evaluated at each point.
     """
-    return (2 / np.pi) * np.arctan(1 / W.sum(1, keepdims=True))
+    return (2 / np.pi) * np.arctan(1 / W.sum(1))
 
 
 def acquisition(

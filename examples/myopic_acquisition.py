@@ -30,21 +30,20 @@ plt.style.use("bmh")
 xl, xu = -3, +3
 f = Simple1DProblem.f
 
-# create data points - X has shape (batch, n_samples, n_var), where the batch dim can be
-# used to fit multiple models at once. Here, it is 1
-X = np.array([-2.61, -1.92, -0.63, 0.38, 2]).reshape(1, -1, 1)
-y = f(X)
+# create data points - X has shape (n_samples, n_var)
+X = np.array([-2.61, -1.92, -0.63, 0.38, 2]).reshape(-1, 1)
+y = f(X).reshape(-1)
 
 # create regressor and fit it
 mdl: RegressorType = Rbf("thinplatespline", 0.01)
 mdl = fit(mdl, X, y)
 
 # predict values over all domain via fitted model
-x = np.linspace(xl, xu, 1000).reshape(1, -1, 1)  # add batch dim
+x = np.linspace(xl, xu, 1000).reshape(-1, 1)
 y_hat = predict(mdl, x)
 
 # compute acquisition function components (these methods should not be used directly)
-dym = y.max() - y.min()  # span of observations
+dym = y.ptp()  # span of observations
 W = idw_weighting(x, X, mdl.exp_weighting)
 s = _idw_variance(y_hat, y, W)
 z = _idw_distance(W)
@@ -56,7 +55,7 @@ a = acquisition(x, mdl, y_hat, dym, c1=1, c2=0.5)
 algorithm = PSO()
 problem = FunctionalProblem(
     n_var=1,
-    objs=lambda x: acquisition(x[np.newaxis], mdl, c1=1, c2=0.5)[0],
+    objs=lambda x: acquisition(x, mdl, c1=1, c2=0.5),
     xl=xl,
     xu=xu,
     elementwise=False,  # enables vectorized evaluation of acquisition function
@@ -65,17 +64,11 @@ res = minimize(problem, algorithm, verbose=True, seed=1)
 
 # create figure and flatten a bunch of arrays for plotting
 _, axs = plt.subplots(2, 1, constrained_layout=True, figsize=(6, 5))
-x = x.flatten()
-fx = f(x)
-a = a.flatten()
-y_hat = y_hat.flatten()
-s = s.flatten()
-z = z.flatten()
-X, y = X.squeeze(), y.squeeze()
+x = x.reshape(-1)
 
 # plot the function, the observations and the prediction in both axes
 for ax in axs:
-    c = ax.plot(x, fx, label="$f(x)$")[0].get_color()
+    c = ax.plot(x, f(x), label="$f(x)$")[0].get_color()
     ax.plot(X, y, "o", label=None, color=c)
     c = ax.plot(x, y_hat, label=None)[0].get_color()
 
