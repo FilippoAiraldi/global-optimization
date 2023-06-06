@@ -15,7 +15,7 @@ from typing import Callable, Literal, NamedTuple, Union
 
 import numpy as np
 import numpy.typing as npt
-from scipy.spatial.distance import pdist, cdist, squareform
+from scipy.spatial.distance import cdist, pdist, squareform
 from typing_extensions import TypeAlias
 
 Array: TypeAlias = npt.NDArray[np.floating]
