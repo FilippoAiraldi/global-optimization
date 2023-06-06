@@ -33,13 +33,9 @@ def _idw_variance(y_hat: Array, ym: Array, W: Array) -> Array:
     array
         The variance function acquisition term evaluated at each point.
     """
-    V = W / W.sum(2, keepdims=True)
-    sqdiff = np.square(ym - y_hat.transpose(0, 2, 1))
-    out = np.diagonal(V @ sqdiff, axis1=1, axis2=2)[..., None]  # fast for small arrays
-    # out = np.empty_like(y_hat)
-    # for i in range(out.shape[1]):
-    #     out[:, i] = np.diag(V[:, i] @ sqdiff[:, :, i].T).reshape(-1, 1)
-    return np.sqrt(out)
+    V = W / W.sum(1, keepdims=True)
+    sqdiff = np.square(ym.reshape(-1, 1) - y_hat.reshape(1, -1))
+    return np.sqrt(np.diag(V.T @ sqdiff))
 
 
 def _idw_distance(W: Array) -> Array:
@@ -55,14 +51,14 @@ def _idw_distance(W: Array) -> Array:
     array
         The distance function acquisition term evaluated at each point.
     """
-    return (2 / np.pi) * np.arctan(1 / W.sum(2, keepdims=True))
+    return (2 / np.pi) * np.arctan(1 / W.sum(1, keepdims=True))
 
 
 def acquisition(
     x: Array,
     mdl: RegressorType,
     y_hat: Optional[Array] = None,
-    dym: Optional[Array] = None,
+    dym: Optional[float] = None,
     c1: float = 1.5078,
     c2: float = 1.4246,
 ) -> Array:
@@ -70,19 +66,17 @@ def acquisition(
 
     Parameters
     ----------
-    x : array of shape (batch, n_samples, n_var)
-        Array of points for which to compute the acquisition. `batch` is the number of
-        parallel regressors used in the computations, `n_samples` is the number of
-        target points for which to compute the acquisition, and `n_var` is the number of
-        features/variables of each point.
+    x : array of shape (n_samples, n_var)
+        Array of points for which to compute the acquisition. `n_samples` is the number
+        of target points for which to compute the acquisition, and `n_var` is the number
+        of features/variables of each point.
     mdl : Idw or Rbf
-        Fitted model (or batch of fitted models) to use for computing the acquisition
-        function.
-    y_hat : array of shape (batch, n_samples, 1), optional
+        Fitted model to use for computing the acquisition function.
+    y_hat : array of shape (n_samples,), optional
         Predictions of the regression model at `x`. If `None`, they are computed based
         on the fitted `mdl`. If pre-computed, can be provided to speed up computations;
         otherwise is computed on-the-fly automatically. By default, `None`.
-    dym : array of shape (batch, 1, 1), optional
+    dym : float, optional
         Delta between the maximum and minimum values of `ym`. If pre-computed, can be
         provided to speed up computations; otherwise is computed on-the-fly
         automatically. If `None`, it is computed automatically. By default, `None`.
@@ -93,7 +87,7 @@ def acquisition(
 
     Returns
     -------
-    array of shape (batch, n_samples, 1)
+    array of shape (n_samples,)
         The myopic acquisition function evaluated at each point.
     """
     Xm = mdl.Xm_
@@ -101,7 +95,7 @@ def acquisition(
     if y_hat is None:
         y_hat = predict(mdl, x)
     if dym is None:
-        dym = ym.ptp((1, 2), keepdims=True)
+        dym = ym.ptp()
 
     W = idw_weighting(x, Xm, mdl.exp_weighting)
     s = _idw_variance(y_hat, ym, W)

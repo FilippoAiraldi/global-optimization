@@ -51,10 +51,7 @@ class NonMyopicGO(GO):
         self.discount = discount
 
     def _internal_setup(self, problem: Problem) -> None:
-        if hasattr(self.acquisition_min_algorithm, "pop_size"):
-            self.acquisition_min_algorithm.pop_size = (
-                self.acquisition_min_algorithm.pop_size * problem.n_var * self.horizon
-            )
+        super()._internal_setup(problem)
         self.acquisition_fun_kwargs["discount"] = self.discount
 
     def _get_acquisition_problem(self) -> Problem:
@@ -68,16 +65,16 @@ class NonMyopicGO(GO):
         n_var = problem.n_var
 
         def obj(x: Array) -> Array:
-            # transform x from (n_samples, n_var * h) to (n_samples, h, n_var)
+            # add batch axis to x
             return acquisition(
-                x.reshape(-1, h, n_var), self.regression, **self.acquisition_fun_kwargs
+                x[np.newaxis], self.regression, h, **self.acquisition_fun_kwargs
             )
 
         return FunctionalProblem(
-            n_var=n_var * h,
+            n_var=n_var,
             objs=obj,
-            xl=np.tile(problem.xl, h),
-            xu=np.tile(problem.xu, h),
+            xl=problem.xl,
+            xu=problem.xu,
             elementwise=False,  # enables vectorized evaluation of acquisition function
         )
 

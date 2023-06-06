@@ -11,7 +11,8 @@ References
 
 from functools import partial
 from itertools import islice, product
-from typing import Any, Iterable, Iterator
+from typing import Any, Iterable, Iterator, Optional
+from joblib import Parallel
 
 import numpy as np
 from joblib import Parallel, delayed
@@ -26,21 +27,27 @@ from globopt.myopic.acquisition import acquisition as myopic_acquisition
 def acquisition(
     x: Array,
     mdl: RegressorType,
+    horizon: int,
     c1: float = 1.5078,
     c2: float = 1.4246,
     discount: float = 1.0,
+    seed: Optional[int] = None,
+    parallel: Parallel = None,
 ) -> Array:
     """Computes the non-myopic acquisition function for IDW/RBF regression models.
 
     Parameters
     ----------
-    x : array of shape (n_samples, horizon, n_var)
-        Array of trajectories for which to compute the acquisition function. `n_samples`
-        is the number of units processed in parallel, `horizon` is the horizon length of
-        the trajectories, and `n_var` is the number of features/variables per point in
-        each trajectory.
+    x : array of shape (1, n_samples, n_var)
+        Array of points for which to compute the acquisition. `n_samples` is the number
+        of target points for which to compute the acquisition, and `n_var` is the number
+        of features/variables of each point. The `batch` dimension is  fixed to 1, since
+        batched computations are not supported.
     mdl : RegressorType
-        Fitted model to use for computing the acquisition function.
+        Fitted model to use for computing the acquisition function. Batched models are
+        not supported.
+    horizon : int
+        Length of the lookahead/non-myopic horizon.
     c1 : float, optional
         Weight of the contribution of the variance function, by default `1.5078`.
     c2 : float, optional
@@ -53,19 +60,39 @@ def acquisition(
     array of shape (n_samples,)
         The non-myopic acquisition function computed for each trajectory in input `x`.
     """
-    n_samples, horizon, _ = x.shape
+    batch, n_samples, _ = x.shape
+    assert batch == 1, "Regression model must be non-batched."
+    if parallel is None:
+        parallel = Parallel(n_jobs=1)
 
-    # repeat the regressor along the sample dim
+    # add cost associated to the one-step lookahead
+    y_hat = predict(mdl, x)
+    a = myopic_acquisition(x, mdl, y_hat, None, c1, c2).reshape(-1)
+
+    # repeat the regressor along the sample dim, reshape arrays to match batch size and
+    # simulate multiple rollout trajectories in parallel
     mdl = repeat(mdl, n_samples)
+    mdl = partial_fit(mdl, x.transpose((1, 0, 2)), y_hat.transpose((1, 0, 2)))
 
-    # loop over the horizon
-    a = np.zeros(n_samples, dtype=float)
-    for h in range(horizon):
-        x_h = x[:, h, np.newaxis, :]
-        y_hat = predict(mdl, x_h)
-        a_h = myopic_acquisition(x_h, mdl, y_hat, None, c1, c2)
-        a += (discount**h) * a_h[:, 0, 0]
-        mdl = partial_fit(mdl, x_h, y_hat)
+    # loop over the rollout horizon
+    for h in range(1, horizon):
+        # minimize new acquisition function for each of the samples
+
+        # get y_hat at the new samples
+
+        # partial_fit the model with the new samples
+
+        # accummulate the acquisition function value in array a
+
+        pass
+
+    # a = np.zeros(n_samples, dtype=float)
+    # for h in range(horizon):
+    #     x_h = x[:, h, np.newaxis, :]
+    #     y_hat = predict(mdl, x_h)
+    #     a_h = myopic_acquisition(x_h, mdl, y_hat, None, c1, c2)
+    #     a += (discount**h) * a_h[:, 0, 0]
+    #     mdl = partial_fit(mdl, x_h, y_hat)
     return a
 
 
