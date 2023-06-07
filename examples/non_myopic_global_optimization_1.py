@@ -37,7 +37,8 @@ kwargs = {
     "c2": 0.5,
 }
 algorithms = (
-    GO(**kwargs), NonMyopicGO(**kwargs, horizon=2, discount=1.0)  # type: ignore
+    GO(**kwargs),  # type: ignore[arg-type]
+    NonMyopicGO(**kwargs, horizon=2, discount=1.0),  # type: ignore[arg-type]
 )
 ITERS = 4
 results = (
