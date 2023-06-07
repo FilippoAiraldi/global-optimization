@@ -72,7 +72,7 @@ def acquisition(
     discount: float = 1.0,
     c1: float = 1.5078,
     c2: float = 1.4246,
-    base_algorithm: Algorithm = None,
+    base_algorithm: Optional[Algorithm] = None,
     xl: Optional[npt.ArrayLike] = None,
     xu: Optional[npt.ArrayLike] = None,
     parallel: Optional[Parallel] = None,
@@ -125,7 +125,7 @@ def acquisition(
     # compute the cost associated to the one-step lookahead
     y_hat = predict(mdl, x)
     a = myopic_acquisition(x, mdl, y_hat, None, c1, c2)
-    if horizon == 1:
+    if horizon == 1 or discount <= 0.0:
         return a
 
     # for each sample, compute the rollout policy by rolling out the base myopic policy
