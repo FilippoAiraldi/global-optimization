@@ -35,17 +35,14 @@ class DPStageCostCallback(Callback):
     def notify(self, algorithm: Algorithm) -> None:
         is_myopic = isinstance(algorithm, GO)
         is_non_myopic = isinstance(algorithm, NonMyopicGO)
+        mdl = self._prev_regression
         assert is_myopic or is_non_myopic, "Algorithm is not a GO instance."
-        if self._prev_regression is not None:
+        if mdl is not None:
             # save the stage cost, i.e., the acquistion, of having chosen the new sample
             # given the previous regression model
             if is_non_myopic:
-                x_new = algorithm.acquisition_min_res.X.reshape(
-                    1, algorithm.problem.n_var
-                )
-                a = acquisition(
-                    x_new, self._prev_regression, c1=algorithm.c1, c2=algorithm.c2
-                )
+                x_new = algorithm.acquisition_min_res.X[None]
+                a = acquisition(x_new, mdl, None, None, algorithm.c1, algorithm.c2)
             else:
                 a = algorithm.acquisition_min_res.F
             self.data["cost"].append(a.item())

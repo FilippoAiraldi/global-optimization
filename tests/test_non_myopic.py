@@ -30,7 +30,7 @@ class TestAcquisition(unittest.TestCase):
         c2 = np.random.rand() * 2 + 1
         x = np.random.randn(n_samples * 2, n_var)
 
-        with Parallel(n_jobs=-1, batch_size=8, verbose=0) as parallel:
+        with Parallel(n_jobs=1, batch_size=8, verbose=0) as parallel:
             a = acquisition(x, mdl, h, discount, c1, c2, None, -3, +3, parallel, seed)
 
         np.testing.assert_allclose(a, RESULTS["acquisition"], atol=1e-4, rtol=1e-4)

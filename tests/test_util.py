@@ -7,8 +7,10 @@ from pymoo.optimize import minimize
 from pymoo.problems import get_problem
 from pymoo.util.normalization import ZeroToOneNormalization
 
-from globopt.core.problems import Adjiman
-from globopt.util.callback import BestSoFarCallback
+from globopt.core.problems import Adjiman, Simple1DProblem
+from globopt.core.regression import Rbf
+from globopt.myopic.algorithm import GO
+from globopt.util.callback import BestSoFarCallback, DPStageCostCallback
 from globopt.util.normalization import NormalizedProblemWrapper, RangeNormalization
 from globopt.util.wrapper import Wrapper
 
@@ -88,6 +90,35 @@ class TestCallback(unittest.TestCase):
             res.algorithm.callback.data["best"],
             [e.opt.get("F").item() for e in res.history],
         )
+
+    def test__dp_stage_cost_callback(self):
+        problem = Simple1DProblem()
+        x0 = [-2.62, -1.2, 0.14, 1.1, 2.82]
+        algorithm = GO(
+            regression=Rbf("thinplatespline", 0.01, svd_tol=0),
+            init_points=x0,
+            c1=1,
+            c2=0.5,
+            acquisition_min_kwargs={"verbose": True},
+        )
+        callback = DPStageCostCallback()
+        minimize(
+            problem,
+            algorithm,
+            termination=("n_iter", 6),
+            verbose=False,
+            copy_algorithm=False,
+            seed=1,
+            callback=callback,
+        )
+        expected = [
+            0.1715646882008188,
+            0.2011653428286008,
+            0.24427501622036624,
+            0.21051260043554526,
+            0.19794195758066008,
+        ]
+        np.testing.assert_allclose(callback.data["cost"], expected)
 
 
 if __name__ == "__main__":
