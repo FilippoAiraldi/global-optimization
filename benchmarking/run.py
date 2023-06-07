@@ -12,6 +12,7 @@ from typing import Literal
 import numpy as np
 from joblib import Parallel, delayed
 from pymoo.algorithms.soo.nonconvex.pso import PSO
+from pymoo.core.callback import CallbackCollection
 from pymoo.optimize import minimize
 from pymoo.termination.default import DefaultSingleObjectiveTermination
 from scipy.io import savemat
@@ -24,7 +25,7 @@ from globopt.core.problems import (
 from globopt.core.regression import Array, Idw, Rbf
 from globopt.myopic.algorithm import GO, Algorithm
 from globopt.nonmyopic.algorithm import NonMyopicGO
-from globopt.util.callback import BestSoFarCallback
+from globopt.util.callback import BestSoFarCallback, DPStageCostCallback
 
 MAX_SEED = 2**32
 FNV_OFFSET, FNV_PRIME = 2166136261, 16777619
@@ -39,43 +40,41 @@ def fnv1a(s: str) -> int:
 
 def get_algorithm(h: int, n_var: int, regression: Literal["rbf", "idw"]) -> Algorithm:
     """Returns the algorithm to be used for the given horizon and regression."""
+    c1, c2, eps = 1.5078, 1.4246, 1.0775
+    termination = DefaultSingleObjectiveTermination(ftol=1e-4, n_max_gen=300, period=10)
+    kwargs = {
+        "regression": Rbf(eps=eps / n_var) if regression == "rbf" else Idw(),
+        "init_points": 2 * n_var,
+        "acquisition_min_algorithm": PSO(pop_size=10),  # size will be scaled with n_var
+        "acquisition_min_kwargs": {"termination": termination},
+        "c1": c1 / n_var,
+        "c2": c2 / n_var,
+    }
     if h == 1:
         cls = GO
-        c1, c2, eps = 1.5078, 1.4246, 1.0775
-        kwargs = {}
     else:
         cls = NonMyopicGO  # type: ignore[assignment]
-        c1, c2, eps = 1.0887, 2.7034, 1.8473
-        kwargs = {"horizon": h, "discount": 0.8277, "shrink_horizon": True}
-        # c1, c2, eps = 1.2389, 2.5306, 0.8609
-        # kwargs = {"horizon": h, "discount": 0.8151}
-    termination = DefaultSingleObjectiveTermination(ftol=1e-4, n_max_gen=300, period=10)
-    return cls(
-        regression=Rbf(eps=eps / n_var) if regression == "rbf" else Idw(),
-        init_points=2 * n_var,
-        acquisition_min_algorithm=PSO(pop_size=10),  # size will be scaled with n_var
-        acquisition_min_kwargs={"termination": termination},
-        c1=c1 / n_var,
-        c2=c2 / n_var,
-        **kwargs,  # type: ignore[arg-type]
-    )
+        kwargs.update({"horizon": h, "discount": 0.9})
+    return cls(**kwargs)
 
 
-def run_benchmark(problem_name: str, h: int, seed: int) -> list[float]:
-    """Solves the problem with the given horizon and seed."""
+def run_benchmark(problem_name: str, h: int, seed: int) -> tuple[list[float], float]:
+    """Solves the problem with the given horizon and seed, and returns as result the
+    performance of the algorithm in terms of best-so-far and total cost."""
     problem, max_n_iter, regression = get_benchmark_problem(problem_name)
     algorithm = get_algorithm(h, problem.n_var, regression)
-    callback = BestSoFarCallback()
+    bsf_callback = BestSoFarCallback()
+    dp_callback = DPStageCostCallback()
     minimize(
         problem,
         algorithm,
         termination=("n_iter", max_n_iter),
-        copy_algorithm=False,  # no need to copy the algorithm, it is freshly created
-        callback=callback,
+        callback=CallbackCollection(bsf_callback, dp_callback),
         verbose=False,
+        copy_algorithm=False,  # no need to copy the algorithm, it is freshly created
         seed=(seed ^ fnv1a(problem_name)) % MAX_SEED,
     )
-    return callback.data["best"]
+    return bsf_callback.data["best"], sum(dp_callback.data["cost"])
 
 
 def run_benchmarks(
@@ -88,9 +87,11 @@ def run_benchmarks(
 
     def _run(name: str, h: int, n_trial: int) -> tuple[str, list[float]]:
         print(f"Solving {name.upper()}, h={h}, iter={n_trial + 1}")
-        return f"{name}_h{h}", run_benchmark(name, h, seed + n_trial)
+        bsf, J = run_benchmark(name, h, seed + n_trial)
+        bsf.append(J)
+        return f"{name}_h{h}", bsf
 
-    results: list[tuple[str, list[float]]] = Parallel(n_jobs=-1, verbose=100)(
+    results: list[tuple[str, list[float]]] = Parallel(n_jobs=1, verbose=100)(
         delayed(_run)(name, h, trial)
         for name, h, trial in product(problem_names, horizons, range(n_trials))
     )

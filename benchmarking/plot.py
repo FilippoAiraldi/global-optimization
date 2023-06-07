@@ -13,6 +13,7 @@ import numpy as np
 from matplotlib.ticker import MaxNLocator
 from prettytable import PrettyTable
 from scipy.io import loadmat
+from typing_extensions import TypeAlias
 
 from globopt.core.problems import (
     get_available_benchmark_problems,
@@ -23,25 +24,26 @@ from globopt.core.regression import Array
 
 plt.style.use("bmh")
 
+DataT: TypeAlias = dict[str, dict[int, tuple[Array, float]]]
 PROBLEMS = get_available_benchmark_problems() + get_available_simple_problems()
 
 
-def load_data(filename: str) -> dict[str, dict[int, Array]]:
+def load_data(filename: str) -> DataT:
     """Loads the data from the given file."""
     data = loadmat(filename)
     for k in ("__header__", "__version__", "__globals__"):
         data.pop(k, None)
-    data_: dict[str, dict[int, Array]] = {}
+    data_: DataT = {}
     for k, v in data.items():
         name, h_name = k.split("_")
         h = int(h_name[1:])
         if name not in data_:
             data_[name] = {}
-        data_[name][h] = v
+        data_[name][h] = (v[:-1], v[-1])  # split best-so-far and performance
     return data_
 
 
-def plot_results(data: dict[str, dict[int, Array]], figtitle: Optional[str]) -> None:
+def plot_results(data: DataT, figtitle: Optional[str]) -> None:
     """Plots the results in the given dictionary."""
     n_cols = 2
     n_rows = np.ceil(len(data) / n_cols).astype(int)
@@ -55,7 +57,7 @@ def plot_results(data: dict[str, dict[int, Array]], figtitle: Optional[str]) -> 
             ax.set_axis_off()
             continue
 
-        for horizon, results in data[problem_name].items():
+        for horizon, (results, _) in data[problem_name].items():
             # compute the average, worst and best solution
             evals = np.arange(1, results.shape[1] + 1)
             avg = results.mean(axis=0)
@@ -83,7 +85,7 @@ def plot_results(data: dict[str, dict[int, Array]], figtitle: Optional[str]) -> 
     # fig.savefig("results.pdf")
 
 
-def plot_gaps(data: dict[str, dict[int, Array]], figtitle: Optional[str]) -> None:
+def plot_gaps(data: DataT, figtitle: Optional[str]) -> None:
     """Plots the gaps in the given dictionary."""
     n_cols = 2
     n_rows = np.ceil(len(data) / n_cols).astype(int)
@@ -100,7 +102,7 @@ def plot_gaps(data: dict[str, dict[int, Array]], figtitle: Optional[str]) -> Non
         problem = get_benchmark_problem(problem_name)[0]
         f_opt = problem.pareto_front().item()
 
-        for horizon, results in data[problem_name].items():
+        for horizon, (results, _) in data[problem_name].items():
             # compute the average, worst and best gaps
             evals = np.arange(1, results.shape[1] + 1)
             gaps = (results[:, 0, None] - results) / (results[:, 0, None] - f_opt)
@@ -127,9 +129,7 @@ def plot_gaps(data: dict[str, dict[int, Array]], figtitle: Optional[str]) -> Non
     # fig.savefig("gaps.pdf")
 
 
-def print_gaps_summary(
-    data: dict[str, dict[int, Array]], tabletitle: Optional[str]
-) -> None:
+def print_gaps_summary(data: DataT, tabletitle: Optional[str]) -> None:
     """Prints the summary of the results in the given dictionary."""
     horizons = [f"h={h}" for h in next(iter(data.values())).keys()]
     problem_names = sorted(data.keys())
@@ -142,7 +142,7 @@ def print_gaps_summary(
         f_opt = get_benchmark_problem(problem_name)[0].pareto_front().item()
         means = []
         medians = []
-        for _, results in data[problem_name].items():
+        for _, (results, _) in data[problem_name].items():
             gaps = (results[:, 0] - results[:, -1]) / (results[:, 0] - f_opt)
             means.append(gaps.mean())
             medians.append(np.median(gaps))
