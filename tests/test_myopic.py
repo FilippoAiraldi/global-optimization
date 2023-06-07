@@ -29,7 +29,7 @@ def f(x: np.ndarray) -> np.ndarray:
 
 
 class TestAcquisition(unittest.TestCase):
-    def test_acquisition_function__returns_correct_values(self):
+    def test__returns_correct_values(self):
         X = np.array([-2.61, -1.92, -0.63, 0.38, 2]).reshape(-1, 1)
         y = f(X).reshape(-1)
 
