@@ -44,7 +44,7 @@ class DPStageCostCallback(Callback):
                     1, algorithm.problem.n_var
                 )
                 a = acquisition(
-                    x_new, self._prev_regression, c1=algorithm.c1, c2=algorithm.c2,
+                    x_new, self._prev_regression, c1=algorithm.c1, c2=algorithm.c2
                 )
             else:
                 a = algorithm.acquisition_min_res.F

@@ -73,9 +73,7 @@ for result, ylbl, axs in zip(results, ("Myopic", "Non-myopic"), np.split(all_axs
         if i + 1 < len(result.history):
             next_algo = result.history[i + 1]
             h = getattr(next_algo, "horizon", 1)
-            a = optimal_acquisition(
-                x, mdl, h, c1=algo.c1, c2=algo.c2, verbosity=0
-            )
+            a = optimal_acquisition(x, mdl, h, c1=algo.c1, c2=algo.c2, verbosity=0)
             acq_min = next_algo.acquisition_min_res.opt.item()
             p = acq_min.X[: problem.n_var], acq_min.F[: problem.n_var]
 
