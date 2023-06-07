@@ -79,7 +79,7 @@ class TestAlgorithm(unittest.TestCase):
                     seed,
                 )
                 acq_min = (
-                    algo.acquisition_min_res.opt.item().X
+                    algo.acquisition_min_res.X
                     if hasattr(algo, "acquisition_min_res")
                     else np.nan
                 )

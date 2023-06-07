@@ -95,7 +95,7 @@ with Parallel(n_jobs=-1, batch_size=8, verbose=0) as parallel:
                         x, mdl, y_hat, None, next_algo.c1, next_algo.c2
                     )
 
-                acq_min = next_algo.acquisition_min_res.opt.item()
+                acq_min = next_algo.acquisition_min_res
                 p = acq_min.X[: problem.n_var], acq_min.F[: problem.n_var]
 
                 ax_ = ax.twinx()

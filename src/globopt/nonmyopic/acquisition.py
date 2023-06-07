@@ -59,7 +59,7 @@ def _rollout(
             elementwise=False,
         )
         res = minimize(problem, algorithm, verbose=False, seed=_seed(seed, h), **kwargs)
-        a += res.opt[0].F.item() * discount**h
+        a += res.F.item() * discount**h
 
         # add new point to the regression model
         x = res.X.reshape(1, n_var)

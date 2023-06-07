@@ -114,7 +114,7 @@ def optimize(
             res = minimize(
                 problem, algorithm, ("n_iter", max_iter), callback=callback, seed=seed
             )
-            return callback.total, res.opt[0].F.item()
+            return callback.total, res.F.item()
 
     # run the minimization N times
     seed += trial.number ^ fnv1a(problem.__class__.__name__)

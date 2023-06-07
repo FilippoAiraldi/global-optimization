@@ -55,7 +55,7 @@ for i, (ax, algo) in enumerate(zip(axs, result.history)):
     # algorithm has terminated
     if i < len(result.history) - 1:
         a = acquisition(x, mdl, y_hat, None, algo.c1, algo.c2)
-        acq_min = result.history[i + 1].acquisition_min_res.opt.item()
+        acq_min = result.history[i + 1].acquisition_min_res
 
         ax_ = ax.twinx()
         line = ax_.plot(x.reshape(-1), a, "--", lw=2.5, label="$a(x)$", color="C2")

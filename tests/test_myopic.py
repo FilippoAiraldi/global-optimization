@@ -75,7 +75,7 @@ class TestAlgorithm(unittest.TestCase):
             ym = algo.pop.get("F").reshape(-1)
             a = acquisition(x, algo.regression, y_hat, c1=algo.c1, c2=algo.c2)
             acq_min = (
-                algo.acquisition_min_res.opt.item().X
+                algo.acquisition_min_res.X
                 if hasattr(algo, "acquisition_min_res")
                 else np.nan
             )
