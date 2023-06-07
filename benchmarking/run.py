@@ -55,7 +55,8 @@ def get_algorithm(h: int, n_var: int, regression: Literal["rbf", "idw"]) -> Algo
         init_points=2 * n_var,
         acquisition_min_algorithm=PSO(pop_size=10),  # size will be scaled with n_var
         acquisition_min_kwargs={"termination": termination},
-        acquisition_fun_kwargs={"c1": c1 / n_var, "c2": c2 / n_var},
+        c1=c1 / n_var,
+        c2=c2 / n_var,
         **kwargs,  # type: ignore[arg-type]
     )
 

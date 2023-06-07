@@ -24,7 +24,8 @@ x0 = [0.19, 0.92]
 kwargs = {
     "regression": Idw(),
     "init_points": x0,
-    "acquisition_fun_kwargs": {"c1": 1.5078, "c2": 1.4246},
+    "c1": 1.5078,
+    "c2": 1.4246,
 }
 algorithms = (
     GO(**kwargs),  # type: ignore[arg-type]
@@ -73,7 +74,7 @@ for result, ylbl, axs in zip(results, ("Myopic", "Non-myopic"), np.split(all_axs
             next_algo = result.history[i + 1]
             h = getattr(next_algo, "horizon", 1)
             a = optimal_acquisition(
-                x, mdl, h, **algo.acquisition_fun_kwargs, verbosity=0
+                x, mdl, h, c1=algo.c1, c2=algo.c2, verbosity=0
             )
             acq_min = next_algo.acquisition_min_res.opt.item()
             p = acq_min.X[: problem.n_var], acq_min.F[: problem.n_var]

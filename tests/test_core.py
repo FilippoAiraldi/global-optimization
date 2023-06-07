@@ -80,7 +80,8 @@ class TestProblems(unittest.TestCase):
     #                 ftol=1e-4, n_max_gen=300, period=10
     #             )
     #         },
-    #         acquisition_fun_kwargs={"c1": 1.5078 / n_var, "c2": 1.4246 / n_var},
+    #         c1=1.5078 / n_var,
+    #         c2=1.4246 / n_var,
     #     )
     #     callback = BestSoFarCallback()
     #     minimize(

@@ -40,13 +40,11 @@ class DPStageCostCallback(Callback):
             # save the stage cost, i.e., the acquistion, of having chosen the new sample
             # given the previous regression model
             if is_non_myopic:
-                x_new = algorithm.acquisition_min_res.X[: algorithm.problem.n_var]
-                kwargs = algorithm.acquisition_fun_kwargs
+                x_new = algorithm.acquisition_min_res.X.reshape(
+                    1, algorithm.problem.n_var
+                )
                 a = acquisition(
-                    x_new.reshape(1, 1, -1),
-                    self._prev_regression,
-                    c1=kwargs["c1"],
-                    c2=kwargs["c2"],
+                    x_new, self._prev_regression, c1=algorithm.c1, c2=algorithm.c2,
                 )
             else:
                 a = algorithm.acquisition_min_res.F

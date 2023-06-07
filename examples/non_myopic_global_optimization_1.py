@@ -31,7 +31,8 @@ x0 = [-2.62, -1.2, 0.14, 1.1, 2.82]
 kwargs = {
     "regression": Rbf("thinplatespline", 0.01),
     "init_points": x0,
-    "acquisition_fun_kwargs": {"c1": 1, "c2": 0.5},
+    "c1": 1,
+    "c2": 0.5,
 }
 algorithms = (
     GO(**kwargs),  # type: ignore[arg-type]

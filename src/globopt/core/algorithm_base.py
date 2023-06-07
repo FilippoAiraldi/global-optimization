@@ -23,7 +23,6 @@ class GOBaseAlgorithm(Algorithm):
         self,
         acquisition_min_algorithm: Algorithm = None,
         acquisition_min_kwargs: Optional[dict[str, Any]] = None,
-        acquisition_fun_kwargs: Optional[dict[str, Any]] = None,
         output: Output = None,
         **kwargs,
     ) -> None:
@@ -35,8 +34,6 @@ class GOBaseAlgorithm(Algorithm):
             Algorithm used to minimize the acquisition function. By default, `PSO`.
         acquisition_min_kwargs : any, optional
             Additional keyword arguments passed to the acquisition min. algorithm.
-        acquisition_fun_kwargs : any, optional
-            Additional keyword arguments passed to the acquisition function evaluations.
         output : Output, optional
             Output display of the algorithm to be printed at each iteration if
             `verbose=True`. By default, `GlobalOptimizationOutput`.
@@ -45,7 +42,6 @@ class GOBaseAlgorithm(Algorithm):
             acquisition_min_algorithm = PSO()
         self.acquisition_min_algorithm = acquisition_min_algorithm
         self.acquisition_min_kwargs = acquisition_min_kwargs or {}
-        self.acquisition_fun_kwargs = acquisition_fun_kwargs or {}
         super().__init__(output=output or GlobalOptimizationOutput(), **kwargs)
 
     def _setup(self, problem: Problem, **kwargs: Any) -> None:

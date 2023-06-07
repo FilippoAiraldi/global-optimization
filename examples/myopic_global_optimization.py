@@ -25,18 +25,9 @@ problem = Simple1DProblem()
 x0 = [-2.62, -1.2, 0.14, 1.1, 2.82]
 
 # instantiate algorithm and then run the optimization
-algorithm = GO(
-    regression=Rbf("thinplatespline", 0.01),
-    init_points=x0,
-    acquisition_fun_kwargs={"c1": 1, "c2": 0.5},
-)
+alog = GO(regression=Rbf("thinplatespline", 0.01), init_points=x0, c1=1, c2=0.5)
 result = minimize(
-    problem,
-    algorithm,
-    termination=("n_iter", 6),
-    verbose=True,
-    seed=1,
-    save_history=True,
+    problem, alog, termination=("n_iter", 6), verbose=True, seed=1, save_history=True
 )
 
 # plot the results
@@ -63,7 +54,7 @@ for i, (ax, algo) in enumerate(zip(axs, result.history)):
     # plot the acquisition function and its minimum, or the best point found if the
     # algorithm has terminated
     if i < len(result.history) - 1:
-        a = acquisition(x, mdl, y_hat, **algo.acquisition_fun_kwargs)
+        a = acquisition(x, mdl, y_hat, None, algo.c1, algo.c2)
         acq_min = result.history[i + 1].acquisition_min_res.opt.item()
 
         ax_ = ax.twinx()

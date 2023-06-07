@@ -36,9 +36,10 @@ class GO(GOBaseAlgorithm):
         regression: Union[None, Idw, Rbf] = None,
         sampling: Sampling = None,
         init_points: Union[int, npt.ArrayLike] = 5,
+        c1: float = 1.5078,
+        c2: float = 1.4246,
         acquisition_min_algorithm: Algorithm = None,
         acquisition_min_kwargs: Optional[dict[str, Any]] = None,
-        acquisition_fun_kwargs: Optional[dict[str, Any]] = None,
         output: Output = None,
         **kwargs,
     ) -> None:
@@ -54,12 +55,16 @@ class GO(GOBaseAlgorithm):
         init_points : int or array-like, optional
             Either the number of initial points to sample, or the initial points
             themselves.
+        c1 : float, optional
+            Weight of the contribution of the variance function to the acquisition, by
+            default `1.5078`.
+        c2 : float, optional
+            Weight of the contribution of the distance function to the acquisition, by
+            default `1.4246`.
         acquisition_min_algorithm : Algorithm, optional
             Algorithm used to minimize the acquisition function. By default, `PSO`.
         acquisition_min_kwargs : any, optional
             Additional keyword arguments passed to the acquisition min. algorithm.
-        acquisition_fun_kwargs : any, optional
-            Additional keyword arguments passed to the acquisition function evaluations.
         output : Output, optional
             Output display of the algorithm to be printed at each iteration if
             `verbose=True`. By default, `GlobalOptimizationOutput`.
@@ -71,12 +76,10 @@ class GO(GOBaseAlgorithm):
             sampling = LatinHypercubeSampling()
         self.sampling = sampling
         self.init_points = init_points
+        self.c1 = c1
+        self.c2 = c2
         super().__init__(
-            acquisition_min_algorithm,
-            acquisition_min_kwargs,
-            acquisition_fun_kwargs,
-            output,
-            **kwargs,
+            acquisition_min_algorithm, acquisition_min_kwargs, output, **kwargs
         )
 
     def _setup(self, problem: Problem, **kwargs: Any) -> None:
@@ -113,7 +116,7 @@ class GO(GOBaseAlgorithm):
         dym = mdl.ym_.ptp()
         return FunctionalProblem(
             problem.n_var,
-            lambda x: acquisition(x, mdl, None, dym, **self.acquisition_fun_kwargs),
+            lambda x: acquisition(x, mdl, None, dym, self.c1, self.c2),
             xl=problem.xl,
             xu=problem.xu,
             elementwise=False,  # enables vectorized evaluation of acquisition function

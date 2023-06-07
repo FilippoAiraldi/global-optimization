@@ -89,7 +89,8 @@ def optimize(
                 ftol=1e-4, n_max_gen=300, period=10
             )
         },
-        acquisition_fun_kwargs={"c1": c1, "c2": c2},
+        c1=c1,
+        c2=c2,
         horizon=horizon,
         discount=discount,
     )

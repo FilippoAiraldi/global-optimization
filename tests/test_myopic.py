@@ -53,7 +53,8 @@ class TestAlgorithm(unittest.TestCase):
         algorithm = GO(
             regression=Rbf("thinplatespline", 0.01, svd_tol=0),
             init_points=x0,
-            acquisition_fun_kwargs={"c1": 1, "c2": 0.5},
+            c1=1,
+            c2=0.5,
             acquisition_min_kwargs={"verbose": True},
         )
 
@@ -72,7 +73,7 @@ class TestAlgorithm(unittest.TestCase):
             y_hat = predict(algo.regression, x)
             Xm = algo.pop.get("X").reshape(-1, 1)
             ym = algo.pop.get("F").reshape(-1)
-            a = acquisition(x, algo.regression, y_hat, **algo.acquisition_fun_kwargs)
+            a = acquisition(x, algo.regression, y_hat, c1=algo.c1, c2=algo.c2)
             acq_min = (
                 algo.acquisition_min_res.opt.item().X
                 if hasattr(algo, "acquisition_min_res")
