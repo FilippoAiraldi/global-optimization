@@ -17,7 +17,7 @@ class BestSoFarCallback(Callback):
         super().__init__()
         self.data["best"] = []
 
-    def notify(self, algorithm: Algorithm) -> None:
+    def _update(self, algorithm: Algorithm) -> None:
         self.data["best"].append(algorithm.pop.get("F").min())
 
 
@@ -32,7 +32,7 @@ class DPStageCostCallback(Callback):
         self.data["cost"] = []
         self._prev_regression: Union[None, Idw, Rbf] = None
 
-    def notify(self, algorithm: Algorithm) -> None:
+    def _update(self, algorithm: Algorithm) -> None:
         is_myopic = isinstance(algorithm, GO)
         is_non_myopic = isinstance(algorithm, NonMyopicGO)
         mdl = self._prev_regression
