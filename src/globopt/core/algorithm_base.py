@@ -38,8 +38,6 @@ class GOBaseAlgorithm(Algorithm):
             Output display of the algorithm to be printed at each iteration if
             `verbose=True`. By default, `GlobalOptimizationOutput`.
         """
-        if acquisition_min_algorithm is None:
-            acquisition_min_algorithm = PSO()
         self.acquisition_min_algorithm = acquisition_min_algorithm
         self.acquisition_min_kwargs = acquisition_min_kwargs or {}
         super().__init__(output=output or GlobalOptimizationOutput(), **kwargs)
@@ -47,6 +45,9 @@ class GOBaseAlgorithm(Algorithm):
     def _setup(self, problem: Problem, **kwargs: Any) -> None:
         """Makes sure the algorithm is set up correctly (modify kwargs and population
         size for the acquisition minimizer, modify the display, etc.)"""
+        if self.acquisition_min_algorithm is None:
+            self.acquisition_min_algorithm = PSO()
+
         self.acquisition_min_kwargs["seed"] = None  # would set seed globally (bad)
         self.acquisition_min_kwargs["copy_algorithm"] = True
 

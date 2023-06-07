@@ -69,11 +69,7 @@ class GO(GOBaseAlgorithm):
             Output display of the algorithm to be printed at each iteration if
             `verbose=True`. By default, `GlobalOptimizationOutput`.
         """
-        if regression is None:
-            regression = Idw()
-        self.regression = regression
-        if sampling is None:
-            sampling = LatinHypercubeSampling()
+        self.regression: Union[Idw, Rbf] = regression  # type: ignore[assignment]
         self.sampling = sampling
         self.init_points = init_points
         self.c1 = c1
@@ -84,6 +80,10 @@ class GO(GOBaseAlgorithm):
 
     def _setup(self, problem: Problem, **kwargs: Any) -> None:
         super()._setup(problem, **kwargs)
+        if self.regression is None:
+            self.regression = Idw()
+        if self.sampling is None:
+            self.sampling = LatinHypercubeSampling()
         if hasattr(self.acquisition_min_algorithm, "pop_size"):
             self.acquisition_min_algorithm.pop_size = (
                 self.acquisition_min_algorithm.pop_size * problem.n_var
