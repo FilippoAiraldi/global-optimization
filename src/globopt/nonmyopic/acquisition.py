@@ -24,6 +24,10 @@ from globopt.core.regression import Array, RegressorType, partial_fit, predict
 from globopt.myopic.acquisition import acquisition as myopic_acquisition
 
 
+def _seed(seed: Optional[int], h: int) -> Optional[int]:
+    return seed ^ h if seed is not None else None
+
+
 def _rollout(
     x: Array,
     y_hat: Array,
@@ -35,7 +39,8 @@ def _rollout(
     algorithm: Algorithm,
     xl: Optional[npt.ArrayLike],
     xu: Optional[npt.ArrayLike],
-    **minimize_kwargs: Any,
+    seed: Optional[int],
+    **kwargs: Any,
 ) -> float:
     """Rollouts the base greedy/myopic policy from the given point, using the regression
     to predict the evolution of the dynamics of the optimization problem."""
@@ -53,8 +58,8 @@ def _rollout(
             xu=xu,
             elementwise=False,
         )
-        res = minimize(problem, algorithm, verbose=False, **minimize_kwargs).opt[0]
-        a += res.F.item() * discount**h
+        res = minimize(problem, algorithm, verbose=False, seed=_seed(seed, h), **kwargs)
+        a += res.opt[0].F.item() * discount**h
 
         # add new point to the regression model
         x = res.X.reshape(1, n_var)
@@ -76,6 +81,7 @@ def acquisition(
     xl: Optional[npt.ArrayLike] = None,
     xu: Optional[npt.ArrayLike] = None,
     parallel: Optional[Parallel] = None,
+    seed: Optional[int] = None,
     **minimize_kwargs: Any,
 ) -> Array:
     """Computes the non-myopic acquisition function for IDW/RBF regression models.
@@ -104,6 +110,8 @@ def acquisition(
     parallel : Parallel, optional
         Parallel object to use for parallel computation. By default,
         `Parallel(n_jobs=-1, verbose=0)` is used.
+    seed : int, optional
+        Seed to use for the random number generator of the `base_algorithm`.
     minimize_kwargs : dict, optional
         Additional keyword arguments to pass to the `minimize` function of each rollout
         policy optimization problem.
@@ -130,8 +138,24 @@ def acquisition(
 
     # for each sample, compute the rollout policy by rolling out the base myopic policy
     # and add its cost to the one-step lookahead cost
-    serial_fun = lambda x, y: _rollout(
-        x, y, mdl, horizon, discount, c1, c2, base_algorithm, xl, xu, **minimize_kwargs
+
+    def compute_rollout(i, x, y):
+        return _rollout(
+            x,
+            y,
+            mdl,
+            horizon,
+            discount,
+            c1,
+            c2,
+            base_algorithm,
+            xl,
+            xu,
+            _seed(seed, i),
+            **minimize_kwargs,
+        )
+
+    a_rollout = parallel(
+        delayed(compute_rollout)(i, x, y) for i, (x, y) in enumerate(zip(x, y_hat))
     )
-    a_rollout = parallel(delayed(serial_fun)(x_, y_) for x_, y_ in zip(x, y_hat))
     return np.add(a, a_rollout)
