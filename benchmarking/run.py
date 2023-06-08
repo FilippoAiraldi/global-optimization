@@ -39,7 +39,7 @@ def get_algorithm(h: int, n_var: int, regression: Literal["rbf", "idw"]) -> Algo
     kwargs = {
         "regression": Rbf(eps=eps / n_var) if regression == "rbf" else Idw(),
         "init_points": 2 * n_var,
-        "acquisition_min_algorithm": PSO(20),
+        "acquisition_min_algorithm": PSO(10),
         "acquisition_min_kwargs": {"termination": termination},
         "c1": c1 / n_var,
         "c2": c2 / n_var,
@@ -52,7 +52,7 @@ def get_algorithm(h: int, n_var: int, regression: Literal["rbf", "idw"]) -> Algo
             {
                 "horizon": h,
                 "discount": 0.9,
-                "rollout_algorithm": PSO(20),
+                "rollout_algorithm": PSO(10),
                 "acquisition_rollout_kwargs": {"termination": termination},
                 "n_jobs": 1,
             }
