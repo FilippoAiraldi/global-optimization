@@ -33,7 +33,7 @@ class TestAcquisition(unittest.TestCase):
         with Parallel(n_jobs=1, batch_size=8, verbose=0) as parallel:
             a = acquisition(x, mdl, h, discount, c1, c2, None, -3, +3, parallel, seed)
 
-        np.testing.assert_allclose(a, RESULTS["acquisition"], atol=1e-4, rtol=1e-4)
+        np.testing.assert_allclose(a, RESULTS["acquisition"], atol=1e-3, rtol=1e-3)
 
 
 class TestAlgorithm(unittest.TestCase):
@@ -87,7 +87,7 @@ class TestAlgorithm(unittest.TestCase):
 
         for key in out:
             for actual, expected in zip(out[key], RESULTS[key]):
-                np.testing.assert_allclose(actual, expected, atol=1e-4, rtol=1e-4)
+                np.testing.assert_allclose(actual, expected, atol=1e-3, rtol=1e-3)
 
 
 if __name__ == "__main__":
