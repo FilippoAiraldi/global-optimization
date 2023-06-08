@@ -35,11 +35,11 @@ SIMPLE_PROBLEMS = get_available_simple_problems()
 def get_algorithm(h: int, n_var: int, regression: Literal["rbf", "idw"]) -> Algorithm:
     """Returns the algorithm to be used for the given horizon and regression."""
     c1, c2, eps = 1.5078, 1.4246, 1.0775
-    termination = DefaultSingleObjectiveTermination(ftol=1e-4, n_max_gen=300, period=10)
+    termination = DefaultSingleObjectiveTermination(ftol=1e-4, n_max_gen=300, period=5)
     kwargs = {
         "regression": Rbf(eps=eps / n_var) if regression == "rbf" else Idw(),
         "init_points": 2 * n_var,
-        "acquisition_min_algorithm": PSO(pop_size=10),  # size will be scaled with n_var
+        "acquisition_min_algorithm": PSO(20),
         "acquisition_min_kwargs": {"termination": termination},
         "c1": c1 / n_var,
         "c2": c2 / n_var,
@@ -48,7 +48,7 @@ def get_algorithm(h: int, n_var: int, regression: Literal["rbf", "idw"]) -> Algo
         cls = GO
     else:
         cls = NonMyopicGO  # type: ignore[assignment]
-        kwargs.update({"horizon": h, "discount": 0.9})
+        kwargs.update({"horizon": h, "discount": 0.9, "rollout_algorithm": PSO(20)})
     return cls(**kwargs)
 
 
