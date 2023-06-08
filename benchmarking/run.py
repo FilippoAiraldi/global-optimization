@@ -26,16 +26,10 @@ from globopt.core.regression import Array, Idw, Rbf
 from globopt.myopic.algorithm import GO, Algorithm
 from globopt.nonmyopic.algorithm import NonMyopicGO
 from globopt.util.callback import BestSoFarCallback, DPStageCostCallback
+from globopt.util.random import make_seeds
 
-MAX_SEED = 2**32
-FNV_OFFSET, FNV_PRIME = 2166136261, 16777619
 BENCHMARK_PROBLEMS = get_available_benchmark_problems()
 SIMPLE_PROBLEMS = get_available_simple_problems()
-
-
-def fnv1a(s: str) -> int:
-    """Hashes a string using the FNV-1a algorithm."""
-    return sum((FNV_OFFSET ^ b) * FNV_PRIME**i for i, b in enumerate(s.encode()))
 
 
 def get_algorithm(h: int, n_var: int, regression: Literal["rbf", "idw"]) -> Algorithm:
@@ -72,7 +66,7 @@ def run_benchmark(problem_name: str, h: int, seed: int) -> tuple[list[float], fl
         callback=CallbackCollection(bsf_callback, dp_callback),
         verbose=False,
         copy_algorithm=False,  # no need to copy the algorithm, it is freshly created
-        seed=(seed ^ fnv1a(problem_name)) % MAX_SEED,
+        seed=seed,
     )
     return bsf_callback.data["best"], sum(dp_callback.data["cost"])
 
@@ -85,14 +79,15 @@ def run_benchmarks(
     if problem_names == ["all"]:
         problem_names = BENCHMARK_PROBLEMS
 
-    def _run(name: str, h: int, n_trial: int) -> tuple[str, list[float]]:
-        print(f"Solving {name.upper()}, h={h}, iter={n_trial + 1}")
-        bsf, J = run_benchmark(name, h, seed + n_trial)
+    def _run(name: str, h: int, n_trial: int, seed: int) -> tuple[str, list[float]]:
+        print(f"{name.upper()}: h={h}, iter={n_trial + 1} | seed={seed}")
+        bsf, J = run_benchmark(name, h, seed)
         bsf.append(J)
         return f"{name}_h{h}", bsf
 
-    results: list[tuple[str, list[float]]] = Parallel(n_jobs=1, verbose=100)(
-        delayed(_run)(name, h, trial)
+    seeds = make_seeds(str(seed) + "".join(problem_names))
+    results: list[tuple[str, list[float]]] = Parallel(n_jobs=-1, verbose=100)(
+        delayed(_run)(name, h, trial, next(seeds))
         for name, h, trial in product(problem_names, horizons, range(n_trials))
     )
     data: dict[str, Array] = {

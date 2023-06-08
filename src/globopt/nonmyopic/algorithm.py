@@ -19,6 +19,7 @@ from pymoo.termination.default import DefaultSingleObjectiveTermination
 
 from globopt.myopic.algorithm import GO, Result
 from globopt.nonmyopic.acquisition import Array, acquisition
+from globopt.util.random import make_seed
 
 
 class NonMyopicGO(GO):
@@ -81,6 +82,10 @@ class NonMyopicGO(GO):
             self.acquisition_rollout_kwargs[
                 "termination"
             ] = DefaultSingleObjectiveTermination(ftol=1e-4, n_max_gen=300, period=10)
+        if seed := kwargs.get("seed", None):
+            self.acquisition_rollout_kwargs["seed"] = make_seed(
+                str(seed + self.horizon + int(self.discount * 100))
+            )
 
         self.parallel = Parallel(self.n_jobs, verbose=0)
         self.parallel.__enter__()

@@ -22,10 +22,7 @@ from pymoo.termination.default import DefaultSingleObjectiveTermination
 
 from globopt.core.regression import Array, RegressorType, partial_fit, predict
 from globopt.myopic.acquisition import acquisition as myopic_acquisition
-
-
-def _seed(seed: Optional[int], h: int) -> Optional[int]:
-    return seed ^ h if seed is not None else None
+from globopt.util.random import make_seeds
 
 
 def _rollout(
@@ -58,7 +55,13 @@ def _rollout(
             xu=xu,
             elementwise=False,
         )
-        res = minimize(problem, algorithm, verbose=False, seed=_seed(seed, h), **kwargs)
+        res = minimize(
+            problem,
+            algorithm,
+            verbose=False,
+            seed=seed * h if seed is not None else None,
+            **kwargs,
+        )
         a += res.F.item() * discount**h
 
         # add new point to the regression model
@@ -139,7 +142,7 @@ def acquisition(
     # for each sample, compute the rollout policy by rolling out the base myopic policy
     # and add its cost to the one-step lookahead cost
 
-    def compute_rollout(i, x, y):
+    def compute_rollout(x: Array, y: Array, seed: Optional[int]) -> float:
         return _rollout(
             x,
             y,
@@ -151,11 +154,11 @@ def acquisition(
             base_algorithm,
             xl,
             xu,
-            _seed(seed, i),
+            seed,
             **minimize_kwargs,
         )
 
     a_rollout = parallel(
-        delayed(compute_rollout)(i, x, y) for i, (x, y) in enumerate(zip(x, y_hat))
+        delayed(compute_rollout)(x, y, s) for x, y, s in zip(x, y_hat, make_seeds(seed))
     )
     return np.add(a, a_rollout)
