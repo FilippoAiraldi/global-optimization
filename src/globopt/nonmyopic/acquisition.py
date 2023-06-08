@@ -46,7 +46,7 @@ def _rollout(
     y_min = mdl.ym_.min()
     y_max = mdl.ym_.max()
     a = 0.0
-    for h in range(1, horizon):
+    for h, seed_ in zip(range(1, horizon), make_seeds(seed)):
         dym = y_max - y_min
         problem = FunctionalProblem(
             n_var,
@@ -59,7 +59,7 @@ def _rollout(
             problem,
             algorithm,
             verbose=False,
-            seed=seed * h if seed is not None else None,
+            seed=seed_,
             **kwargs,
         )
         a += res.F.item() * discount**h
