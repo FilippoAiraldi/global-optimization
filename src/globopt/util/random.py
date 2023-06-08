@@ -41,7 +41,7 @@ def make_seeds(
     """
     if seed is None:
         yield from repeat(None)
-    elif isinstance(seed, int):
-        yield from count(seed)
     else:
-        yield from count(make_seed(seed))
+        generator = count(seed if isinstance(seed, int) else make_seed(seed))
+        while True:
+            yield next(generator) % MAX_SEED
