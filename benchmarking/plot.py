@@ -6,7 +6,7 @@ Optimization strategies on synthetic problems.
 
 import argparse
 from itertools import zip_longest
-from typing import Optional
+from typing import Callable, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -24,7 +24,7 @@ from globopt.core.regression import Array
 
 plt.style.use("bmh")
 
-DataT: TypeAlias = dict[str, dict[int, tuple[Array, float]]]
+DataT: TypeAlias = dict[str, dict[int, tuple[Array, Array]]]
 PROBLEMS = get_available_benchmark_problems() + get_available_simple_problems()
 
 
@@ -39,7 +39,9 @@ def load_data(filename: str) -> DataT:
         h = int(h_name[1:])
         if name not in data_:
             data_[name] = {}
-        data_[name][h] = (v[:-1], v[-1])  # split best-so-far and performance
+
+        # NOTE: here we split best-so-far data from performance (last column)
+        data_[name][h] = (v[:, :-1], v[:, -1])
     return data_
 
 
@@ -129,33 +131,46 @@ def plot_gaps(data: DataT, figtitle: Optional[str]) -> None:
     # fig.savefig("gaps.pdf")
 
 
-def print_gaps_summary(data: DataT, tabletitle: Optional[str]) -> None:
+def print_gaps_and_performance_summary(data: DataT, tabletitle: Optional[str]) -> None:
     """Prints the summary of the results in the given dictionary."""
-    horizons = [f"h={h}" for h in next(iter(data.values())).keys()]
     problem_names = sorted(data.keys())
-    table = PrettyTable()
-    table.field_names = ["Function name", ""] + horizons
-    if tabletitle is not None:
-        table.title = tabletitle
+    horizons = sorted(next(iter(data.values())).keys())
+    pfs = {n: get_benchmark_problem(n)[0].pareto_front().item() for n in problem_names}
 
-    for problem_name in problem_names:
-        f_opt = get_benchmark_problem(problem_name)[0].pareto_front().item()
-        means = []
-        medians = []
-        for _, (results, _) in data[problem_name].items():
-            gaps = (results[:, 0] - results[:, -1]) / (results[:, 0] - f_opt)
-            means.append(gaps.mean())
-            medians.append(np.median(gaps))
-        best_mean = np.argmax(means)
-        best_median = np.argmax(medians)
+    tables = (PrettyTable(), PrettyTable())
+    field_names = ["Function name", ""] + [f"h={h}" for h in horizons]
+    for table in tables:
+        table.field_names = field_names
+        if tabletitle is not None:
+            table.title = tabletitle
 
-        means_str = [f"{m:.6f}" for m in means]
-        medians_str = [f"{m:.6f}" for m in medians]
-        means_str[best_mean] = f"\033[1;34;40m{means_str[best_mean]}\033[0m"
-        medians_str[best_median] = f"\033[1;34;40m{medians_str[best_median]}\033[0m"
-        table.add_row([problem_name, "mean"] + means_str)
-        table.add_row(["", "median"] + medians_str)
-    print(table)
+    def populate_table(
+        table: PrettyTable, get: Callable[[str, int], Array], order=np.argmax
+    ) -> None:
+        for name in problem_names:
+            means, medians = [], []
+            for h in horizons:
+                results = get(name, h)
+                means.append(np.mean(results))
+                medians.append(np.median(results))
+            best_mean = order(means)
+            best_median = order(medians)
+            means_str = [f"{m:.6f}" for m in means]
+            medians_str = [f"{m:.6f}" for m in medians]
+            means_str[best_mean] = f"\033[1;34;40m{means_str[best_mean]}\033[0m"
+            medians_str[best_median] = f"\033[1;34;40m{medians_str[best_median]}\033[0m"
+            table.add_row([name, "mean"] + means_str)
+            table.add_row(["", "median"] + medians_str)
+
+    def get_gap(name: str, h: int) -> Array:
+        results, _ = data[name][h]
+        return (results[:, 0] - results[:, -1]) / (results[:, 0] - pfs[name])
+
+    populate_table(tables[0], get_gap)
+    populate_table(tables[1], lambda name, h: data[name][h][1], order=np.argmin)
+
+    rows = zip(*(t.get_string().splitlines() for t in tables))
+    print("\n".join(row1 + "\t" + row2 for row1, row2 in rows))
 
 
 if __name__ == "__main__":
@@ -191,5 +206,5 @@ if __name__ == "__main__":
             plot_results(data, title)
             plot_gaps(data, title)
         if not args.no_summary:
-            print_gaps_summary(data, title)
+            print_gaps_and_performance_summary(data, title)
     plt.show()
