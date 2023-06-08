@@ -3,7 +3,6 @@ import unittest
 
 import numpy as np
 from pymoo.optimize import minimize
-from scipy.io import loadmat
 
 from globopt.core.problems import Simple1DProblem
 from globopt.core.regression import Rbf, fit, predict
@@ -15,9 +14,8 @@ from globopt.myopic.acquisition import (
 )
 from globopt.myopic.algorithm import GO
 
-RESULTS = loadmat(r"tests/data_test_myopic.mat")
 with open(r"tests/data_test_myopic.pkl", "rb") as f:
-    RESULTS.update(pickle.load(f))
+    RESULTS = pickle.load(f)
 
 
 def f(x: np.ndarray) -> np.ndarray:
