@@ -26,7 +26,7 @@ from globopt.core.regression import Array, Idw, Rbf
 from globopt.myopic.algorithm import GO, Algorithm
 from globopt.nonmyopic.algorithm import NonMyopicGO
 from globopt.util.callback import BestSoFarCallback, DPStageCostCallback
-from globopt.util.random import make_seeds
+from globopt.util.random import make_seed
 
 BENCHMARK_PROBLEMS = get_available_benchmark_problems()
 SIMPLE_PROBLEMS = get_available_simple_problems()
@@ -48,7 +48,15 @@ def get_algorithm(h: int, n_var: int, regression: Literal["rbf", "idw"]) -> Algo
         cls = GO
     else:
         cls = NonMyopicGO  # type: ignore[assignment]
-        kwargs.update({"horizon": h, "discount": 0.9, "rollout_algorithm": PSO(20)})
+        kwargs.update(
+            {
+                "horizon": h,
+                "discount": 0.9,
+                "rollout_algorithm": PSO(20),
+                "acquisition_rollout_kwargs": {"termination": termination},
+                "n_jobs": 1,
+            }
+        )
     return cls(**kwargs)
 
 
@@ -79,15 +87,15 @@ def run_benchmarks(
     if problem_names == ["all"]:
         problem_names = BENCHMARK_PROBLEMS
 
-    def _run(name: str, h: int, n_trial: int, seed: int) -> tuple[str, list[float]]:
-        print(f"{name.upper()}: h={h}, iter={n_trial + 1} | seed={seed}")
-        bsf, J = run_benchmark(name, h, seed)
+    def _run(name: str, h: int, n_trial: int) -> tuple[str, list[float]]:
+        seed_ = make_seed(name + str(seed + n_trial))
+        print(f"{name.upper()}: h={h}, iter={n_trial + 1} | seed={seed_}")
+        bsf, J = run_benchmark(name, h, seed_)
         bsf.append(J)
         return f"{name}_h{h}", bsf
 
-    seeds = make_seeds(str(seed) + "".join(problem_names))
     results: list[tuple[str, list[float]]] = Parallel(n_jobs=-1, verbose=100)(
-        delayed(_run)(name, h, trial, next(seeds))
+        delayed(_run)(name, h, trial)
         for name, h, trial in product(problem_names, horizons, range(n_trials))
     )
     data: dict[str, Array] = {
