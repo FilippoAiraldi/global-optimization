@@ -18,10 +18,11 @@ def make_seed(s: str) -> int:
     int
         The generated seed.
     """
-    return (
+    seed = (
         int.from_bytes(sha256(s.encode(), usedforsecurity=False).digest(), "big")
         % MAX_SEED
     )
+    return seed if seed >= 0 else seed - 4 + MAX_SEED
 
 
 def make_seeds(
@@ -44,4 +45,5 @@ def make_seeds(
     else:
         generator = count(seed if isinstance(seed, int) else make_seed(seed))
         while True:
-            yield next(generator) % MAX_SEED
+            seed_ = next(generator)
+            yield seed_ if seed_ >= 0 else seed_ - 4 + MAX_SEED
