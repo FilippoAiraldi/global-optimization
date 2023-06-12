@@ -145,7 +145,7 @@ def print_gaps_and_performance_summary(data: DataT, tabletitle: Optional[str]) -
             table.title = tabletitle
 
     def populate_table(
-        table: PrettyTable, get: Callable[[str, int], Array], order=np.argmax, prec=6
+        table: PrettyTable, get: Callable[[str, int], Array], order=np.argmax, prec=4
     ) -> None:
         for name in problem_names:
             means, medians = [], []
