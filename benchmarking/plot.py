@@ -145,7 +145,7 @@ def print_gaps_and_performance_summary(data: DataT, tabletitle: Optional[str]) -
             table.title = tabletitle
 
     def populate_table(
-        table: PrettyTable, get: Callable[[str, int], Array], order=np.argmax
+        table: PrettyTable, get: Callable[[str, int], Array], order=np.argmax, prec=6
     ) -> None:
         for name in problem_names:
             means, medians = [], []
@@ -155,8 +155,8 @@ def print_gaps_and_performance_summary(data: DataT, tabletitle: Optional[str]) -
                 medians.append(np.median(results))
             best_mean = order(means)
             best_median = order(medians)
-            means_str = [f"{m:.6f}" for m in means]
-            medians_str = [f"{m:.6f}" for m in medians]
+            means_str = [f"{m:.{prec}f}" for m in means]
+            medians_str = [f"{m:.{prec}f}" for m in medians]
             means_str[best_mean] = f"\033[1;34;40m{means_str[best_mean]}\033[0m"
             medians_str[best_median] = f"\033[1;34;40m{medians_str[best_median]}\033[0m"
             table.add_row([name, "mean"] + means_str)
@@ -167,7 +167,7 @@ def print_gaps_and_performance_summary(data: DataT, tabletitle: Optional[str]) -
         return (results[:, 0] - results[:, -1]) / (results[:, 0] - pfs[name])
 
     populate_table(tables[0], get_gap)
-    populate_table(tables[1], lambda name, h: data[name][h][1], order=np.argmin)
+    populate_table(tables[1], lambda name, h: data[name][h][1], order=np.argmin, prec=3)
 
     rows = zip(*(t.get_string().splitlines() for t in tables))
     print("\n".join(row1 + "\t" + row2 for row1, row2 in rows))
