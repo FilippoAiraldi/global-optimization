@@ -13,11 +13,13 @@ References
 
 from typing import Callable, Literal, NamedTuple, Union
 
+import numba as nb
 import numpy as np
+import numpy.typing as npt
 from scipy.spatial.distance import _distance_pybind
 from typing_extensions import TypeAlias
 from vpso.math import batch_cdist, batch_pdist, batch_squareform
-from vpso.typing import Array1d, Array2d, Array3d
+from vpso.typing import Array2d, Array3d
 
 
 
@@ -163,15 +165,14 @@ def _blockwise_inversion(
     return y_new, coef_new, Minv_new
 
 
-def _idw_weighting(X: Array3d, Xm: Array3d, exp_weighting: bool = False) -> Array3d:
+@nb.njit(nb.float64[:, :, :](nb.float64[:, :, :], nb.boolean), cache=True)
+def _idw_weighting(d2: Array3d, exp_weighting: bool = False) -> Array3d:
     """Computes the IDW weighting function.
 
     Parameters
     ----------
-    X : array of shape (batch, n_target, n_features)
-        Array of `x` for which to compute the weighting function.
-    Xm : array of shape (batch, n_samples, n_features)
-        Array of observed query points.
+    d2 : array of shape (batch, n_target, n_samples)
+        Array of distances between `X` and `Xm`.
     exp_weighting : bool, optional
         Whether the weighting function should decay exponentially, by default `False`.
 
@@ -180,7 +181,6 @@ def _idw_weighting(X: Array3d, Xm: Array3d, exp_weighting: bool = False) -> Arra
     array
         The weighiing function computed at `X` against dataset `Xm`.
     """
-    d2 = batch_cdist(X, Xm, _distance_pybind.cdist_sqeuclidean)
     W = 1 / np.maximum(d2, DELTA)
     if exp_weighting:
         W *= np.exp(-d2)
@@ -198,11 +198,18 @@ def _idw_partial_fit(mdl: Idw, X: Array3d, y: Array3d) -> Idw:
     return Idw(exp_weighting, np.concatenate((X_, X), 1), np.concatenate((y_, y), 1))
 
 
+@nb.njit(nb.float64[:, :, :](nb.float64[:, :, :], nb.boolean), cache=True)
+def _idw_contributions(d2: Array3d, exp_weighting: bool) -> Array3d:
+    """Computes the IDW contributions."""
+    W = _idw_weighting(d2, exp_weighting)
+    return W / W.sum(2)[:, :, np.newaxis]
+
+
 def _idw_predict(mdl: Idw, X: Array3d) -> Array3d:
     """Predicts target values according to the IDW model."""
     exp_weighting, X_, y_ = mdl
-    W = _idw_weighting(X, X_, exp_weighting)
-    v = W / W.sum(2, keepdims=True)
+    d2 = batch_cdist(X, X_, _distance_pybind.cdist_sqeuclidean)
+    v = _idw_contributions(d2, exp_weighting)
     return v @ y_
 
 
@@ -264,7 +271,7 @@ def fit(mdl: RegressorType, X: Array3d, y: Array3d) -> RegressorType:
     return _rbf_fit(mdl, X, y) if isinstance(mdl, Rbf) else _idw_fit(mdl, X, y)
 
 
-def partial_fit(mdl: RegressorType, X: Array, y: Array) -> RegressorType:
+def partial_fit(mdl: RegressorType, X: Array3d, y: Array3d) -> RegressorType:
     """Adds additional data to an already fitted IDW or RBF model.
 
     Parameters
