@@ -14,11 +14,11 @@ References
 from typing import Callable, Literal, NamedTuple, Union
 
 import numpy as np
-import numpy.typing as npt
-from scipy.spatial.distance import cdist, pdist, squareform
+from scipy.spatial.distance import _distance_pybind
 from typing_extensions import TypeAlias
+from vpso.math import batch_cdist, batch_pdist, batch_squareform
+from vpso.typing import Array1d, Array2d, Array3d
 
-Array: TypeAlias = npt.NDArray[np.floating]
 
 
 """Choices of available RBF kernels."""
@@ -68,10 +68,10 @@ class Rbf(NamedTuple):
     svd_tol: float = 1e-6
     exp_weighting: bool = False
 
-    Xm_: Array = np.empty((0, 0))
-    ym_: Array = np.empty((0,))
-    coef_: Array = np.empty((0,))
-    Minv_: Array = np.empty((0, 0))
+    Xm_: Array3d = np.empty((0, 0, 0))
+    ym_: Array3d = np.empty((0, 0, 0))
+    coef_: Array3d = np.empty((0, 0, 0))
+    Minv_: Array3d = np.empty((0, 0, 0))
 
     def __str__(self) -> str:
         return _regressor_to_str(self)
@@ -91,8 +91,8 @@ class Idw(NamedTuple):
 
     exp_weighting: bool = False
 
-    Xm_: Array = np.empty((0, 0))
-    ym_: Array = np.empty((0,))
+    Xm_: Array3d = np.empty((0, 0, 0))
+    ym_: Array3d = np.empty((0, 0, 0))
 
     def __str__(self) -> str:
         return _regressor_to_str(self)
@@ -105,11 +105,11 @@ RegressorType: TypeAlias = Union[Rbf, Idw]
 
 
 """Small value to avoid division by zero."""
-DELTA = 1e-9
+DELTA = 1e-12
 
 
 """RBF kernels."""
-RBF_FUNCS: dict[RbfKernel, Callable[[Array, float], Array]] = {
+RBF_FUNCS: dict[RbfKernel, Callable[[Array3d, float], Array3d]] = {
     "inversequadratic": lambda d2, eps: 1 / (1 + eps**2 * d2),
     "multiquadric": lambda d2, eps: np.sqrt(1 + eps**2 * d2),
     "linear": lambda d2, eps: eps * np.sqrt(d2),
@@ -121,43 +121,56 @@ RBF_FUNCS: dict[RbfKernel, Callable[[Array, float], Array]] = {
 }
 
 
-def _linsolve_via_svd(M: Array, y: Array, tol: float = 1e-6) -> tuple[Array, Array]:
+def _linsolve_via_svd(
+    M: Array3d, y: Array3d, tol: float = 1e-9
+) -> tuple[Array3d, Array3d]:
     """Solves linear systems via SVD."""
+    B, n, _ = y.shape
     U, S, VT = np.linalg.svd(M)
+    #
     S[S <= tol] = np.inf
-    Minv = (VT.T / S.reshape(1, -1)) @ U.T
+    S = S.reshape(B, 1, n)
+    #
+    Minv = (VT.transpose((0, 2, 1)) / S) @ U.transpose(0, 2, 1)
     coef = Minv @ y
     return coef, Minv
 
 
 def _blockwise_inversion(
-    ym: Array, y: Array, Minv: Array, phi: Array, Phi: Array, tol: float = 1e-6
-) -> tuple[Array, Array, Array]:
+    ym: Array3d,
+    y: Array3d,
+    Minv: Array3d,
+    phi: Array3d,
+    Phi: Array3d,
+    tol: float = 1e-6,
+) -> tuple[Array3d, Array3d, Array3d]:
     """Performs blockwise inversion updates of RBF kernel matrices."""
     L = Minv @ Phi
     #
-    c = phi - Phi.T @ L
+    c = phi - Phi.transpose(0, 2, 1) @ L
     c[np.abs(c) <= tol] = tol
     c_inv = np.linalg.inv(c)
     #
     B = -L @ c_inv
-    A = Minv - B @ L.T
-    Minv_new = np.vstack((np.hstack((A, B)), np.hstack((B.T, c_inv))))
+    A = Minv - B @ L.transpose(0, 2, 1)
+    Minv_new = np.concatenate(
+        (np.concatenate((A, B), 2), np.concatenate((B.transpose(0, 2, 1), c_inv), 2)), 1
+    )
 
     # update coefficients
-    y_new = np.concatenate((ym, y), 0)
+    y_new = np.concatenate((ym, y), 1)
     coef_new = Minv_new @ y_new
     return y_new, coef_new, Minv_new
 
 
-def idw_weighting(X: Array, Xm: Array, exp_weighting: bool = False) -> Array:
+def _idw_weighting(X: Array3d, Xm: Array3d, exp_weighting: bool = False) -> Array3d:
     """Computes the IDW weighting function.
 
     Parameters
     ----------
-    X : array of shape (n_target, n_features)
+    X : array of shape (batch, n_target, n_features)
         Array of `x` for which to compute the weighting function.
-    Xm : array of shape (n_samples, n_features)
+    Xm : array of shape (batch, n_samples, n_features)
         Array of observed query points.
     exp_weighting : bool, optional
         Whether the weighting function should decay exponentially, by default `False`.
@@ -167,80 +180,80 @@ def idw_weighting(X: Array, Xm: Array, exp_weighting: bool = False) -> Array:
     array
         The weighiing function computed at `X` against dataset `Xm`.
     """
-    d2 = cdist(X, Xm, "sqeuclidean")
+    d2 = batch_cdist(X, Xm, _distance_pybind.cdist_sqeuclidean)
     W = 1 / np.maximum(d2, DELTA)
     if exp_weighting:
         W *= np.exp(-d2)
     return W
 
 
-def _idw_fit(mdl: Idw, X: Array, y: Array) -> Idw:
+def _idw_fit(mdl: Idw, X: Array3d, y: Array3d) -> Idw:
     """Fits an IDW model to the data."""
     return Idw(mdl.exp_weighting, X, y)
 
 
-def _idw_partial_fit(mdl: Idw, X: Array, y: Array) -> Idw:
+def _idw_partial_fit(mdl: Idw, X: Array3d, y: Array3d) -> Idw:
     """Fits an already partially fitted IDW model to the additional data."""
     exp_weighting, X_, y_ = mdl
-    return Idw(exp_weighting, np.concatenate((X_, X), 0), np.concatenate((y_, y), 0))
+    return Idw(exp_weighting, np.concatenate((X_, X), 1), np.concatenate((y_, y), 1))
 
 
-def _idw_predict(mdl: Idw, X: Array) -> Array:
+def _idw_predict(mdl: Idw, X: Array3d) -> Array3d:
     """Predicts target values according to the IDW model."""
     exp_weighting, X_, y_ = mdl
-    W = idw_weighting(X, X_, exp_weighting)
-    v = W / W.sum(1, keepdims=True)
+    W = _idw_weighting(X, X_, exp_weighting)
+    v = W / W.sum(2, keepdims=True)
     return v @ y_
 
 
-def _rbf_fit(mdl: Rbf, X: Array, y: Array) -> Rbf:
+def _rbf_fit(mdl: Rbf, X: Array3d, y: Array3d) -> Rbf:
     """Fits an RBF model to the data."""
     # create matrix of kernel evaluations
     kernel, eps, svd_tol, exp_weighting = mdl[:4]
     fun = RBF_FUNCS[kernel]
-    d2 = pdist(X, "sqeuclidean")  # returns all single distances, not a matrix
-    M = squareform(fun(d2, eps))
-    M[np.diag_indices_from(M)] = fun(0, eps)  # type: ignore[arg-type]
+    d2 = batch_pdist(X, _distance_pybind.pdist_sqeuclidean)
+    M = batch_squareform(fun(d2, eps))
+    M[:, np.eye(M.shape[1], dtype=bool)] = fun(0, eps)  # type: ignore[arg-type]
 
     # compute coefficients via SVD and inverse of M (useful for partial_fit)
     coef, Minv = _linsolve_via_svd(M, y, svd_tol)
     return Rbf(kernel, eps, svd_tol, exp_weighting, X, y, coef, Minv)
 
 
-def _rbf_partial_fit(mdl: Rbf, X: Array, y: Array) -> Rbf:
+def _rbf_partial_fit(mdl: Rbf, X: Array3d, y: Array2d) -> Rbf:
     """Fits an already partially fitted RBF model to the additional data."""
     kernel, eps, svd_tol, exp_weighting, Xm, ym, _, Minv = mdl
 
     # create matrix of kernel evals of new elements w.r.t. training data and themselves
     fun = RBF_FUNCS[kernel]
-    Phi = fun(cdist(Xm, X, "sqeuclidean"), eps)
-    phi = pdist(X, "sqeuclidean")
-    phi = squareform(fun(phi, eps))
-    phi[np.diag_indices_from(phi)] = fun(0, eps)  # type: ignore[arg-type]
+    Phi = fun(batch_cdist(Xm, X, _distance_pybind.cdist_sqeuclidean), eps)
+    phi = batch_pdist(X, _distance_pybind.pdist_sqeuclidean)
+    phi = batch_squareform(fun(phi, eps))
+    phi[:, np.eye(phi.shape[1], dtype=bool)] = fun(0, eps)  # type: ignore[arg-type]
 
     # update inverse of M via blockwise inversion and coefficients
     y_new, coef_new, Minv_new = _blockwise_inversion(ym, y, Minv, phi, Phi, svd_tol)
-    X_new = np.concatenate((Xm, X), 0)
+    X_new = np.concatenate((Xm, X), 1)
     return Rbf(kernel, eps, svd_tol, exp_weighting, X_new, y_new, coef_new, Minv_new)
 
 
-def _rbf_predict(mdl: Rbf, X: Array) -> Array:
+def _rbf_predict(mdl: Rbf, X: Array3d) -> Array2d:
     """Predicts target values according to the IDW model."""
-    d2 = cdist(mdl.Xm_, X, "sqeuclidean")
+    d2 = batch_cdist(mdl.Xm_, X, _distance_pybind.cdist_sqeuclidean)
     M = RBF_FUNCS[mdl.kernel](d2, mdl.eps)
-    return M.T @ mdl.coef_
+    return M.transpose(0, 2, 1) @ mdl.coef_
 
 
-def fit(mdl: RegressorType, X: Array, y: Array) -> RegressorType:
+def fit(mdl: RegressorType, X: Array3d, y: Array3d) -> RegressorType:
     """Fits an IDW or RBF model to the data.
 
     Parameters
     ----------
     mdl : Idw or Rbf
         The options for the RBF model.
-    X : array of shape (n_samples, n_features)
+    X : array of shape (batch, n_samples, n_features)
         The input data to be fitted.
-    y : array of shape (n_samples,)
+    y : array of shape (batch, n_samples, 1)
         The target values to be fitted.
 
     Returns
@@ -258,9 +271,9 @@ def partial_fit(mdl: RegressorType, X: Array, y: Array) -> RegressorType:
     ----------
     fitresult : Idw or Rbf
         Model resulting from a previous fit or partial fit operation.
-    X : array of shape (n_samples, n_features)
+    X : array of shape (batch, n_samples, n_features)
         The input data to be fitted.
-    y : array of shape (n_samples,)
+    y : array of shape (batch, n_samples, 1)
         The target values to be fitted.
 
     Returns
@@ -275,14 +288,14 @@ def partial_fit(mdl: RegressorType, X: Array, y: Array) -> RegressorType:
     )
 
 
-def predict(mdl: RegressorType, X: Array) -> Array:
+def predict(mdl: RegressorType, X: Array3d) -> Array3d:
     """Predicts target values according to the IDW or RBF model.
 
     Parameters
     ----------
     mdl : Idw or Rbf
         Model resulting from a previous fit or partial fit operation.
-    X : array of shape (n_samples, n_features)
+    X : array of shape (batch, n_samples, n_features)
         The input data for which `y` has to be predicted.
 
     Returns
@@ -291,3 +304,34 @@ def predict(mdl: RegressorType, X: Array) -> Array:
         Prediction of `y`.
     """
     return _rbf_predict(mdl, X) if isinstance(mdl, Rbf) else _idw_predict(mdl, X)
+
+
+def repeat(mdl: RegressorType, n: int) -> RegressorType:
+    """Repeats a regressor model `n` times, so that `n` regressions can be computed in
+    batch.
+
+    Parameters
+    ----------
+    mdl : RegressorType
+        The regressor model to be repeated.
+    n : int
+        The number of times the regressor model should be repeated.
+
+    Returns
+    -------
+    RegressorType
+        The repeated regressor model. The repetitions are all the same model.
+    """
+    if isinstance(mdl, Idw):
+        return Idw(mdl.exp_weighting, mdl.Xm_.repeat(n, 0), mdl.ym_.repeat(n, 0))
+    else:
+        return Rbf(
+            mdl.kernel,
+            mdl.eps,
+            mdl.svd_tol,
+            mdl.exp_weighting,
+            mdl.Xm_.repeat(n, 0),
+            mdl.ym_.repeat(n, 0),
+            mdl.coef_.repeat(n, 0),
+            mdl.Minv_.repeat(n, 0),
+        )
