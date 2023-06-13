@@ -165,6 +165,44 @@ def _blockwise_inversion(
     return y_new, coef_new, Minv_new
 
 
+def _rbf_fit(mdl: Rbf, X: Array3d, y: Array3d) -> Rbf:
+    """Fits an RBF model to the data."""
+    # create matrix of kernel evaluations
+    kernel, eps, svd_tol, exp_weighting = mdl[:4]
+    fun = RBF_FUNCS[kernel]
+    d2 = batch_pdist(X, _distance_pybind.pdist_sqeuclidean)
+    M = batch_squareform(fun(d2, eps))
+    M[:, np.eye(M.shape[1], dtype=bool)] = fun(0, eps)  # type: ignore[arg-type]
+
+    # compute coefficients via SVD and inverse of M (useful for partial_fit)
+    coef, Minv = _linsolve_via_svd(M, y, svd_tol)
+    return Rbf(kernel, eps, svd_tol, exp_weighting, X, y, coef, Minv)
+
+
+def _rbf_partial_fit(mdl: Rbf, X: Array3d, y: Array2d) -> Rbf:
+    """Fits an already partially fitted RBF model to the additional data."""
+    kernel, eps, svd_tol, exp_weighting, Xm, ym, _, Minv = mdl
+
+    # create matrix of kernel evals of new elements w.r.t. training data and themselves
+    fun = RBF_FUNCS[kernel]
+    Phi = fun(batch_cdist(Xm, X, _distance_pybind.cdist_sqeuclidean), eps)
+    phi = batch_pdist(X, _distance_pybind.pdist_sqeuclidean)
+    phi = batch_squareform(fun(phi, eps))
+    phi[:, np.eye(phi.shape[1], dtype=bool)] = fun(0, eps)  # type: ignore[arg-type]
+
+    # update inverse of M via blockwise inversion and coefficients
+    y_new, coef_new, Minv_new = _blockwise_inversion(ym, y, Minv, phi, Phi, svd_tol)
+    X_new = np.concatenate((Xm, X), 1)
+    return Rbf(kernel, eps, svd_tol, exp_weighting, X_new, y_new, coef_new, Minv_new)
+
+
+def _rbf_predict(mdl: Rbf, X: Array3d) -> Array2d:
+    """Predicts target values according to the IDW model."""
+    d2 = batch_cdist(mdl.Xm_, X, _distance_pybind.cdist_sqeuclidean)
+    M = RBF_FUNCS[mdl.kernel](d2, mdl.eps)
+    return M.transpose(0, 2, 1) @ mdl.coef_
+
+
 @nb.njit(nb.float64[:, :, :](nb.float64[:, :, :], nb.boolean), cache=True)
 def _idw_weighting(d2: Array3d, exp_weighting: bool = False) -> Array3d:
     """Computes the IDW weighting function.
@@ -211,44 +249,6 @@ def _idw_predict(mdl: Idw, X: Array3d) -> Array3d:
     d2 = batch_cdist(X, X_, _distance_pybind.cdist_sqeuclidean)
     v = _idw_contributions(d2, exp_weighting)
     return v @ y_
-
-
-def _rbf_fit(mdl: Rbf, X: Array3d, y: Array3d) -> Rbf:
-    """Fits an RBF model to the data."""
-    # create matrix of kernel evaluations
-    kernel, eps, svd_tol, exp_weighting = mdl[:4]
-    fun = RBF_FUNCS[kernel]
-    d2 = batch_pdist(X, _distance_pybind.pdist_sqeuclidean)
-    M = batch_squareform(fun(d2, eps))
-    M[:, np.eye(M.shape[1], dtype=bool)] = fun(0, eps)  # type: ignore[arg-type]
-
-    # compute coefficients via SVD and inverse of M (useful for partial_fit)
-    coef, Minv = _linsolve_via_svd(M, y, svd_tol)
-    return Rbf(kernel, eps, svd_tol, exp_weighting, X, y, coef, Minv)
-
-
-def _rbf_partial_fit(mdl: Rbf, X: Array3d, y: Array2d) -> Rbf:
-    """Fits an already partially fitted RBF model to the additional data."""
-    kernel, eps, svd_tol, exp_weighting, Xm, ym, _, Minv = mdl
-
-    # create matrix of kernel evals of new elements w.r.t. training data and themselves
-    fun = RBF_FUNCS[kernel]
-    Phi = fun(batch_cdist(Xm, X, _distance_pybind.cdist_sqeuclidean), eps)
-    phi = batch_pdist(X, _distance_pybind.pdist_sqeuclidean)
-    phi = batch_squareform(fun(phi, eps))
-    phi[:, np.eye(phi.shape[1], dtype=bool)] = fun(0, eps)  # type: ignore[arg-type]
-
-    # update inverse of M via blockwise inversion and coefficients
-    y_new, coef_new, Minv_new = _blockwise_inversion(ym, y, Minv, phi, Phi, svd_tol)
-    X_new = np.concatenate((Xm, X), 1)
-    return Rbf(kernel, eps, svd_tol, exp_weighting, X_new, y_new, coef_new, Minv_new)
-
-
-def _rbf_predict(mdl: Rbf, X: Array3d) -> Array2d:
-    """Predicts target values according to the IDW model."""
-    d2 = batch_cdist(mdl.Xm_, X, _distance_pybind.cdist_sqeuclidean)
-    M = RBF_FUNCS[mdl.kernel](d2, mdl.eps)
-    return M.transpose(0, 2, 1) @ mdl.coef_
 
 
 def fit(mdl: RegressorType, X: Array3d, y: Array3d) -> RegressorType:
