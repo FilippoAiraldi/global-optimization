@@ -3,14 +3,16 @@ import unittest
 
 import numpy as np
 from pymoo.optimize import minimize
+from scipy.spatial.distance import _distance_pybind
+from vpso.math import batch_cdist
 
 from globopt.core.problems import Simple1DProblem
 from globopt.core.regression import Rbf, fit, predict
 from globopt.myopic.acquisition import (
     _idw_distance,
     _idw_variance,
+    _idw_weighting,
     acquisition,
-    idw_weighting,
 )
 from globopt.myopic.algorithm import GO
 
@@ -28,19 +30,20 @@ def f(x: np.ndarray) -> np.ndarray:
 
 class TestAcquisition(unittest.TestCase):
     def test__returns_correct_values(self):
-        X = np.array([-2.61, -1.92, -0.63, 0.38, 2]).reshape(-1, 1)
-        y = f(X).reshape(-1)
+        X = np.array([-2.61, -1.92, -0.63, 0.38, 2]).reshape(1, -1, 1)
+        y = f(X)
 
         mdl = fit(Rbf("thinplatespline", 0.01, svd_tol=0), X, y)
-        x = np.linspace(-3, 3, 1000).reshape(-1, 1)
+        x = np.linspace(-3, 3, 1000).reshape(1, -1, 1)
+        d2 = batch_cdist(x, X, _distance_pybind.cdist_sqeuclidean)
         y_hat = predict(mdl, x)
-        dym = y.ptp()
-        W = idw_weighting(x, X)
+        dym = y.ptp((1, 2), keepdims=True)
+        W = _idw_weighting(d2, mdl.exp_weighting)
         s = _idw_variance(y_hat, y, W)
         z = _idw_distance(W)
-        a = acquisition(x, mdl, y_hat, dym, 1, 0.5)
+        a = acquisition(x, mdl, y_hat, d2, dym, 1, 0.5)
 
-        out = np.asarray((s, z, a))
+        out = np.asarray((s.squeeze(), z.squeeze(), a.squeeze()))
         np.testing.assert_allclose(out, RESULTS["acquisitions"], atol=1e-6, rtol=1e-6)
 
 

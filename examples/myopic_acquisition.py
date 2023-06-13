@@ -2,6 +2,9 @@
 Example of computation and minimization of the myopic acquisition function on a simple
 scalar function. This example attempts to reproduce Fig. 3 and 6 of [1].
 
+These functionalities are used in the implementation of the myopic and non-myopic
+solvers and are not intended to be used directly by the user.
+
 References
 ----------
 [1] A. Bemporad. Global optimization via inverse distance weighting and radial basis
@@ -11,60 +14,58 @@ References
 
 import matplotlib.pyplot as plt
 import numpy as np
-from pymoo.algorithms.soo.nonconvex.pso import PSO
-from pymoo.optimize import minimize
-from pymoo.problems.functional import FunctionalProblem
+from scipy.spatial.distance import _distance_pybind
+from vpso import vpso
+from vpso.math import batch_cdist
 
 from globopt.core.problems import Simple1DProblem
 from globopt.core.regression import Rbf, RegressorType, fit, predict
 from globopt.myopic.acquisition import (
     _idw_distance,
     _idw_variance,
+    _idw_weighting,
     acquisition,
-    idw_weighting,
 )
 
 plt.style.use("bmh")
 
 # define the function and its domain
-xl, xu = -3, +3
+lb, ub = -3, +3
 f = Simple1DProblem.f
 
-# create data points - X has shape (n_samples, n_var)
-X = np.array([-2.61, -1.92, -0.63, 0.38, 2]).reshape(-1, 1)
-y = f(X).reshape(-1)
+# create data points - X has shape (batch, n_samples, n_var)
+X = np.array([-2.61, -1.92, -0.63, 0.38, 2]).reshape(1, -1, 1)
+y = f(X)
 
 # create regressor and fit it
 mdl: RegressorType = Rbf("thinplatespline", 0.01)
 mdl = fit(mdl, X, y)
 
 # predict values over all domain via fitted model
-x = np.linspace(xl, xu, 1000).reshape(-1, 1)
+x = np.linspace(lb, ub, 1000).reshape(1, -1, 1)
 y_hat = predict(mdl, x)
 
 # compute acquisition function components (these methods should not be used directly)
-dym = y.ptp()  # span of observations
-W = idw_weighting(x, X, mdl.exp_weighting)
+d2 = batch_cdist(x, X, _distance_pybind.cdist_sqeuclidean)
+dym = y.ptp((1, 2), keepdims=True)  # span of observations
+W = _idw_weighting(d2, mdl.exp_weighting)
 s = _idw_variance(y_hat, y, W)
 z = _idw_distance(W)
 
 # compute the overall acquisition function
-a = acquisition(x, mdl, y_hat, dym, c1=1, c2=0.5)
+a = acquisition(x, mdl, y_hat, d2, dym, c1=1, c2=0.5)
 
 # compute minimizer of acquisition function
-algorithm = PSO()
-problem = FunctionalProblem(
-    n_var=1,
-    objs=lambda x: acquisition(x, mdl, c1=1, c2=0.5),
-    xl=xl,
-    xu=xu,
-    elementwise=False,  # enables vectorized evaluation of acquisition function
+res = vpso(
+    func=lambda x: acquisition(x, mdl, c1=1, c2=0.5)[..., 0],
+    lb=np.array([[lb]]),
+    ub=np.array([[ub]]),
+    seed=1909,
 )
-res = minimize(problem, algorithm, verbose=True, seed=1)
 
 # create figure and flatten a bunch of arrays for plotting
 _, axs = plt.subplots(2, 1, constrained_layout=True, figsize=(6, 5))
-x = x.reshape(-1)
+x, X, y, y_hat, s, z, a = (o.squeeze() for o in (x, X, y, y_hat, s, z, a))
 
 # plot the function, the observations and the prediction in both axes
 for ax in axs:
@@ -86,8 +87,8 @@ axs[0].plot(x, z, label="$z(x)$")
 # plot acquisition function and its minimizer
 c = axs[1].plot(x, a, "--", lw=2.5, label="$a(x)$")[0].get_color()
 axs[1].plot(
-    res.X.item(),
-    res.F.item(),
+    res[0].item(),
+    res[1].item(),
     "*",
     label=r"arg min $a(x)$",
     markersize=17,
