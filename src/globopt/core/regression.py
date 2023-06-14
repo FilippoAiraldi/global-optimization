@@ -11,14 +11,14 @@ References
 """
 
 
-from typing import Callable, Literal, NamedTuple, Union
+from typing import Literal, NamedTuple, Union
 
 import numba as nb
 import numpy as np
 import numpy.typing as npt
-from scipy.spatial.distance import _distance_pybind
 from typing_extensions import TypeAlias
-from vpso.math import batch_cdist, batch_pdist, batch_squareform
+from vpso.jit import jit
+from vpso.math import batch_cdist, batch_cdist_and_pdist, batch_pdist
 from vpso.typing import Array2d, Array3d
 
 
@@ -67,7 +67,7 @@ class Rbf(NamedTuple):
 
     kernel: RbfKernel = "inversequadratic"
     eps: float = 1.0775
-    svd_tol: float = 1e-6
+    svd_tol: float = 1e-9
     exp_weighting: bool = False
 
     Xm_: Array3d = np.empty((0, 0, 0))
@@ -110,97 +110,143 @@ RegressorType: TypeAlias = Union[Rbf, Idw]
 DELTA = 1e-12
 
 
-"""RBF kernels."""
-RBF_FUNCS: dict[RbfKernel, Callable[[Array3d, float], Array3d]] = {
-    "inversequadratic": lambda d2, eps: 1 / (1 + eps**2 * d2),
-    "multiquadric": lambda d2, eps: np.sqrt(1 + eps**2 * d2),
-    "linear": lambda d2, eps: eps * np.sqrt(d2),
-    "gaussian": lambda d2, eps: np.exp(-(eps**2) * d2),
-    "thinplatespline": lambda d2, eps: eps**2
-    * d2
-    * np.log(np.maximum(eps * d2, DELTA)),
-    "inversemultiquadric": lambda d2, eps: 1 / np.sqrt(1 + eps**2 * d2),
-}
+@jit(
+    [
+        nb.float64(nb.float64, nb.float64, nb.types.unicode_type),
+        nb.float64[:, :](nb.float64[:, :], nb.float64, nb.types.unicode_type),
+        nb.float64[:, :, :](nb.float64[:, :, :], nb.float64, nb.types.unicode_type),
+    ],
+)
+def rbf(d2: np.ndarray, eps: float, type: str) -> np.ndarray:
+    if type == "inversequadratic":
+        return 1 / (1 + eps**2 * d2)
+    if type == "multiquadric":
+        return np.sqrt(1 + eps**2 * d2)
+    if type == "linear":
+        return eps * np.sqrt(d2)
+    if type == "gaussian":
+        return np.exp(-(eps**2) * d2)
+    if type == "thinplatespline":
+        return eps**2 * d2 * np.log(np.maximum(eps * d2, DELTA))
+    if type == "inversemultiquadric":
+        return 1 / np.sqrt(1 + eps**2 * d2)
+    raise ValueError(f"unknown RBF kernel type: {type}")
 
 
-def _linsolve_via_svd(
-    M: Array3d, y: Array3d, tol: float = 1e-9
+@jit(
+    nb.types.UniTuple(nb.float64[:, :, :], 2)(
+        nb.float64[:, :, :],
+        nb.float64[:, :, :],
+        nb.float64,
+        nb.types.unicode_type,
+        nb.float64,
+    ),
+    parallel=True,
+)
+def _fit_rbf_via_svd(
+    X: Array3d, y: Array3d, eps: float, kernel: str, svd_tol: float
 ) -> tuple[Array3d, Array3d]:
-    """Solves linear systems via SVD."""
+    """Fits the RBF to the data by solving the linear systems via SVD."""
+    M = rbf(batch_pdist(X, "sqeuclidean"), eps, kernel)
     B, n, _ = y.shape
-    U, S, VT = np.linalg.svd(M)
-    #
-    S[S <= tol] = np.inf
-    S = S.reshape(B, 1, n)
-    #
-    Minv = (VT.transpose((0, 2, 1)) / S) @ U.transpose(0, 2, 1)
-    coef = Minv @ y
+    coef = np.empty((B, n, 1), dtype=np.float64)
+    Minv = np.empty((B, n, n), dtype=np.float64)
+    for i in nb.prange(B):
+        U, S, VT = np.linalg.svd(M[i])
+        S[S <= svd_tol] = np.inf
+        Minv_ = (VT.T / S) @ U.T
+        Minv[i] = Minv_
+        coef[i] = Minv_ @ y[i]
     return coef, Minv
-
-
-def _blockwise_inversion(
-    ym: Array3d,
-    y: Array3d,
-    Minv: Array3d,
-    phi: Array3d,
-    Phi: Array3d,
-    tol: float = 1e-6,
-) -> tuple[Array3d, Array3d, Array3d]:
-    """Performs blockwise inversion updates of RBF kernel matrices."""
-    L = Minv @ Phi
-    #
-    c = phi - Phi.transpose(0, 2, 1) @ L
-    c[np.abs(c) <= tol] = tol
-    c_inv = np.linalg.inv(c)
-    #
-    B = -L @ c_inv
-    A = Minv - B @ L.transpose(0, 2, 1)
-    Minv_new = np.concatenate(
-        (np.concatenate((A, B), 2), np.concatenate((B.transpose(0, 2, 1), c_inv), 2)), 1
-    )
-
-    # update coefficients
-    y_new = np.concatenate((ym, y), 1)
-    coef_new = Minv_new @ y_new
-    return y_new, coef_new, Minv_new
 
 
 def _rbf_fit(mdl: Rbf, X: Array3d, y: Array3d) -> Rbf:
     """Fits an RBF model to the data."""
     # create matrix of kernel evaluations
     kernel, eps, svd_tol, exp_weighting = mdl[:4]
-    fun = RBF_FUNCS[kernel]
-    d2 = batch_pdist(X, _distance_pybind.pdist_sqeuclidean)
-    M = batch_squareform(fun(d2, eps))
-    M[:, np.eye(M.shape[1], dtype=bool)] = fun(0, eps)  # type: ignore[arg-type]
-
-    # compute coefficients via SVD and inverse of M (useful for partial_fit)
-    coef, Minv = _linsolve_via_svd(M, y, svd_tol)
+    coef, Minv = _fit_rbf_via_svd(X, y, eps, kernel, svd_tol)
     return Rbf(kernel, eps, svd_tol, exp_weighting, X, y, coef, Minv)
+
+
+@jit(
+    nb.types.UniTuple(nb.float64[:, :, :], 4)(
+        nb.float64[:, :, :],
+        nb.float64[:, :, :],
+        nb.float64[:, :, :],
+        nb.float64[:, :, :],
+        nb.float64[:, :, :],
+        nb.float64,
+        nb.types.unicode_type,
+        nb.float64,
+    ),
+    parallel=True,
+)
+def _partial_fit_via_blockwise_inversion(
+    Xm: Array3d,
+    ym: Array3d,
+    X: Array3d,
+    y: Array3d,
+    Minv: Array3d,
+    eps: float,
+    kernel: str,
+    inv_tol: float,
+) -> tuple[Array3d, Array3d, Array3d, Array3d]:
+    """Performs blockwise inversion updates of the RBF kernel matrices."""
+    # create matrix of kernel evals of new elements w.r.t. training data and themselves
+    Phi_and_phi = batch_cdist_and_pdist(X, Xm, "sqeuclidean")
+    Phi = rbf(Phi_and_phi[0].transpose(0, 2, 1), eps, kernel)
+    phi = rbf(Phi_and_phi[1], eps, kernel)
+
+    # update data
+    X_new = np.concatenate((Xm, X), 1)
+    y_new = np.concatenate((ym, y), 1)
+
+    # update inverse blockwise
+    B, n, _ = ym.shape
+    n += y.shape[1]
+    coef_new = np.empty((B, n, 1), dtype=np.float64)
+    Minv_new = np.empty((B, n, n), dtype=np.float64)
+    for i in nb.prange(B):
+        Minv_ = Minv[i]
+        Phi_ = Phi[i]
+        L = Minv_ @ Phi_
+        c = phi[i] - Phi_.T @ L
+        c = np.where(np.abs(c) <= inv_tol, inv_tol, c)
+        c_inv = np.linalg.inv(c)
+        B = -L @ c_inv
+        A = Minv[i] - B @ L.T
+        Minv_new_ = np.concatenate(
+            (np.concatenate((A, B), 1), np.concatenate((B.T, c_inv), 1)), 0
+        )
+        Minv_new[i] = Minv_new_
+        coef_new[i] = Minv_new_ @ y_new[i]
+    return X_new, y_new, coef_new, Minv_new
 
 
 def _rbf_partial_fit(mdl: Rbf, X: Array3d, y: Array2d) -> Rbf:
     """Fits an already partially fitted RBF model to the additional data."""
     kernel, eps, svd_tol, exp_weighting, Xm, ym, _, Minv = mdl
-
-    # create matrix of kernel evals of new elements w.r.t. training data and themselves
-    fun = RBF_FUNCS[kernel]
-    Phi = fun(batch_cdist(Xm, X, _distance_pybind.cdist_sqeuclidean), eps)
-    phi = batch_pdist(X, _distance_pybind.pdist_sqeuclidean)
-    phi = batch_squareform(fun(phi, eps))
-    phi[:, np.eye(phi.shape[1], dtype=bool)] = fun(0, eps)  # type: ignore[arg-type]
-
-    # update inverse of M via blockwise inversion and coefficients
-    y_new, coef_new, Minv_new = _blockwise_inversion(ym, y, Minv, phi, Phi, svd_tol)
-    X_new = np.concatenate((Xm, X), 1)
+    X_new, y_new, coef_new, Minv_new = _partial_fit_via_blockwise_inversion(
+        Xm, ym, X, y, Minv, eps, kernel, svd_tol
+    )
     return Rbf(kernel, eps, svd_tol, exp_weighting, X_new, y_new, coef_new, Minv_new)
 
 
+@jit(
+    nb.float64[:, :, :](
+        nb.float64[:, :, :], nb.float64[:, :, :], nb.float64, nb.types.unicode_type
+    )
+)
+def _get_rbf_matrix(X: Array3d, Xm: Array3d, eps: float, kernel: str) -> Array3d:
+    d2 = batch_cdist(X, Xm, "sqeuclidean")
+    return rbf(d2, eps, kernel)
+
+
 def _rbf_predict(mdl: Rbf, X: Array3d) -> Array2d:
+    kernel, eps = mdl[:2]
     """Predicts target values according to the IDW model."""
-    d2 = batch_cdist(mdl.Xm_, X, _distance_pybind.cdist_sqeuclidean)
-    M = RBF_FUNCS[mdl.kernel](d2, mdl.eps)
-    return M.transpose(0, 2, 1) @ mdl.coef_
+    M = _get_rbf_matrix(X, mdl.Xm_, eps, kernel)
+    return M @ mdl.coef_
 
 
 @jit(nb.float64[:, :, :](nb.float64[:, :, :], nb.float64[:, :, :], nb.boolean))
