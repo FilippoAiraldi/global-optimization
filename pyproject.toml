@@ -22,7 +22,7 @@ classifiers = [
 dependencies = [
     "pymoo >= 0.6.0.1",
     "joblib >= 1.2.0",
-    "vpso >= 1.0.1",
+    "vpso >= 1.0.2",
 ]
 
 [project.urls]
