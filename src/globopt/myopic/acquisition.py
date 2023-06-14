@@ -13,14 +13,14 @@ from typing import Optional
 
 import numba as nb
 import numpy as np
-from vpso.jit import jit
+from vpso.jit import _float, jit
 from vpso.typing import Array3d
 
 from globopt.core.regression import RegressorType, _idw_weighting, predict
 
 
 @jit(
-    nb.float64[:, :, :](nb.float64[:, :, :], nb.float64[:, :, :], nb.float64[:, :, :]),
+    _float[:, :, :](_float[:, :, :], _float[:, :, :], _float[:, :, :]),
     parallel=True,
 )
 def _idw_variance(y_hat: Array3d, ym: Array3d, W: Array3d) -> Array3d:
@@ -33,21 +33,21 @@ def _idw_variance(y_hat: Array3d, ym: Array3d, W: Array3d) -> Array3d:
     return np.sqrt(out)
 
 
-@jit(nb.float64[:, :, :](nb.float64[:, :, :]))
+@jit(_float[:, :, :](_float[:, :, :]))
 def _idw_distance(W: Array3d) -> Array3d:
     """Computes the distance function acquisition term for IDW/RBF regression models."""
     return ((2 / np.pi) * np.arctan(1 / W.sum(2)))[:, :, np.newaxis]
 
 
 @jit(
-    nb.float64[:, :, :](
-        nb.float64[:, :, :],
-        nb.float64[:, :, :],
-        nb.float64[:, :, :],
-        nb.float64[:, :, :],
-        nb.float64[:, :, :],
-        nb.float64,
-        nb.float64,
+    _float[:, :, :](
+        _float[:, :, :],
+        _float[:, :, :],
+        _float[:, :, :],
+        _float[:, :, :],
+        _float[:, :, :],
+        _float,
+        _float,
         nb.boolean,
     )
 )

@@ -17,7 +17,7 @@ import numba as nb
 import numpy as np
 import numpy.typing as npt
 from typing_extensions import TypeAlias
-from vpso.jit import jit
+from vpso.jit import _float, jit
 from vpso.math import batch_cdist, batch_cdist_and_pdist, batch_pdist
 from vpso.typing import Array2d, Array3d
 
@@ -112,9 +112,9 @@ DELTA = 1e-12
 
 @jit(
     [
-        nb.float64(nb.float64, nb.float64, nb.types.unicode_type),
-        nb.float64[:, :](nb.float64[:, :], nb.float64, nb.types.unicode_type),
-        nb.float64[:, :, :](nb.float64[:, :, :], nb.float64, nb.types.unicode_type),
+        _float(_float, _float, nb.types.unicode_type),
+        _float[:, :](_float[:, :], _float, nb.types.unicode_type),
+        _float[:, :, :](_float[:, :, :], _float, nb.types.unicode_type),
     ],
 )
 def rbf(d2: np.ndarray, eps: float, type: str) -> np.ndarray:
@@ -134,12 +134,8 @@ def rbf(d2: np.ndarray, eps: float, type: str) -> np.ndarray:
 
 
 @jit(
-    nb.types.UniTuple(nb.float64[:, :, :], 2)(
-        nb.float64[:, :, :],
-        nb.float64[:, :, :],
-        nb.float64,
-        nb.types.unicode_type,
-        nb.float64,
+    nb.types.UniTuple(_float[:, :, :], 2)(
+        _float[:, :, :], _float[:, :, :], _float, nb.types.unicode_type, _float
     ),
     parallel=True,
 )
@@ -169,15 +165,15 @@ def _rbf_fit(mdl: Rbf, X: Array3d, y: Array3d) -> Rbf:
 
 
 @jit(
-    nb.types.UniTuple(nb.float64[:, :, :], 4)(
-        nb.float64[:, :, :],
-        nb.float64[:, :, :],
-        nb.float64[:, :, :],
-        nb.float64[:, :, :],
-        nb.float64[:, :, :],
-        nb.float64,
+    nb.types.UniTuple(_float[:, :, :], 4)(
+        _float[:, :, :],
+        _float[:, :, :],
+        _float[:, :, :],
+        _float[:, :, :],
+        _float[:, :, :],
+        _float,
         nb.types.unicode_type,
-        nb.float64,
+        _float,
     ),
     parallel=True,
 )
@@ -232,11 +228,7 @@ def _rbf_partial_fit(mdl: Rbf, X: Array3d, y: Array2d) -> Rbf:
     return Rbf(kernel, eps, svd_tol, exp_weighting, X_new, y_new, coef_new, Minv_new)
 
 
-@jit(
-    nb.float64[:, :, :](
-        nb.float64[:, :, :], nb.float64[:, :, :], nb.float64, nb.types.unicode_type
-    )
-)
+@jit(_float[:, :, :](_float[:, :, :], _float[:, :, :], _float, nb.types.unicode_type))
 def _get_rbf_matrix(X: Array3d, Xm: Array3d, eps: float, kernel: str) -> Array3d:
     d2 = batch_cdist(X, Xm, "sqeuclidean")
     return rbf(d2, eps, kernel)
@@ -249,7 +241,7 @@ def _rbf_predict(mdl: Rbf, X: Array3d) -> Array2d:
     return M @ mdl.coef_
 
 
-@jit(nb.float64[:, :, :](nb.float64[:, :, :], nb.float64[:, :, :], nb.boolean))
+@jit(_float[:, :, :](_float[:, :, :], _float[:, :, :], nb.boolean))
 def _idw_weighting(X: Array3d, Xm: Array3d, exp_weighting: bool = False) -> Array3d:
     """Computes the IDW weighting function `w`."""
     d2 = batch_cdist(X, Xm, "sqeuclidean")
@@ -270,7 +262,7 @@ def _idw_partial_fit(mdl: Idw, X: Array3d, y: Array3d) -> Idw:
     return Idw(exp_weighting, np.concatenate((X_, X), 1), np.concatenate((y_, y), 1))
 
 
-@jit(nb.float64[:, :, :](nb.float64[:, :, :], nb.float64[:, :, :], nb.boolean))
+@jit(_float[:, :, :](_float[:, :, :], _float[:, :, :], nb.boolean))
 def _idw_contributions(X: Array3d, Xm: Array3d, exp_weighting: bool) -> Array3d:
     """Computes the IDW contributions `v`."""
     W = _idw_weighting(X, Xm, exp_weighting)
