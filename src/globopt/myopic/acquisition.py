@@ -103,7 +103,7 @@ def acquisition(
 
     Returns
     -------
-    array of shape (n_samples,)
+    array of shape (batch, n_samples, 1)
         The myopic acquisition function evaluated at each point.
     """
     Xm = mdl.Xm_
