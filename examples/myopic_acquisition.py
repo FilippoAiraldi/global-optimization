@@ -14,9 +14,7 @@ References
 
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.spatial.distance import _distance_pybind
 from vpso import vpso
-from vpso.math import batch_cdist
 
 from globopt.core.problems import Simple1DProblem
 from globopt.core.regression import Rbf, RegressorType, fit, predict
@@ -46,14 +44,13 @@ x = np.linspace(lb, ub, 1000).reshape(1, -1, 1)
 y_hat = predict(mdl, x)
 
 # compute acquisition function components (these methods should not be used directly)
-d2 = batch_cdist(x, X, _distance_pybind.cdist_sqeuclidean)
 dym = y.ptp((1, 2), keepdims=True)  # span of observations
-W = _idw_weighting(d2, mdl.exp_weighting)
+W = _idw_weighting(x, X, mdl.exp_weighting)
 s = _idw_variance(y_hat, y, W)
 z = _idw_distance(W)
 
 # compute the overall acquisition function
-a = acquisition(x, mdl, y_hat, d2, dym, c1=1, c2=0.5)
+a = acquisition(x, mdl, y_hat, dym, c1=1, c2=0.5)
 
 # compute minimizer of acquisition function
 res = vpso(

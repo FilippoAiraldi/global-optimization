@@ -13,61 +13,35 @@ from typing import Optional
 
 import numba as nb
 import numpy as np
-from scipy.spatial.distance import _distance_pybind
-from vpso.math import batch_cdist
+from vpso.jit import jit
 from vpso.typing import Array3d
 
 from globopt.core.regression import RegressorType, _idw_weighting, predict
 
 
-@nb.njit(
+@jit(
     nb.float64[:, :, :](nb.float64[:, :, :], nb.float64[:, :, :], nb.float64[:, :, :]),
-    cache=True,
+    parallel=True,
 )
 def _idw_variance(y_hat: Array3d, ym: Array3d, W: Array3d) -> Array3d:
-    """Computes the variance function acquisition term for IDW/RBF regression models.
-
-    Parameters
-    ----------
-    y_hat : array
-        Array of regressed predictions for which to compute the variance.
-    ym : array
-        Dataset of `y` used to fit the regression model.
-    W : array
-        Weights computed via `idw_weighting`.
-
-    Returns
-    -------
-    array
-        The variance function acquisition term evaluated at each point.
-    """
+    """Computes the variance function acquisition term for IDW/RBF regression models."""
     V = W / W.sum(2)[:, :, np.newaxis]
     sqdiff = np.square(ym - y_hat.transpose(0, 2, 1))
     out = np.empty_like(y_hat)
-    for i in range(out.shape[1]):
+    for i in nb.prange(out.shape[1]):
         out[:, i] = np.diag(V[:, i] @ sqdiff[:, :, i].T).reshape(-1, 1)
     return np.sqrt(out)
 
 
-@nb.njit(nb.float64[:, :, :](nb.float64[:, :, :]), cache=True)
+@jit(nb.float64[:, :, :](nb.float64[:, :, :]))
 def _idw_distance(W: Array3d) -> Array3d:
-    """Computes the distance function acquisition term for IDW/RBF regression models.
-
-    Parameters
-    ----------
-    W : array
-        Weights computed via `idw_weighting`.
-
-    Returns
-    -------
-    array
-        The distance function acquisition term evaluated at each point.
-    """
+    """Computes the distance function acquisition term for IDW/RBF regression models."""
     return ((2 / np.pi) * np.arctan(1 / W.sum(2)))[:, :, np.newaxis]
 
 
-@nb.njit(
+@jit(
     nb.float64[:, :, :](
+        nb.float64[:, :, :],
         nb.float64[:, :, :],
         nb.float64[:, :, :],
         nb.float64[:, :, :],
@@ -75,19 +49,20 @@ def _idw_distance(W: Array3d) -> Array3d:
         nb.float64,
         nb.float64,
         nb.boolean,
-    ),
-    cache=True,
+    )
 )
 def _compute_acquisition(
+    Xm: Array3d,
+    x: Array3d,
     ym: Array3d,
     y_hat: Array3d,
-    d2: Array3d,
     dym: Array3d,
     c1: float,
     c2: float,
     exp_weighting: bool,
 ) -> Array3d:
-    W = _idw_weighting(d2, exp_weighting)
+    """Runs the computations of the myopic acquisition function for IDW/RBF models."""
+    W = _idw_weighting(x, Xm, exp_weighting)
     s = _idw_variance(y_hat, ym, W)
     z = _idw_distance(W)
     return y_hat - c1 * s - c2 * dym * z
@@ -97,7 +72,6 @@ def acquisition(
     x: Array3d,
     mdl: RegressorType,
     y_hat: Optional[Array3d] = None,
-    d2: Optional[Array3d] = None,
     dym: Optional[Array3d] = None,
     c1: float = 1.5078,
     c2: float = 1.4246,
@@ -118,10 +92,6 @@ def acquisition(
         Predictions of the regression model at `x`. If `None`, they are computed based
         on the fitted `mdl`. If pre-computed, can be provided to speed up computations;
         otherwise is computed on-the-fly automatically. By default, `None`.
-    d2 : array of shape (batch, n_samples, n_centers), optional
-        Squared Euclidean distances between `x` and the centers of the regression
-        model. If pre-computed, can be provided to speed up computations; otherwise is
-        computed on-the-fly automatically. By default, `None`.
     dym : array of shape (batch, 1, 1), optional
         Delta between the maximum and minimum values of `ym`. If pre-computed, can be
         provided to speed up computations; otherwise is computed on-the-fly
@@ -136,11 +106,10 @@ def acquisition(
     array of shape (n_samples,)
         The myopic acquisition function evaluated at each point.
     """
+    Xm = mdl.Xm_
     ym = mdl.ym_
     if y_hat is None:
         y_hat = predict(mdl, x)
     if dym is None:
         dym = ym.ptp((1, 2), keepdims=True)
-    if d2 is None:
-        d2 = batch_cdist(x, mdl.Xm_, _distance_pybind.cdist_sqeuclidean)
-    return _compute_acquisition(ym, y_hat, d2, dym, c1, c2, mdl.exp_weighting)
+    return _compute_acquisition(Xm, x, ym, y_hat, dym, c1, c2, mdl.exp_weighting)
