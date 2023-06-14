@@ -203,22 +203,10 @@ def _rbf_predict(mdl: Rbf, X: Array3d) -> Array2d:
     return M.transpose(0, 2, 1) @ mdl.coef_
 
 
-@nb.njit(nb.float64[:, :, :](nb.float64[:, :, :], nb.boolean), cache=True)
-def _idw_weighting(d2: Array3d, exp_weighting: bool = False) -> Array3d:
-    """Computes the IDW weighting function.
-
-    Parameters
-    ----------
-    d2 : array of shape (batch, n_target, n_samples)
-        Array of distances between `X` and `Xm`.
-    exp_weighting : bool, optional
-        Whether the weighting function should decay exponentially, by default `False`.
-
-    Returns
-    -------
-    array
-        The weighiing function computed at `X` against dataset `Xm`.
-    """
+@jit(nb.float64[:, :, :](nb.float64[:, :, :], nb.float64[:, :, :], nb.boolean))
+def _idw_weighting(X: Array3d, Xm: Array3d, exp_weighting: bool = False) -> Array3d:
+    """Computes the IDW weighting function `w`."""
+    d2 = batch_cdist(X, Xm, "sqeuclidean")
     W = 1 / np.maximum(d2, DELTA)
     if exp_weighting:
         W *= np.exp(-d2)
@@ -236,19 +224,18 @@ def _idw_partial_fit(mdl: Idw, X: Array3d, y: Array3d) -> Idw:
     return Idw(exp_weighting, np.concatenate((X_, X), 1), np.concatenate((y_, y), 1))
 
 
-@nb.njit(nb.float64[:, :, :](nb.float64[:, :, :], nb.boolean), cache=True)
-def _idw_contributions(d2: Array3d, exp_weighting: bool) -> Array3d:
-    """Computes the IDW contributions."""
-    W = _idw_weighting(d2, exp_weighting)
+@jit(nb.float64[:, :, :](nb.float64[:, :, :], nb.float64[:, :, :], nb.boolean))
+def _idw_contributions(X: Array3d, Xm: Array3d, exp_weighting: bool) -> Array3d:
+    """Computes the IDW contributions `v`."""
+    W = _idw_weighting(X, Xm, exp_weighting)
     return W / W.sum(2)[:, :, np.newaxis]
 
 
 def _idw_predict(mdl: Idw, X: Array3d) -> Array3d:
     """Predicts target values according to the IDW model."""
     exp_weighting, X_, y_ = mdl
-    d2 = batch_cdist(X, X_, _distance_pybind.cdist_sqeuclidean)
-    v = _idw_contributions(d2, exp_weighting)
-    return v @ y_
+    v = _idw_contributions(X, X_, exp_weighting)
+    return v @ y_  # cannot be jitted due to 3D tensor multiplication
 
 
 def fit(mdl: RegressorType, X: Array3d, y: Array3d) -> RegressorType:
