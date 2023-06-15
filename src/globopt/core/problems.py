@@ -23,9 +23,9 @@ from pymoo.core.problem import Problem as Problem_original
 from pymoo.problems.single import Ackley as Ackley_original
 from pymoo.problems.single import Himmelblau as Himmelblau_original
 from pymoo.problems.single import Rosenbrock as Rosenbrock_original
+from vpso.typing import Array1d, Array2d
 
 from globopt.core.regression import Array
-from globopt.util.normalization import NormalizedProblemWrapper
 
 # in some problems do not return 0 as pareto front, as this produces a bug in which
 # f_gap is not computed
@@ -420,37 +420,52 @@ class Simple1DProblem(Problem_original):
 
 @dataclass(frozen=True, init=False)
 class Problem:
-    f: Callable[[np.ndarray], np.ndarray]
-    n_var: int
-    lb: np.ndarray
-    ub: np.ndarray
-    x_opt: np.ndarray
+    """Class repreenting a benchmarking problem."""
+
+    f: Callable[[Array2d], Array1d]
+    dim: int
+    lb: Array1d
+    ub: Array1d
+    x_opt: Array1d
     f_opt: float
 
     def __init__(
         self,
-        f: Callable[[np.ndarray], np.ndarray],
-        n_var: int,
-        lb: Union[float, np.ndarray],
-        ub: Union[float, np.ndarray],
-        x_opt: Union[float, np.ndarray],
-        f_opt: float,
+        f: Callable[[Array2d], Array1d],
+        dim: int,
+        lb: Union[float, Array1d],
+        ub: Union[float, Array1d],
+        x_opt: Array2d,
     ) -> None:
+        """Creates a new benchmarking problem.
+
+        Parameters
+        ----------
+        f : Callable[[Array2d], Array1d]
+            A function that, given a 2d array of shape `(n_points, dim)`, returns a 1d
+            evaluation array of shape `(n_points,)`.
+        dim : int
+            Dimensionality of the problem.
+        lb, ub : float or 1d array
+            Lower and upper bounds of the problem.
+        x_opt : 2d array
+            Minimizer(s) of the problem with shape `(n_minimizers, dim)`.
+        """
         object.__setattr__(self, "f", f)
-        object.__setattr__(self, "n_var", n_var)
+        object.__setattr__(self, "dim", dim)
         object.__setattr__(
-            self, "lb", np.broadcast_to(lb, n_var).astype(np.float64, copy=False)
+            self, "lb", np.broadcast_to(lb, dim).astype(np.float64, copy=False)
         )
         object.__setattr__(
-            self, "ub", np.broadcast_to(ub, n_var).astype(np.float64, copy=False)
+            self, "ub", np.broadcast_to(ub, dim).astype(np.float64, copy=False)
         )
         object.__setattr__(
-            self, "x_opt", np.broadcast_to(x_opt, n_var).astype(np.float64, copy=False)
+            self, "x_opt", np.reshape(x_opt, (-1, dim)).astype(np.float64, copy=False)
         )
-        object.__setattr__(self, "f_opt", f_opt)
+        object.__setattr__(self, "f_opt", float(f(self.x_opt[0, np.newaxis])))
 
 
-def _simple1dproblem(x: np.ndarray) -> np.ndarray:
+def _simple1dproblem(x: Array2d) -> Array1d:
     return (
         (1 + x * np.sin(2 * x) * np.cos(3 * x) / (1 + x**2)) ** 2
         + x**2 / 12
@@ -458,7 +473,16 @@ def _simple1dproblem(x: np.ndarray) -> np.ndarray:
     )
 
 
-simple1dproblem = Problem(_simple1dproblem, 1, -3, +3, -0.959769, 0.279504)
+simple1dproblem = Problem(_simple1dproblem, 1, -3, +3, -0.959769)  # f_opt: 0.279504
+
+
+def _adjiman(x: Array2d) -> Array1d:
+    x1 = x[:, 0]
+    x2 = x[:, 1]
+    return np.cos(x1) * np.sin(x2) - x1 / (np.square(x2) + 1)
+
+
+adjiman = Problem(_adjiman, 2, -1, (2, 1), (2, 0.10578))  # f_opt: -2.02181
 
 
 class AnotherSimple1DProblem(Problem_original):
@@ -550,8 +574,8 @@ def get_benchmark_problem(
     """
     problem_type, max_evals, regressor = TESTS[name.lower()]
     problem = problem_type(*args, **kwargs)
-    if normalize:
-        problem = NormalizedProblemWrapper(problem)
+    # if normalize:
+    #     problem = NormalizedProblemWrapper(problem)
     return problem, max_evals, regressor
 
 

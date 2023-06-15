@@ -4,7 +4,6 @@ import unittest
 import numpy as np
 from vpso.typing import Array1d
 
-from globopt.myopic.algorithm2 import acquisition, go
 from globopt.core.problems import simple1dproblem
 from globopt.core.regression import Rbf, fit, predict
 from globopt.myopic.acquisition import (
@@ -13,6 +12,7 @@ from globopt.myopic.acquisition import (
     _idw_weighting,
     acquisition,
 )
+from globopt.myopic.algorithm2 import go
 
 with open(r"tests/data_test_myopic.pkl", "rb") as f:
     RESULTS = pickle.load(f)

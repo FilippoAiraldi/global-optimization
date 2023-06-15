@@ -1,140 +1,91 @@
 """Utility classes for easier normalization of ranges and values for problems."""
 
 
-from numbers import Number
-from typing import Any, Optional, Union
+from typing import Union
 
 import numpy as np
-import numpy.typing as npt
-from pymoo.core.problem import Problem
-from pymoo.util.normalization import Normalization
+from vpso.typing import Array1d, Array2d
 
-from globopt.core.regression import Array
-from globopt.util.wrapper import Wrapper
+from globopt.core.problems import Problem
 
 
-class RangeNormalization(Normalization):
+def forward(
+    X: Array2d, lb: Array1d, ub: Array1d, lb_new: Array1d, ub_new: Array1d
+) -> Array2d:
+    """Normalizes `X` from the old bounds to the new bounds.
+
+    Parameters
+    ----------
+    X : 2d array
+        The array to normalize.
+    lb, ub : 1d array
+        The old lower and upper bounds.
+    lb_new, ub_new : 1d array
+        The new lower and upper bounds.
+
+    Returns
+    -------
+    array
+        The normalized array.
     """
-    Normalization to and from arbitrary bounds. It is simple in the sense that it does
-    not consider any none values and assumes lower as well as upper bounds are given.
+    return (X - lb) / (ub - lb) * (ub_new - lb_new) + lb_new
+
+
+def backward(
+    X: Array2d, lb: Array1d, ub: Array1d, lb_new: Array1d, ub_new: Array1d
+) -> Array2d:
+    """Denormalizes `X` from the new bounds to the old bounds.
+
+    Parameters
+    ----------
+    X : array
+        The array to denormalize.
+    lb, ub : array
+        The old lower and upper bounds.
+    lb_new, ub_new : array
+        The new lower and upper bounds.
+
+    Returns
+    -------
+    array
+        The denormalized array.
     """
-
-    __slots__ = ("xl", "xu", "xl_new", "xu_new")
-
-    def __init__(
-        self,
-        xl: Union[float, npt.ArrayLike],
-        xu: Union[float, npt.ArrayLike],
-        xl_new: Union[float, npt.ArrayLike],
-        xu_new: Union[float, npt.ArrayLike],
-    ) -> None:
-        """Constructs the normalization object.
-
-        Parameters
-        ----------
-        xl : float or array_like
-            Old lower bound.
-        xu : float or array_like
-            Old upper bound.
-        xl_new : float or array_like
-            New lower bound.
-        xu_new : float or array_like
-            New upper bound.
-        """
-        super().__init__()
-        self.xl = np.asarray(xl)
-        self.xu = np.asarray(xu)
-        self.xl_new = np.asarray(xl_new)
-        self.xu_new = np.asarray(xu_new)
-
-    def forward(self, X: Union[float, npt.ArrayLike]) -> Array:
-        """Normalizes `X` from the old bounds to the new bounds.
-
-        Parameters
-        ----------
-        X : float or array_like
-            The array to normalize.
-
-        Returns
-        -------
-        array
-            The normalized array.
-        """
-        X = np.asarray(X)
-        return (X - self.xl) / (self.xu - self.xl) * (
-            self.xu_new - self.xl_new
-        ) + self.xl_new
-
-    def backward(self, X: Union[float, npt.ArrayLike]) -> Array:
-        """Denormalizes `X` from the new bounds to the old bounds.
-
-        Parameters
-        ----------
-        X : float or array_like
-            The array to denormalize.
-
-        Returns
-        -------
-        array
-            The denormalized array.
-        """
-        X = np.asarray(X)
-        return (X - self.xl_new) / (self.xu_new - self.xl_new) * (
-            self.xu - self.xl
-        ) + self.xl
-
-    def __repr__(self) -> str:
-        name = self.__class__.__name__
-        return f"{name}[({self.xl}, {self.xu}) -> ({self.xl_new}, {self.xu_new})]"
-
-    def __str__(self) -> str:
-        return super().__repr__()
+    return forward(X, lb_new, ub_new, lb, ub)
 
 
-class NormalizedProblemWrapper(Problem, Wrapper[Problem]):
-    """A wrapper class for the normalization of problems."""
+def normalize_problem(
+    problem: Problem,
+    lb_new: Union[float, Array1d] = -1.0,
+    ub_new: Union[float, Array1d] = 1.0,
+) -> Problem:
+    """Created a normalized version of a problem.
 
-    def __init__(
-        self,
-        problem: Problem,
-        new_xl: Union[Number, npt.ArrayLike] = -1,
-        new_xu: Union[Number, npt.ArrayLike] = +1,
-    ) -> None:
-        assert problem.has_bounds(), "Can only normalize bounded problems."
-        Problem.__init__(
-            self,
-            n_var=problem.n_var,
-            n_obj=problem.n_obj,
-            n_ieq_constr=problem.n_ieq_constr,
-            n_eq_constr=problem.n_eq_constr,
-            xl=new_xl,
-            xu=new_xu,
-            vtype=problem.vtype,
-            vars=problem.vars,
-            elementwise=problem.elementwise,
-            elementwise_func=problem.elementwise_func,
-            elementwise_runner=problem.elementwise_runner,
-            replace_nan_values_by=problem.replace_nan_values_by,
-            exclude_from_serialization=problem.exclude_from_serialization,
-            callback=problem.callback,
-            strict=problem.strict,
-        )
-        Wrapper.__init__(self, to_wrap=problem)
-        self.normalization = RangeNormalization(*self.wrapped.bounds(), *self.bounds())
+    Parameters
+    ----------
+    problem : Problem
+        The problem to normalize.
+    lb_new, ub_new : float or array
+        The new lower and upper bounds of the problem.
 
-    def original_bounds(
-        self,
-    ) -> tuple[Array, Array]:
-        """Gets the bounds of the wrapped problem."""
-        return self.wrapped.bounds()
+    Returns
+    -------
+    Problem
+        The normalized problem.
+    """
+    f = problem.f
+    dim = problem.dim
+    lb = problem.lb
+    ub = problem.ub
+    lb_new = np.broadcast_to(lb_new, dim)
+    ub_new = np.broadcast_to(ub_new, dim)
 
-    def _evaluate(self, x: Array, out: dict[str, Any], *args, **kwargs) -> None:
-        x_ = self.normalization.backward(x)
-        self.wrapped._evaluate(x_, out, *args, **kwargs)
+    def normalized_f(x: Array2d) -> Array2d:
+        return f(backward(x, lb, ub, lb_new, ub_new))
 
-    def _calc_pareto_set(self) -> Union[None, Number, Array]:
-        pf = self.wrapped._calc_pareto_set()
-        return None if pf is None else self.normalization.forward(pf)
-
-    def _calc_pareto_front(self, *args, **kwargs) -> Optional[Array]:
-        return self.wrapped._calc_pareto_front(*args, **kwargs)
+    return Problem(
+        normalized_f,
+        dim,
+        lb_new,
+        ub_new,
+        forward(problem.x_opt, lb, ub, lb_new, ub_new),
+    )
