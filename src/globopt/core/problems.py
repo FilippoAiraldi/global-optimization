@@ -12,13 +12,14 @@ References
 """
 
 
+from dataclasses import dataclass
 from numbers import Number
-from typing import Any, Literal, Type, Union
+from typing import Any, Callable, Literal, Type, Union
 
 import numpy as np
 import numpy.typing as npt
 import pymoo.gradient.toolbox as anp
-from pymoo.core.problem import Problem
+from pymoo.core.problem import Problem as Problem_original
 from pymoo.problems.single import Ackley as Ackley_original
 from pymoo.problems.single import Himmelblau as Himmelblau_original
 from pymoo.problems.single import Rosenbrock as Rosenbrock_original
@@ -58,7 +59,7 @@ class Ackley(Ackley_original):
         return ALMOSTZERO
 
 
-class Adjiman(Problem):
+class Adjiman(Problem_original):
     """Adjiman benchmark function as per [1].
 
     References
@@ -86,7 +87,7 @@ class Adjiman(Problem):
         return np.asarray([2, 0.10578])
 
 
-class Branin(Problem):
+class Branin(Problem_original):
     """Branin benchmark function as per [1, 2].
 
     References
@@ -134,7 +135,7 @@ class Branin(Problem):
         )
 
 
-class CamelSixHumps(Problem):
+class CamelSixHumps(Problem_original):
     """Six-Humps Camel benchmark function as per [1, 2].
 
     References
@@ -176,7 +177,7 @@ class CamelSixHumps(Problem):
         )
 
 
-class Hartman(Problem):
+class Hartman(Problem_original):
     """Hartman benchmark function as per [1, 2].
 
     References
@@ -318,7 +319,7 @@ class Rosenbrock8(Rosenbrock):
         super().__init__(8, *args, **kwargs)
 
 
-class Step2Function(Problem):
+class Step2Function(Problem_original):
     """Step 2 Function benchmark function as per [1].
 
     References
@@ -350,7 +351,7 @@ class Step2Function5(Step2Function):
         super().__init__(5, *args, **kwargs)
 
 
-class StyblinskiTang(Problem):
+class StyblinskiTang(Problem_original):
     """Styblinski-Tang benchmark function as per [1, 2].
 
     References
@@ -387,7 +388,7 @@ class StyblinskiTang5(StyblinskiTang):
         super().__init__(5, *args, **kwargs)
 
 
-class Simple1DProblem(Problem):
+class Simple1DProblem(Problem_original):
     """Simple scalar problem to be minimized. Taken from [1].
 
     References
@@ -417,7 +418,50 @@ class Simple1DProblem(Problem):
         )
 
 
-class AnotherSimple1DProblem(Problem):
+@dataclass(frozen=True, init=False)
+class Problem:
+    f: Callable[[np.ndarray], np.ndarray]
+    n_var: int
+    lb: np.ndarray
+    ub: np.ndarray
+    x_opt: np.ndarray
+    f_opt: float
+
+    def __init__(
+        self,
+        f: Callable[[np.ndarray], np.ndarray],
+        n_var: int,
+        lb: Union[float, np.ndarray],
+        ub: Union[float, np.ndarray],
+        x_opt: Union[float, np.ndarray],
+        f_opt: float,
+    ) -> None:
+        object.__setattr__(self, "f", f)
+        object.__setattr__(self, "n_var", n_var)
+        object.__setattr__(
+            self, "lb", np.broadcast_to(lb, n_var).astype(np.float64, copy=False)
+        )
+        object.__setattr__(
+            self, "ub", np.broadcast_to(ub, n_var).astype(np.float64, copy=False)
+        )
+        object.__setattr__(
+            self, "x_opt", np.broadcast_to(x_opt, n_var).astype(np.float64, copy=False)
+        )
+        object.__setattr__(self, "f_opt", f_opt)
+
+
+def _simple1dproblem(x: np.ndarray) -> np.ndarray:
+    return (
+        (1 + x * np.sin(2 * x) * np.cos(3 * x) / (1 + x**2)) ** 2
+        + x**2 / 12
+        + x / 10
+    )
+
+
+simple1dproblem = Problem(_simple1dproblem, 1, -3, +3, -0.959769, 0.279504)
+
+
+class AnotherSimple1DProblem(Problem_original):
     """Another Simple scalar problem to be minimized."""
 
     def __init__(self) -> None:
@@ -437,7 +481,7 @@ class AnotherSimple1DProblem(Problem):
         return x + np.sin(4.5 * np.pi * x)
 
 
-TESTS: dict[str, tuple[Type[Problem], int, Literal["rbf", "idw"]]] = {
+TESTS: dict[str, tuple[Type[Problem_original], int, Literal["rbf", "idw"]]] = {
     cls.__name__.lower(): (cls, max_evals, regressor_type)  # type: ignore[misc]
     for cls, max_evals, regressor_type in [
         (Ackley, 50, "rbf"),
@@ -480,7 +524,7 @@ def get_available_simple_problems() -> list[str]:
 
 def get_benchmark_problem(
     name: str, *args: Any, normalize: bool = False, **kwargs: Any
-) -> tuple[Problem, int, Literal["rbf", "idw"]]:
+) -> tuple[Problem_original, int, Literal["rbf", "idw"]]:
     """Gets an instance of a benchmark test problem.
 
     Parameters
