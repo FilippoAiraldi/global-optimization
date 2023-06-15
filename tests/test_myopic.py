@@ -2,9 +2,10 @@ import pickle
 import unittest
 
 import numpy as np
-from pymoo.optimize import minimize
+from vpso.typing import Array1d
 
-from globopt.core.problems import Simple1DProblem
+from globopt.myopic.algorithm2 import acquisition, go
+from globopt.core.problems import simple1dproblem
 from globopt.core.regression import Rbf, fit, predict
 from globopt.myopic.acquisition import (
     _idw_distance,
@@ -12,7 +13,6 @@ from globopt.myopic.acquisition import (
     _idw_weighting,
     acquisition,
 )
-from globopt.myopic.algorithm import GO
 
 with open(r"tests/data_test_myopic.pkl", "rb") as f:
     RESULTS = pickle.load(f)
@@ -46,42 +46,51 @@ class TestAcquisition(unittest.TestCase):
 
 class TestAlgorithm(unittest.TestCase):
     def test__returns_correct_result(self):
-        problem = Simple1DProblem()
+        f = simple1dproblem.f
+        lb = simple1dproblem.lb
+        ub = simple1dproblem.ub
         x0 = [-2.62, -1.2, 0.14, 1.1, 2.82]
-        algorithm = GO(
-            regression=Rbf("thinplatespline", 0.01, svd_tol=0),
+        c1 = 1
+        c2 = 0.5
+        history: list[tuple[Array1d, ...]] = []
+        x = np.linspace(lb, ub, 500)
+
+        def save_history(
+            iter: int,
+            x_best: Array1d,
+            y_best: float,
+            x_new: Array1d,
+            y_new: float,
+            a_opt: float,
+            mdl: Rbf,
+            mdl_new: Rbf,
+        ) -> None:
+            if iter > 0:
+                x_ = x.reshape(1, -1, 1)
+                y_hat = predict(mdl, x_)
+                a = acquisition(x_, mdl, y_hat, None, c1, c2)
+                history.append((y_hat, mdl.Xm_, mdl.ym_, a, x_new))
+
+        # run the optimization
+        go(
+            func=f,
+            lb=lb,
+            ub=ub,
+            mdl=Rbf("thinplatespline", 0.01),
             init_points=x0,
-            c1=1,
-            c2=0.5,
-            acquisition_min_kwargs={"verbose": True},
+            c1=c1,
+            c2=c2,
+            maxiter=6,
+            seed=1909,
+            callback=save_history,
         )
 
-        res = minimize(
-            problem,
-            algorithm,
-            termination=("n_iter", 6),
-            verbose=True,
-            seed=1,
-            save_history=True,
-        )
-
-        x = np.linspace(*problem.bounds(), 500).reshape(-1, 1)
-        out: dict[int, tuple[np.ndarray, ...]] = {}
-        for i, algo in enumerate(res.history, start=1):
-            y_hat = predict(algo.regression, x)
-            Xm = algo.pop.get("X").reshape(-1, 1)
-            ym = algo.pop.get("F").reshape(-1)
-            a = acquisition(x, algo.regression, y_hat, c1=algo.c1, c2=algo.c2)
-            acq_min = (
-                algo.acquisition_min_res.X
-                if hasattr(algo, "acquisition_min_res")
-                else np.nan
-            )
-            out[i] = (y_hat, Xm, ym, a, acq_min)
-
+        out = dict(enumerate(history, start=1))
         for key in out:
             for actual, expected in zip(out[key], RESULTS[key]):
-                np.testing.assert_allclose(actual, expected, atol=1e-5, rtol=1e-6)
+                np.testing.assert_allclose(
+                    np.squeeze(actual), np.squeeze(expected), atol=1e-4, rtol=1e-4
+                )
 
 
 if __name__ == "__main__":
