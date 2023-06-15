@@ -19,18 +19,22 @@ from vpso.typing import Array3d
 from globopt.core.regression import RegressorType, _idw_weighting, predict
 
 
-@jit(
-    _float[:, :, :](_float[:, :, :], _float[:, :, :], _float[:, :, :]),
-    parallel=True,
-)
+@jit(_float[:, :, :](_float[:, :, :], _float[:, :, :]), parallel=True)
+def _idw_variance_inner_loop(V, sqdiff):
+    """Parallelized inner loop of the variance function."""
+    B, n, _ = V.shape
+    out = np.empty((B, n, 1))
+    for i in nb.prange(n):
+        out[:, i, 0] = np.diag(V[:, i] @ sqdiff[:, :, i].T)
+    return out
+
+
+@jit(_float[:, :, :](_float[:, :, :], _float[:, :, :], _float[:, :, :]))
 def _idw_variance(y_hat: Array3d, ym: Array3d, W: Array3d) -> Array3d:
     """Computes the variance function acquisition term for IDW/RBF regression models."""
     V = W / W.sum(2)[:, :, np.newaxis]
     sqdiff = np.square(ym - y_hat.transpose(0, 2, 1))
-    out = np.empty_like(y_hat)
-    for i in nb.prange(out.shape[1]):
-        out[:, i] = np.diag(V[:, i] @ sqdiff[:, :, i].T).reshape(-1, 1)
-    return np.sqrt(out)
+    return np.sqrt(_idw_variance_inner_loop(V, sqdiff))
 
 
 @jit(_float[:, :, :](_float[:, :, :]))
