@@ -4,7 +4,7 @@ import unittest
 import numpy as np
 from vpso.typing import Array1d
 
-from globopt.core.problems import simple1dproblem
+from globopt.core.problems import Simple1dProblem
 from globopt.core.regression import Rbf, fit, predict
 from globopt.myopic.acquisition import (
     _idw_distance,
@@ -46,9 +46,9 @@ class TestAcquisition(unittest.TestCase):
 
 class TestAlgorithm(unittest.TestCase):
     def test__returns_correct_result(self):
-        f = simple1dproblem.f
-        lb = simple1dproblem.lb
-        ub = simple1dproblem.ub
+        f = Simple1dProblem.f
+        lb = Simple1dProblem.lb
+        ub = Simple1dProblem.ub
         x0 = [-2.62, -1.2, 0.14, 1.1, 2.82]
         c1 = 1
         c2 = 0.5
