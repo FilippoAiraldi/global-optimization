@@ -31,7 +31,9 @@ c1 = 1
 c2 = 0.5
 
 # helper quantities and method
-history: list[tuple[Array1d, float, float, Array1d, Array1d, Array1d, Array1d]] = []
+history: list[
+    tuple[Array1d, Array1d, float, float, Array1d, Array1d, Array1d, Array1d]
+] = []
 x = np.linspace(lb, ub, 300)
 
 
@@ -50,7 +52,7 @@ def save_history(
         y_hat = predict(mdl, x_)
         acq = acquisition(x_, mdl, y_hat, None, c1, c2)[0, :, 0]
         Xm, ym = mdl.Xm_.squeeze(), mdl.ym_.squeeze()
-        history.append((x_new, y_best, acq, acq_opt, y_hat.squeeze(), Xm, ym))
+        history.append((x_new, y_new, y_best, acq, acq_opt, y_hat.squeeze(), Xm, ym))
 
 
 # run the optimization
@@ -83,20 +85,23 @@ _, axs = plt.subplots(
 )
 axs = axs.flatten()
 for i, (ax, history_item) in enumerate(zip(axs, history)):
-    x_new, y_best, acq, acq_opt, y_hat, Xm, ym = history_item
+    x_new, y_new, y_best, acq, acq_opt, y_hat, Xm, ym = history_item
 
     # plot true function, current sampled points, and regression prediction
-    c = ax.plot(x, y, label="$f(x)$")[0].get_color()
-    ax.plot(Xm, ym, "o", color=c, markersize=8)
-    ax.plot(x, y_hat, label=r"$\hat{f}(x)$")
+    ax.plot(x, y, label="$f(x)$", color="C0")
+    ax.plot(Xm, ym, "o", color="C0", markersize=8)
+    ax.plot(x, y_hat, label=r"$\hat{f}(x)$", color="C1")
 
     # plot acquisition function and its minimum
     ax_ = ax.twinx()
-    line = ax_.plot(x.reshape(-1), acq, "--", lw=2.5, label="$a(x)$", color="C2")
-    ax_.plot(x_new, acq_opt, "*", markersize=13, color=line[0].get_color())
+    ax_.plot(x.reshape(-1), acq, "--", lw=2.5, label="$a(x)$", color="C2")
+    ax_.plot(x_new, acq_opt, "*", markersize=13, color="C2")
     ax_.set_axis_off()
     ylim = ax_.get_ylim()
     ax_.set_ylim(ylim[0] - 0.1, ylim[1] + np.diff(ylim) * 0.7)
+
+    # plot next point
+    ax.plot(x_new, y_new, "o", markersize=8, color="C4")
 
     # set axis limits and title
     ax.set_xlim(lb, ub)

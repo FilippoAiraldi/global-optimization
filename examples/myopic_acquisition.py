@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from vpso import vpso
 
-from globopt.core.problems import Simple1DProblem
+from globopt.core.problems import Simple1dProblem
 from globopt.core.regression import Rbf, RegressorType, fit, predict
 from globopt.myopic.acquisition import (
     _idw_distance,
@@ -29,7 +29,7 @@ plt.style.use("bmh")
 
 # define the function and its domain
 lb, ub = -3, +3
-f = Simple1DProblem.f
+f = Simple1dProblem.f
 
 # create data points - X has shape (batch, n_samples, n_var)
 X = np.array([-2.61, -1.92, -0.63, 0.38, 2]).reshape(1, -1, 1)

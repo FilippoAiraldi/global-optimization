@@ -12,7 +12,6 @@ References
 """
 
 
-from dataclasses import dataclass
 from functools import partial
 from typing import Callable, Literal, Union
 
@@ -48,16 +47,10 @@ _P6 = np.asarray(
 )
 
 
-@dataclass(frozen=True, init=False)
 class Problem:
     """Class repreenting a benchmarking problem."""
 
-    f: Callable[[Array2d], Array1d]
-    dim: int
-    lb: Array1d
-    ub: Array1d
-    x_opt: Array1d
-    f_opt: float
+    __slots__ = ("f", "dim", "lb", "ub", "x_opt", "f_opt")
 
     def __init__(
         self,
@@ -81,18 +74,12 @@ class Problem:
         x_opt : 2d array
             Minimizer(s) of the problem with shape `(n_minimizers, dim)`.
         """
-        object.__setattr__(self, "f", f)
-        object.__setattr__(self, "dim", dim)
-        object.__setattr__(
-            self, "lb", np.broadcast_to(lb, dim).astype(np.float64, copy=False)
-        )
-        object.__setattr__(
-            self, "ub", np.broadcast_to(ub, dim).astype(np.float64, copy=False)
-        )
-        object.__setattr__(
-            self, "x_opt", np.reshape(x_opt, (-1, dim)).astype(np.float64, copy=False)
-        )
-        object.__setattr__(self, "f_opt", float(f(self.x_opt[0, np.newaxis])))
+        self.f = f
+        self.dim = dim
+        self.lb = np.broadcast_to(lb, dim).astype(np.float64, copy=False)
+        self.ub = np.broadcast_to(ub, dim).astype(np.float64, copy=False)
+        self.x_opt = np.reshape(x_opt, (-1, dim)).astype(np.float64, copy=False)
+        self.f_opt = float(f(self.x_opt[0, np.newaxis]))
 
 
 def _anothersimple1dproblem(x: Array2d) -> Array1d:

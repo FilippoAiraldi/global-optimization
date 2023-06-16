@@ -6,21 +6,21 @@ from parameterized import parameterized
 from scipy.io import loadmat
 
 from globopt.core.problems import (
-    get_available_benchmark_problems,
-    get_available_simple_problems,
-    get_benchmark_problem,
     Ackley,
     Adjiman,
+    AnotherSimple1dProblem,
     Branin,
     CamelSixHumps,
     Hartmann3,
     Hartmann6,
     Himmelblau,
     Rosenbrock8,
+    Simple1dProblem,
     Step2Function5,
     StyblinskiTang5,
-    Simple1dProblem,
-    AnotherSimple1dProblem,
+    get_available_benchmark_problems,
+    get_available_simple_problems,
+    get_benchmark_problem,
 )
 from globopt.core.regression import Idw, Rbf, fit, partial_fit, predict
 

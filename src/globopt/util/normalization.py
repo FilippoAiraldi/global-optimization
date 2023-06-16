@@ -1,8 +1,8 @@
 """Utility classes for easier normalization of ranges and values for problems."""
 
 
-from typing import Union
 from functools import wraps
+from typing import Union
 
 import numpy as np
 from vpso.typing import Array1d, Array2d
