@@ -9,6 +9,18 @@ from globopt.core.problems import (
     get_available_benchmark_problems,
     get_available_simple_problems,
     get_benchmark_problem,
+    Ackley,
+    Adjiman,
+    Branin,
+    CamelSixHumps,
+    Hartmann3,
+    Hartmann6,
+    Himmelblau,
+    Rosenbrock8,
+    Step2Function5,
+    StyblinskiTang5,
+    Simple1dProblem,
+    AnotherSimple1dProblem,
 )
 from globopt.core.regression import Idw, Rbf, fit, partial_fit, predict
 
@@ -51,61 +63,41 @@ class TestRegression(unittest.TestCase):
         self.assertIn("svd_tol=0", s)
 
 
+EXPECTED_F_OPT: dict[str, float] = {
+    AnotherSimple1dProblem.f.__name__: -0.669169468,
+    Simple1dProblem.f.__name__: 0.279504,
+    #
+    Ackley.f.__name__: 0,
+    Adjiman.f.__name__: -2.02181,
+    Branin.f.__name__: 0.3978873,
+    CamelSixHumps.f.__name__: -1.031628453489877,
+    Hartmann3.f.__name__: -3.86278214782076,
+    Hartmann6.f.__name__: -3.32236801141551,
+    Himmelblau.f.__name__: 0,
+    Rosenbrock8.f.__name__: 0,
+    Step2Function5.f.__name__: 0,
+    StyblinskiTang5.f.__name__: -39.16599 * 5,
+}
+
+
 class TestProblems(unittest.TestCase):
     @parameterized.expand(
         product(
             get_available_benchmark_problems() + get_available_simple_problems(),
-            (False, True),
+            (True, False),
         )
     )
-    def test__pareto_set_and_front(self, testname: str, normalized: bool):
-        pbl, _, _ = get_benchmark_problem(testname, normalize=normalized)
-        ps = pbl.pareto_set()
-        pf = pbl.pareto_front()
-        pf_actual = pbl.evaluate(ps)
-        np.testing.assert_allclose(
-            pf_actual.squeeze(), pf.squeeze(), rtol=1e-5, atol=1e-5
-        )
+    def test__f_opt(self, testname: str, normalized: bool):
+        problem, _, _ = get_benchmark_problem(testname, normalize=normalized)
+        expected = EXPECTED_F_OPT[problem.f.__name__]
+        actual = problem.f_opt
+        np.testing.assert_allclose(actual, expected, rtol=1e-5, atol=1e-6)
 
-    # def test_hartman6(self) -> None:
-    #     name = "hartman6"
-    #     problem = get_benchmark_problem(name)[0]
-    #     n_var = problem.n_var
-    #     algorithm = GO(
-    #         regression=Rbf(eps=1.0775 / n_var, svd_tol=0),
-    #         init_points=2 * n_var,
-    #         acquisition_min_algorithm=PSO(pop_size=10),
-    #         acquisition_min_kwargs={
-    #             "termination": DefaultSingleObjectiveTermination(
-    #                 ftol=1e-4, n_max_gen=300, period=10
-    #             )
-    #         },
-    #         c1=1.5078 / n_var,
-    #         c2=1.4246 / n_var,
-    #     )
-    #     callback = BestSoFarCallback()
-    #     minimize(
-    #         problem,
-    #         algorithm,
-    #         termination=("n_iter", RESULTS["hartman6_res"].size),
-    #         callback=callback,
-    #         copy_algorithm=False,
-    #         verbose=True,
-    #         seed=2088275051,
-    #     )
-
-    #     ACTUAL_RES = np.array(callback.data["best"]).flatten()
-    #     ACTUAL_COEF = algorithm.regression.coef_.flatten()
-    #     ACTUAL_MINV = algorithm.regression.Minv_.flatten()
-    #     np.testing.assert_allclose(
-    #         ACTUAL_RES, RESULTS["hartman6_res"].flatten(), atol=1e-3, rtol=1e-3
-    #     )
-    #     np.testing.assert_allclose(
-    #         ACTUAL_COEF, RESULTS["hartman6_coef"].flatten(), atol=1e-3, rtol=1e-3
-    #     )
-    #     np.testing.assert_allclose(
-    #         ACTUAL_MINV, RESULTS["hartman6_minv"].flatten(), atol=1e-3, rtol=1e-3
-    #     )
+        x_opt = problem.x_opt
+        for i in range(1, x_opt.shape[0]):
+            np.testing.assert_allclose(
+                problem.f(x_opt[i, np.newaxis]), expected, rtol=1e-5, atol=1e-6
+            )
 
 
 if __name__ == "__main__":

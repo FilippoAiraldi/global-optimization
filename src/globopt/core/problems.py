@@ -19,7 +19,7 @@ from typing import Callable, Literal, Union
 import numpy as np
 from vpso.typing import Array1d, Array2d
 
-# Hartman problem's constants
+# Hartmann problem's constants
 _C = np.asarray([1, 1.2, 3, 3.2])
 _A3 = np.asarray([[3, 10, 30], [0.1, 10, 35], [3, 10, 30], [0.1, 10, 35]])
 _P3 = np.asarray(
@@ -94,14 +94,6 @@ class Problem:
         )
         object.__setattr__(self, "f_opt", float(f(self.x_opt[0, np.newaxis])))
 
-    @property
-    def name(self) -> str:
-        """Name of the problem."""
-        f = self.f
-        if isinstance(f, partial):
-            f = f.func
-        return f.__name__[1:].lower()
-
 
 def _anothersimple1dproblem(x: Array2d) -> Array1d:
     return x + np.sin(4.5 * np.pi * x)
@@ -155,6 +147,12 @@ def _hartmann(A: Array2d, P: Array2d, C: Array2d, x: Array2d) -> Array1d:
     return -(C * np.exp(exponent)).sum(-1)
 
 
+_hartmann3 = partial(_hartmann, _A3, _P3, _C)
+_hartmann3.__name__ = "_hartmann3"  # type: ignore[attr-defined]
+_hartmann6 = partial(_hartmann, _A6, _P6, _C)
+_hartmann6.__name__ = "_hartmann6"  # type: ignore[attr-defined]
+
+
 def _himmelblau(x: Array2d) -> Array1d:
     x1 = x[:, 0]
     x2 = x[:, 1]
@@ -173,8 +171,7 @@ def _step2function(x: Array2d) -> Array1d:
 
 def _styblinskitang(x: Array2d) -> Array1d:
     x_2 = np.square(x)
-    x_4 = np.square(x_2)
-    return 0.5 * (x_4 - 16 * x_2 + 5 * x).sum(1)
+    return 0.5 * (np.square(x_2) - 16 * x_2 + 5 * x).sum(1)
 
 
 # simple problems
@@ -201,15 +198,15 @@ CamelSixHumps = Problem(  # f_opt: -1.031628453489877
     5,
     [[-0.089842013683013, 0.71265640327041], [0.089842013683013, -0.71265640327041]],
 )
-Hartman3 = Problem(  # f_opt: -3.32236801141551
-    partial(_hartmann, _A3, _P3, _C),
+Hartmann3 = Problem(  # f_opt: -3.86278214782076
+    _hartmann3,
     3,
     0,
     1,
-    [0.1140, 0.556, 0.852],
+    [0.114614, 0.555649, 0.852547],
 )
-Hartman6 = Problem(  # f_opt: -3.86278214782076
-    partial(_hartmann, _A6, _P6, _C),
+Hartmann6 = Problem(  # f_opt: -3.32236801141551
+    _hartmann6,
     6,
     0,
     1,
@@ -230,14 +227,14 @@ StyblinskiTang5 = Problem(  # f_opt: -39.16599 * 5
 
 
 TESTS: dict[str, tuple[Problem, int, Literal["rbf", "idw"]]] = {
-    problem.name: (problem, max_evals, regressor_type)  # type: ignore[misc]
+    problem.f.__name__: (problem, max_evals, regressor_type)  # type: ignore[misc]
     for problem, max_evals, regressor_type in [
         (Ackley, 50, "rbf"),
         (Adjiman, 10, "rbf"),
         (Branin, 40, "rbf"),
         (CamelSixHumps, 10, "rbf"),
-        (Hartman3, 50, "rbf"),
-        (Hartman6, 100, "rbf"),
+        (Hartmann3, 50, "rbf"),
+        (Hartmann6, 100, "rbf"),
         (Himmelblau, 25, "rbf"),
         (Rosenbrock8, 60, "idw"),
         (Step2Function5, 40, "idw"),
@@ -267,7 +264,7 @@ def get_available_simple_problems() -> list[str]:
     list of str
         Names of all the available simpler tests.
     """
-    return [Simple1dProblem.name, AnotherSimple1dProblem.name]
+    return [Simple1dProblem.f.__name__, AnotherSimple1dProblem.f.__name__]
 
 
 def get_benchmark_problem(
@@ -297,6 +294,7 @@ def get_benchmark_problem(
     problem, max_evals, regressor = TESTS[name.lower()]
     if normalize:
         from globopt.util.normalization import normalize_problem
+
         problem = normalize_problem(problem)
     return problem, max_evals, regressor
 
