@@ -75,10 +75,10 @@ def _compute_acquisition(
 def acquisition(
     x: Array3d,
     mdl: RegressorType,
-    y_hat: Optional[Array3d] = None,
-    dym: Optional[Array3d] = None,
     c1: float = 1.5078,
     c2: float = 1.4246,
+    y_hat: Optional[Array3d] = None,
+    dym: Optional[Array3d] = None,
 ) -> Array3d:
     """Computes the myopic acquisition function for IDW/RBF regression models.
 
@@ -92,6 +92,10 @@ def acquisition(
         of features/variables of each point.
     mdl : Idw or Rbf
         Fitted model to use for computing the acquisition function.
+    c1 : float, optional
+        Weight of the contribution of the variance function, by default `1.5078`.
+    c2 : float, optional
+        Weight of the contribution of the distance function, by default `1.4246`.
     y_hat : array of shape (batch, n_samples, 1), optional
         Predictions of the regression model at `x`. If `None`, they are computed based
         on the fitted `mdl`. If pre-computed, can be provided to speed up computations;
@@ -100,10 +104,6 @@ def acquisition(
         Delta between the maximum and minimum values of `ym`. If pre-computed, can be
         provided to speed up computations; otherwise is computed on-the-fly
         automatically. If `None`, it is computed automatically. By default, `None`.
-    c1 : float, optional
-        Weight of the contribution of the variance function, by default `1.5078`.
-    c2 : float, optional
-        Weight of the contribution of the distance function, by default `1.4246`.
 
     Returns
     -------

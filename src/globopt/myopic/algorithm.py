@@ -149,7 +149,7 @@ def go(
         # choose next point to sample by minimizing the myopic acquisition function
         dym = mdl.ym_.ptp((1, 2), keepdims=True)
         x_new, acq_opt, _ = vpso(
-            lambda x: acquisition(x, mdl, None, dym, c1, c2)[:, :, 0],
+            lambda x: acquisition(x, mdl, c1, c2, None, dym)[:, :, 0],
             lb_,
             ub_,
             **pso_kwargs,

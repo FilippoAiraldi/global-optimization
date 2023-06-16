@@ -39,7 +39,7 @@ class TestAcquisition(unittest.TestCase):
         W = _idw_weighting(x, X, mdl.exp_weighting)
         s = _idw_variance(y_hat, y, W)
         z = _idw_distance(W)
-        a = acquisition(x, mdl, y_hat, dym, 1, 0.5)
+        a = acquisition(x, mdl, 1, 0.5, y_hat, dym)
 
         out = np.asarray((s.squeeze(), z.squeeze(), a.squeeze()))
         np.testing.assert_allclose(out, RESULTS["acquisitions"], atol=1e-6, rtol=1e-6)
@@ -61,7 +61,7 @@ class TestAlgorithm(unittest.TestCase):
                 x_ = x.reshape(1, -1, 1)
                 mdl = locals["mdl"]
                 y_hat = predict(mdl, x_)
-                a = acquisition(x_, mdl, y_hat, None, c1, c2)
+                a = acquisition(x_, mdl, c1, c2, y_hat)
                 history.append((y_hat, mdl.Xm_, mdl.ym_, a, locals["x_new"]))
 
         # run the optimization

@@ -50,11 +50,11 @@ s = _idw_variance(y_hat, y, W)
 z = _idw_distance(W)
 
 # compute the overall acquisition function
-a = acquisition(x, mdl, y_hat, dym, c1=1, c2=0.5)
+a = acquisition(x, mdl, 1, 0.5, y_hat, dym)
 
 # compute minimizer of acquisition function
 res = vpso(
-    func=lambda x: acquisition(x, mdl, c1=1, c2=0.5)[..., 0],
+    func=lambda x: acquisition(x, mdl, 1, 0.5)[..., 0],
     lb=np.array([[lb]]),
     ub=np.array([[ub]]),
     seed=1909,

@@ -31,13 +31,7 @@ class DpStageCostCallback(list[float]):
         else:
             x_new = locals.get("x_new", np.nan)
             if not np.isnan(x_new):
+                x_new = x_new.reshape(1, 1, -1)
                 self.append(
-                    acquisition(
-                        x_new.reshape(1, 1, -1),
-                        locals["mdl"],
-                        None,
-                        None,
-                        locals["c1"],
-                        locals["c2"],
-                    ).item()
+                    acquisition(x_new, locals["mdl"], locals["c1"], locals["c2"]).item()
                 )

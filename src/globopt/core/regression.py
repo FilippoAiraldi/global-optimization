@@ -15,12 +15,10 @@ from typing import Literal, NamedTuple, Union
 
 import numba as nb
 import numpy as np
-import numpy.typing as npt
 from typing_extensions import TypeAlias
 from vpso.jit import _float, jit
 from vpso.math import batch_cdist, batch_cdist_and_pdist, batch_pdist
 from vpso.typing import Array2d, Array3d
-
 
 """Choices of available RBF kernels."""
 RbfKernel: TypeAlias = Literal[

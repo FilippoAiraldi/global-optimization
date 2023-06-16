@@ -47,7 +47,7 @@ def save_history(_: Literal["go", "nmgo"], locals: dict[str, Any]) -> None:
                 locals["x_new"],
                 locals["y_new"],
                 locals["y_best"],
-                acquisition(x_, mdl, y_hat, None, c1, c2).squeeze(),
+                acquisition(x_, mdl, c1, c2, y_hat).squeeze(),
                 locals["acq_opt"],
                 y_hat.squeeze(),
                 mdl.Xm_.squeeze(),
