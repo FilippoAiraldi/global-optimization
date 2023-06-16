@@ -1,7 +1,6 @@
 import unittest
 
 import numpy as np
-from parameterized import parameterized
 from pymoo.util.normalization import ZeroToOneNormalization
 
 from globopt.core.problems import Adjiman, Simple1dProblem
@@ -70,18 +69,17 @@ class TestCallback(unittest.TestCase):
             rtol=1e-4,
         )
 
-    @parameterized.expand([(True,), (False,)])
-    def test__dp_stage_cost_callback(self, is_myopic: bool):
-        c1, c2 = 1, 0.5
-        callback = DpStageCostCallback(c1, c2, is_myopic)
+    def test__dp_stage_cost_callback(self):
+        # TODO: test with both go and nmgo
+        callback = DpStageCostCallback()
         go(
             func=Simple1dProblem.f,
             lb=Simple1dProblem.lb,
             ub=Simple1dProblem.ub,
             mdl=Rbf("thinplatespline", 0.01, svd_tol=0),
             init_points=[-2.62, -1.2, 0.14, 1.1, 2.82],
-            c1=c1,
-            c2=c2,
+            c1=1,
+            c2=0.5,
             maxiter=5,
             seed=1909,
             callback=callback,

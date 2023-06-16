@@ -10,12 +10,11 @@ References
 
 
 import logging
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable, Literal, Optional, Union
 
 import numpy as np
 from numpy.typing import ArrayLike
 from scipy.stats.qmc import LatinHypercube
-from typing_extensions import TypeAlias
 from vpso import vpso
 from vpso.typing import Array1d, Array2d
 
@@ -24,9 +23,6 @@ from globopt.myopic.acquisition import acquisition
 from globopt.util.random import make_seeds
 
 logger = logging.getLogger(__name__)
-CallbackT: TypeAlias = Callable[
-    [int, Array1d, float, Array1d, float, float, Union[Idw, Rbf], Union[Idw, Rbf]], None
-]
 
 
 def _fit_mdl_to_init_points(
@@ -79,7 +75,7 @@ def go(
     #
     seed: Optional[int] = None,
     verbosity: int = logging.WARNING,
-    callback: Optional[CallbackT] = None,
+    callback: Optional[Callable[[Literal["go", "nmgo"], dict[str, Any]], None]] = None,
     #
     pso_kwargs: Optional[dict[str, Any]] = None,
 ) -> tuple[Array1d, float]:
@@ -96,10 +92,10 @@ def go(
     x_best = mdl.Xm_[0, k]
     y_best = mdl.ym_[0, k].item()
     if callback is not None:
-        callback(0, x_best, y_best, np.nan, np.nan, np.nan, mdl, mdl)
+        callback("go", locals())
 
     # main loop
-    for i, seed_ in zip(range(1, maxiter + 1), make_seeds(pso_seed)):
+    for iteration, seed_ in zip(range(1, maxiter + 1), make_seeds(pso_seed)):
         # choose next point to sample by minimizing the myopic acquisition function
         dym = mdl.ym_.ptp((1, 2), keepdims=True)
         x_new, acq_opt, _ = vpso(
@@ -109,24 +105,23 @@ def go(
             **pso_kwargs,
             seed=seed_,
         )
+        x_new = x_new[0]
+        acq_opt = acq_opt.item()
 
         # evaluate next point and update the best point found so far
-        y_new = np.reshape(func(x_new), (1, 1, 1))
-        y_new_item = y_new.item()
-        if y_new_item < y_best:
+        y_new = np.reshape(func(x_new[np.newaxis]), ())
+        if y_new < y_best:
             x_best = x_new[0]
-            y_best = y_new_item
+            y_best = y_new.item()
         if logger.level <= logging.INFO:
-            logger.info("best values at iteration %i: %e", i, y_best)
+            logger.info("best values at iteration %i: %e", iteration, y_best)
 
         # partially fit the regression model to the new point
-        mdl_new = partial_fit(mdl, x_new[np.newaxis], y_new)
+        mdl_new = partial_fit(mdl, x_new.reshape(1, 1, -1), y_new.reshape(1, 1, 1))
 
         # call callback at the end of the iteration and update model
         if callback is not None:
-            callback(
-                i, x_best, y_best, x_new[0], y_new_item, acq_opt.item(), mdl, mdl_new
-            )
+            callback("go", locals())
         mdl = mdl_new
 
     return x_best, y_best

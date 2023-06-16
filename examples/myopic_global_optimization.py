@@ -9,14 +9,14 @@ References
 """
 
 
-from typing import Union
+from typing import Any, Literal
 
 import matplotlib.pyplot as plt
 import numpy as np
 from vpso.typing import Array1d
 
 from globopt.core.problems import Simple1dProblem
-from globopt.core.regression import Idw, Rbf, predict
+from globopt.core.regression import Rbf, predict
 from globopt.myopic.algorithm2 import acquisition, go
 
 plt.style.use("bmh")
@@ -37,22 +37,23 @@ history: list[
 x = np.linspace(lb, ub, 300)
 
 
-def save_history(
-    iter: int,
-    x_best: Array1d,
-    y_best: float,
-    x_new: Array1d,
-    y_new: float,
-    acq_opt: float,
-    mdl: Union[Idw, Rbf],
-    mdl_new: Union[Idw, Rbf],
-) -> None:
-    if iter > 0:
+def save_history(_: Literal["go", "nmgo"], locals: dict[str, Any]) -> None:
+    if locals.get("iteration", 0) > 0:
         x_ = x.reshape(1, -1, 1)
+        mdl = locals["mdl"]
         y_hat = predict(mdl, x_)
-        acq = acquisition(x_, mdl, y_hat, None, c1, c2)[0, :, 0]
-        Xm, ym = mdl.Xm_.squeeze(), mdl.ym_.squeeze()
-        history.append((x_new, y_new, y_best, acq, acq_opt, y_hat.squeeze(), Xm, ym))
+        history.append(
+            (
+                locals["x_new"],
+                locals["y_new"],
+                locals["y_best"],
+                acquisition(x_, mdl, y_hat, None, c1, c2).squeeze(),
+                locals["acq_opt"],
+                y_hat.squeeze(),
+                mdl.Xm_.squeeze(),
+                mdl.ym_.squeeze(),
+            )
+        )
 
 
 # run the optimization

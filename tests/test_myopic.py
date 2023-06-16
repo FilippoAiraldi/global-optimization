@@ -1,5 +1,6 @@
 import pickle
 import unittest
+from typing import Any, Literal
 
 import numpy as np
 from vpso.typing import Array1d
@@ -55,21 +56,13 @@ class TestAlgorithm(unittest.TestCase):
         history: list[tuple[Array1d, ...]] = []
         x = np.linspace(lb, ub, 500)
 
-        def save_history(
-            iter: int,
-            x_best: Array1d,
-            y_best: float,
-            x_new: Array1d,
-            y_new: float,
-            a_opt: float,
-            mdl: Rbf,
-            mdl_new: Rbf,
-        ) -> None:
-            if iter > 0:
+        def save_history(_: Literal["go", "nmgo"], locals: dict[str, Any]) -> None:
+            if locals.get("iteration", 0) > 0:
                 x_ = x.reshape(1, -1, 1)
+                mdl = locals["mdl"]
                 y_hat = predict(mdl, x_)
                 a = acquisition(x_, mdl, y_hat, None, c1, c2)
-                history.append((y_hat, mdl.Xm_, mdl.ym_, a, x_new))
+                history.append((y_hat, mdl.Xm_, mdl.ym_, a, locals["x_new"]))
 
         # run the optimization
         go(
