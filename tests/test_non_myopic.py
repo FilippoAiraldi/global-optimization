@@ -16,7 +16,7 @@ with open(r"tests/data_test_non_myopic.pkl", "rb") as f:
 
 class TestAcquisition(unittest.TestCase):
     def test__returns_correct_values(self):
-        seed = 17
+        seed = 1909
         np.random.seed(seed)
         n_var = 3
         n_samples = 10
