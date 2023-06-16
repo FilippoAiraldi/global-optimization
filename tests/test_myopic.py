@@ -13,7 +13,7 @@ from globopt.myopic.acquisition import (
     _idw_weighting,
     acquisition,
 )
-from globopt.myopic.algorithm2 import go
+from globopt.myopic.algorithm import go
 
 with open(r"tests/data_test_myopic.pkl", "rb") as f:
     RESULTS = pickle.load(f)

@@ -14,13 +14,13 @@ References
 import matplotlib.pyplot as plt
 import numpy as np
 
-from globopt.core.problems import Simple1DProblem
+from globopt.core.problems import Simple1dProblem
 from globopt.core.regression import Idw, Rbf, RegressorType, fit, partial_fit, predict
 
 plt.style.use("bmh")
 
 
-f = Simple1DProblem.f
+f = Simple1dProblem.f
 
 
 # create data points - X has shape (batch, n_samples, n_var). Since we only have one

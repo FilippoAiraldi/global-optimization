@@ -5,7 +5,7 @@ from pymoo.util.normalization import ZeroToOneNormalization
 
 from globopt.core.problems import Adjiman, Simple1dProblem
 from globopt.core.regression import Rbf
-from globopt.myopic.algorithm2 import go
+from globopt.myopic.algorithm import go
 from globopt.util.callback import BestSoFarCallback, DpStageCostCallback
 from globopt.util.normalization import backward, forward, normalize_problem
 
