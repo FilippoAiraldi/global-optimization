@@ -1,49 +1,60 @@
 """Callbacks compliant to pymoo API to collect data from algorithm runs."""
 
 
-from typing import Union
+import numpy as np
+from vpso.typing import Array1d
 
-from pymoo.core.algorithm import Algorithm
-from pymoo.core.callback import Callback
-
-from globopt.myopic.algorithm import GO, Idw, Rbf, acquisition
-from globopt.nonmyopic.algorithm import NonMyopicGO
+from globopt.core.regression import RegressorType
+from globopt.myopic.acquisition import acquisition
 
 
-class BestSoFarCallback(Callback):
+class BestSoFarCallback(list[float]):
     """Callback for storing the best solution found so far."""
 
-    def __init__(self) -> None:
-        super().__init__()
-        self.data["best"] = []
+    def __call__(
+        self,
+        iter: int,
+        x_best: Array1d,
+        y_best: float,
+        x_new: Array1d,
+        y_new: float,
+        acq_opt: float,
+        mdl: RegressorType,
+        mdl_new: RegressorType,
+    ) -> None:
+        self.append(y_best)
 
-    def _update(self, algorithm: Algorithm) -> None:
-        self.data["best"].append(algorithm.pop.get("F").min())
 
-
-class DPStageCostCallback(Callback):
+class DpStageCostCallback(list[float]):
     """
     Callback for storing the dynamic programming's stage cost of choosing a new sampling
     point at each iteration.
     """
 
-    def __init__(self) -> None:
-        super().__init__()
-        self.data["cost"] = []
-        self._prev_regression: Union[None, Idw, Rbf] = None
+    __slots__ = ("_c1", "_c2", "_is_myopic")
 
-    def _update(self, algorithm: Algorithm) -> None:
-        is_myopic = isinstance(algorithm, GO)
-        is_non_myopic = isinstance(algorithm, NonMyopicGO)
-        mdl = self._prev_regression
-        assert is_myopic or is_non_myopic, "Algorithm is not a GO instance."
-        if mdl is not None:
-            # save the stage cost, i.e., the acquistion, of having chosen the new sample
-            # given the previous regression model
-            if is_non_myopic:
-                x_new = algorithm.acquisition_min_res.X[None]
-                a = acquisition(x_new, mdl, None, None, algorithm.c1, algorithm.c2)
-            else:
-                a = algorithm.acquisition_min_res.F
-            self.data["cost"].append(a.item())
-        self._prev_regression = algorithm.regression
+    def __init__(self, c1: float, c2: float, is_myopic: bool = False) -> None:
+        self._c1 = c1
+        self._c2 = c2
+        self._is_myopic = is_myopic
+
+    def __call__(
+        self,
+        iter: int,
+        x_best: Array1d,
+        y_best: float,
+        x_new: Array1d,
+        y_new: float,
+        acq_opt: float,
+        mdl: RegressorType,
+        mdl_new: RegressorType,
+    ) -> None:
+        if self._is_myopic:
+            if not np.isnan(acq_opt):
+                self.append(acq_opt)
+        elif not np.isnan(x_new):
+            self.append(
+                acquisition(
+                    x_new[np.newaxis, np.newaxis], mdl, None, None, self._c1, self._c2
+                ).item()
+            )

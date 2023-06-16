@@ -1,20 +1,18 @@
 import unittest
 
 import numpy as np
-from pymoo.algorithms.soo.nonconvex.ga import GA
-from pymoo.optimize import minimize
-from pymoo.problems import get_problem
+from parameterized import parameterized
 from pymoo.util.normalization import ZeroToOneNormalization
 
-from globopt.core.problems import Adjiman, Simple1DProblem
+from globopt.core.problems import Adjiman, Simple1dProblem
 from globopt.core.regression import Rbf
-from globopt.myopic.algorithm import GO
-from globopt.util.callback import BestSoFarCallback, DPStageCostCallback
+from globopt.myopic.algorithm2 import go
+from globopt.util.callback import BestSoFarCallback, DpStageCostCallback
 from globopt.util.normalization import backward, forward, normalize_problem
 
 
 class TestNormalization(unittest.TestCase):
-    def test_range_normalization__normalizes_correctly(self) -> None:
+    def test__normalizes_correctly(self) -> None:
         dim = 3
         ub = np.abs(np.random.randn(dim)) + 1
         lb = -np.abs(np.random.randn(dim)) - 1
@@ -35,7 +33,7 @@ class TestNormalization(unittest.TestCase):
         np.testing.assert_allclose(x_normalized[0], x_normalized[1])
         np.testing.assert_allclose(x_denormalized[0], x_denormalized[1])
 
-    def test_normalized_problem_wrapper__pareto_set__and__evaluate(self):
+    def test__normalizes_x_opt_correctly(self):
         normalized_adjiman = normalize_problem(Adjiman)
         f_opt = Adjiman.f_opt
         self.assertEqual(normalized_adjiman.dim, Adjiman.dim)
@@ -50,65 +48,56 @@ class TestNormalization(unittest.TestCase):
         )
 
 
-class TestWrapper(unittest.TestCase):
-    def test_wrapper(self):
-        class Object:
-            pass
-
-        fieldvalue = object()
-        obj = Object()
-        obj.field = fieldvalue
-        wrapped_obj = Wrapper(obj)
-        self.assertIsNot(obj, wrapped_obj)
-        self.assertIs(obj, wrapped_obj.unwrapped)
-        self.assertIs(obj, wrapped_obj.wrapped)
-        self.assertEqual(obj.field, wrapped_obj.field)
-
-
 class TestCallback(unittest.TestCase):
     def test__best_so_far_callback(self):
-        problem = get_problem("sphere")
-        algorithm = GA(pop_size=50)
-        res = minimize(
-            problem,
-            algorithm,
-            ("n_gen", 10),
-            callback=BestSoFarCallback(),
-            save_history=True,
-        )
-        np.testing.assert_array_equal(
-            res.algorithm.callback.data["best"],
-            [e.opt.get("F").item() for e in res.history],
-        )
-
-    def test__dp_stage_cost_callback(self):
-        problem = Simple1DProblem()
-        x0 = [-2.62, -1.2, 0.14, 1.1, 2.82]
-        algorithm = GO(
-            regression=Rbf("thinplatespline", 0.01, svd_tol=0),
-            init_points=x0,
+        callback = BestSoFarCallback()
+        go(
+            func=Simple1dProblem.f,
+            lb=Simple1dProblem.lb,
+            ub=Simple1dProblem.ub,
+            mdl=Rbf("thinplatespline", 0.01),
+            init_points=[-2.62, -1.2, 0.14, 1.1, 2.82],
             c1=1,
             c2=0.5,
-            acquisition_min_kwargs={"verbose": True},
-        )
-        callback = DPStageCostCallback()
-        minimize(
-            problem,
-            algorithm,
-            termination=("n_iter", 6),
-            verbose=False,
-            copy_algorithm=False,
-            seed=1,
+            maxiter=6,
+            seed=1909,
             callback=callback,
         )
-        expected = [
-            0.1715646882008188,
-            0.2011653428286008,
-            0.24427501622036624,
-            0.21051260043554526,
-            0.19794195758066008,
-        ]
-        np.testing.assert_allclose(callback.data["cost"], expected)
+        np.testing.assert_allclose(
+            callback,
+            [0.4929, 0.4929, 0.4929, 0.3889, 0.2810, 0.2810, 0.2810],
+            atol=1e-4,
+            rtol=1e-4,
+        )
+
+    @parameterized.expand([(True,), (False,)])
+    def test__dp_stage_cost_callback(self, is_myopic: bool):
+        c1, c2 = 1, 0.5
+        callback = DpStageCostCallback(c1, c2, is_myopic)
+        go(
+            func=Simple1dProblem.f,
+            lb=Simple1dProblem.lb,
+            ub=Simple1dProblem.ub,
+            mdl=Rbf("thinplatespline", 0.01, svd_tol=0),
+            init_points=[-2.62, -1.2, 0.14, 1.1, 2.82],
+            c1=c1,
+            c2=c2,
+            maxiter=5,
+            seed=1909,
+            callback=callback,
+        )
+        np.testing.assert_allclose(
+            callback,
+            [
+                0.1715646882008188,
+                0.2011653428286008,
+                0.24427501622036624,
+                0.21051260043554526,
+                0.19794195758066008,
+            ],
+            atol=1e-5,
+            rtol=1e-5,
+        )
 
 
 if __name__ == "__main__":

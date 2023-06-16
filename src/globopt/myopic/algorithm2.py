@@ -124,7 +124,9 @@ def go(
 
         # call callback at the end of the iteration and update model
         if callback is not None:
-            callback(i, x_best, y_best, x_new, y_new_item, acq_opt, mdl, mdl_new)
+            callback(
+                i, x_best, y_best, x_new[0], y_new_item, acq_opt.item(), mdl, mdl_new
+            )
         mdl = mdl_new
 
     return x_best, y_best
