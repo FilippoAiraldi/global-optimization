@@ -19,8 +19,6 @@ from typing import Callable, Literal, Union
 import numpy as np
 from vpso.typing import Array1d, Array2d
 
-from globopt.util.normalization import normalize_problem
-
 # Hartman problem's constants
 _C = np.asarray([1, 1.2, 3, 3.2])
 _A3 = np.asarray([[3, 10, 30], [0.1, 10, 35], [3, 10, 30], [0.1, 10, 35]])
@@ -189,19 +187,19 @@ Simple1dProblem = Problem(_simple1dproblem, 1, -3, +3, -0.959769)  # f_opt: 0.27
 # benchmark functions
 Ackley = Problem(_ackley, 2, -5, 5, np.zeros(2))  # f_opt: 0
 Adjiman = Problem(_adjiman, 2, -1, (2, 1), (2, 0.10578))  # f_opt: -2.02181
-CamelSixHumps = Problem(  # f_opt: -1.031628453489877
-    _camelsixhumps,
-    2,
-    -5,
-    5,
-    [[-0.089842013683013, 0.71265640327041], [0.089842013683013, -0.71265640327041]],
-)
 Branin = Problem(  # f_opt: 0.3978873
     _branin,
     2,
     (-5, 0),
     (10, 15),
     [[-np.pi, 12.275], [np.pi, 2.275], [3 * np.pi, 2.475]],
+)
+CamelSixHumps = Problem(  # f_opt: -1.031628453489877
+    _camelsixhumps,
+    2,
+    -5,
+    5,
+    [[-0.089842013683013, 0.71265640327041], [0.089842013683013, -0.71265640327041]],
 )
 Hartman3 = Problem(  # f_opt: -3.32236801141551
     partial(_hartmann, _A3, _P3, _C),
@@ -298,6 +296,7 @@ def get_benchmark_problem(
     """
     problem, max_evals, regressor = TESTS[name.lower()]
     if normalize:
+        from globopt.util.normalization import normalize_problem
         problem = normalize_problem(problem)
     return problem, max_evals, regressor
 

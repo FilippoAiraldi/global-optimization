@@ -2,6 +2,7 @@
 
 
 from typing import Union
+from functools import wraps
 
 import numpy as np
 from vpso.typing import Array1d, Array2d
@@ -79,6 +80,7 @@ def normalize_problem(
     lb_new = np.broadcast_to(lb_new, dim)
     ub_new = np.broadcast_to(ub_new, dim)
 
+    @wraps(f)
     def normalized_f(x: Array2d) -> Array2d:
         return f(backward(x, lb, ub, lb_new, ub_new))
 

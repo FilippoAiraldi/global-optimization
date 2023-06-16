@@ -6,11 +6,11 @@ from pymoo.optimize import minimize
 from pymoo.problems import get_problem
 from pymoo.util.normalization import ZeroToOneNormalization
 
-from globopt.core.problems import adjiman, Simple1DProblem
+from globopt.core.problems import Adjiman, Simple1DProblem
 from globopt.core.regression import Rbf
 from globopt.myopic.algorithm import GO
 from globopt.util.callback import BestSoFarCallback, DPStageCostCallback
-from globopt.util.normalization import forward, backward, normalize_problem
+from globopt.util.normalization import backward, forward, normalize_problem
 
 
 class TestNormalization(unittest.TestCase):
@@ -36,15 +36,15 @@ class TestNormalization(unittest.TestCase):
         np.testing.assert_allclose(x_denormalized[0], x_denormalized[1])
 
     def test_normalized_problem_wrapper__pareto_set__and__evaluate(self):
-        normalized_adjiman = normalize_problem(adjiman)
-        f_opt = adjiman.f_opt
-        self.assertEqual(normalized_adjiman.dim, adjiman.dim)
-        self.assertEqual(normalized_adjiman.lb.shape, adjiman.lb.shape)
-        self.assertEqual(normalized_adjiman.ub.shape, adjiman.ub.shape)
-        self.assertEqual(normalized_adjiman.f_opt, adjiman.f_opt)
-        np.testing.assert_allclose(adjiman.x_opt, [[2, 0.10578]])
+        normalized_adjiman = normalize_problem(Adjiman)
+        f_opt = Adjiman.f_opt
+        self.assertEqual(normalized_adjiman.dim, Adjiman.dim)
+        self.assertEqual(normalized_adjiman.lb.shape, Adjiman.lb.shape)
+        self.assertEqual(normalized_adjiman.ub.shape, Adjiman.ub.shape)
+        self.assertEqual(normalized_adjiman.f_opt, Adjiman.f_opt)
+        np.testing.assert_allclose(Adjiman.x_opt, [[2, 0.10578]])
         np.testing.assert_allclose(normalized_adjiman.x_opt, [[1, 0.10578]])
-        np.testing.assert_allclose(adjiman.f(adjiman.x_opt), f_opt, atol=1e-4)
+        np.testing.assert_allclose(Adjiman.f(Adjiman.x_opt), f_opt, atol=1e-4)
         np.testing.assert_allclose(
             normalized_adjiman.f(normalized_adjiman.x_opt), f_opt, atol=1e-4
         )
