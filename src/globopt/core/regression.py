@@ -21,6 +21,7 @@ from vpso.jit import _float, jit
 from vpso.math import batch_cdist, batch_cdist_and_pdist, batch_pdist
 from vpso.typing import Array2d, Array3d
 
+Array: TypeAlias = npt.NDArray[np.floating]  # TODO: to be removed
 
 
 """Choices of available RBF kernels."""

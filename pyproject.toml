@@ -8,7 +8,7 @@ version = "0.0.0"
 authors = [
   { name="Filippo Airaldi", email="filippoairaldi@gmail.com" },
 ]
-description = "Global Optimization"
+description = "Myopic and Non-Myopic Global Optimization"
 readme = "README.md"
 requires-python = ">=3.9,<3.11"
 license = { text = "MIT" }
@@ -20,7 +20,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Mathematics"
 ]
 dependencies = [
-    "pymoo >= 0.6.0.1",
+    "pymoo >= 0.6.0.1",  # TODO: update requirements
     "joblib >= 1.2.0",
     "vpso >= 1.0.2",
 ]
