@@ -147,7 +147,7 @@ def go(
     # main loop
     for iteration, seed_ in zip(range(1, maxiter + 1), make_seeds(pso_seed)):
         # choose next point to sample by minimizing the myopic acquisition function
-        dym = mdl.ym_.ptp((1, 2), keepdims=True)
+        dym = mdl.ym_.ptp(1, keepdims=True)
         x_new, acq_opt, _ = vpso(
             lambda x: acquisition(x, mdl, c1, c2, None, dym)[:, :, 0],
             lb_,

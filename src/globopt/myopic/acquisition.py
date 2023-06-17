@@ -115,5 +115,5 @@ def acquisition(
     if y_hat is None:
         y_hat = predict(mdl, x)
     if dym is None:
-        dym = ym.ptp((1, 2), keepdims=True)
+        dym = ym.ptp(1, keepdims=True)
     return _compute_acquisition(Xm, x, ym, y_hat, dym, c1, c2, mdl.exp_weighting)

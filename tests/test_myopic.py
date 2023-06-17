@@ -35,7 +35,7 @@ class TestAcquisition(unittest.TestCase):
         mdl = fit(Rbf("thinplatespline", 0.01, svd_tol=0), X, y)
         x = np.linspace(-3, 3, 1000).reshape(1, -1, 1)
         y_hat = predict(mdl, x)
-        dym = y.ptp((1, 2), keepdims=True)
+        dym = y.ptp(1, keepdims=True)
         W = _idw_weighting(x, X, mdl.exp_weighting)
         s = _idw_variance(y_hat, y, W)
         z = _idw_distance(W)
