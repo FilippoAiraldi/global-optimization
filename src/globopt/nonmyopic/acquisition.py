@@ -18,8 +18,10 @@ from vpso import vpso
 from vpso.typing import Array1d, Array2d, Array3d
 
 from globopt.core.regression import RegressorType, partial_fit, predict, repeat
+from globopt.myopic.acquisition import _idw_variance, _idw_weighting
 from globopt.myopic.acquisition import acquisition as myopic_acquisition
 from globopt.util.random import make_seeds
+
 
 def _check_args(
     x: Array3d,
@@ -64,6 +66,58 @@ def _initialize(
     return n_samples, mdl, lb, ub, is_mpc, pso_kwarg
 
 
+def _compute_acquisition(
+    x: Array3d,
+    mdl: RegressorType,
+    horizon: int,
+    gamma: float,
+    c1: float,
+    c2: float,
+    lb: Optional[Array1d],
+    ub: Optional[Array1d],
+    n_samples: int,
+    is_mpc: bool,
+    pso_kwarg: dict[str, Any],
+    normal_rng: Optional[list[float]],
+) -> Array1d:
+    """Actual computation of the non-myopic acquisition acquisition function."""
+    seeds = make_seeds(str(normal_rng) if normal_rng else None)
+    a = np.zeros(n_samples, dtype=np.float64)
+    y_min = mdl.ym_.min(1, keepdims=True)
+    y_max = mdl.ym_.max(1, keepdims=True)
+    for h, seed in zip(range(horizon), seeds):
+        # compute the next point to query. If the strategy is "mpc", then the next point
+        # is just the next point in the trajectory. If the strategy is "rollout", then,
+        # for h=0, the next point is the input, and for h>0, the next point is the
+        # minimizer of the myopic acquisition function, i.e., base policy.
+        dym = y_max - y_min
+        if is_mpc:  # type == "mpc"
+            x_next = x[:, h, np.newaxis, :]
+        elif h == 0:  # type == "rollout" and first iteration
+            x_next = x
+        else:  # type == "rollout"
+            func = lambda x: myopic_acquisition(x, mdl, c1, c2, None, dym)[:, :, 0]
+            x_next = vpso(func, lb, ub, **pso_kwarg, seed=seed)[0][:, np.newaxis, :]
+
+        # predict the sampling of the next point, either deterministically or with some
+        # stochasticity due to the variance
+        y_hat = predict(mdl, x_next)
+        if normal_rng:
+            std = _idw_variance(
+                y_hat, mdl.ym_, _idw_weighting(x, mdl.Xm_, mdl.exp_weighting)
+            )
+            y_hat += std * normal_rng[h]
+
+        # add to reward
+        a += (gamma**h) * myopic_acquisition(x_next, mdl, c1, c2, y_hat, dym)[:, 0, 0]
+
+        # fit regression to new point, and update min/max
+        mdl = partial_fit(mdl, x_next, y_hat)
+        y_min = np.minimum(y_min, y_hat)
+        y_max = np.maximum(y_max, y_hat)
+    return a
+
+
 def deterministic_acquisition(
     x: Array3d,
     mdl: RegressorType,
@@ -75,7 +129,6 @@ def deterministic_acquisition(
     lb: Optional[Array1d] = None,  # only when `type == "rollout"`
     ub: Optional[Array1d] = None,  # only when `type == "rollout"`
     pso_kwarg: Optional[dict[str, Any]] = None,
-    seed: Optional[int] = None,
     check: bool = True,
 ) -> Array1d:
     """Computes the non-myopic acquisition function for IDW/RBF regression models with
@@ -108,8 +161,6 @@ def deterministic_acquisition(
     lb, ub : 1d array, optional
         Lower and upper bounds of the search domain. Only required when
         `type == "rollout"`.
-    seed : int, optional
-        Seed for the random number generator, by default `None`. Used in `vpso`.
     check : bool, optional
         Whether to perform checks on the inputs, by default `True`.
 
@@ -123,35 +174,9 @@ def deterministic_acquisition(
     n_samples, mdl, lb, ub, is_mpc, pso_kwarg = _initialize(
         x, mdl, type, lb, ub, pso_kwarg
     )
-    a = np.zeros(n_samples, dtype=np.float64)
-    y_min = mdl.ym_.min(1, keepdims=True)
-    y_max = mdl.ym_.max(1, keepdims=True)
-    for h, seed_ in zip(range(horizon), make_seeds(seed)):
-        # compute the next point to query. If the strategy is "mpc", then the next point
-        # is just the next point in the trajectory. If the strategy is "rollout", then,
-        # for h=0, the next point is the input, and for h>0, the next point is the
-        # minimizer of the myopic acquisition function, i.e., base policy.
-        dym = y_max - y_min
-        if is_mpc:  # type == "mpc"
-            x_next = x[:, h, np.newaxis, :]
-        elif h == 0:  # type == "rollout" and first iteration
-            x_next = x
-        else:  # type == "rollout"
-            func = lambda x: myopic_acquisition(x, mdl, c1, c2, None, dym)[:, :, 0]
-            x_next = vpso(func, lb, ub, **pso_kwarg, seed=seed_)[0][:, np.newaxis, :]
-
-        # predict the sampling of the next point deterministically
-        y_hat = predict(mdl, x_next)
-
-        # add to reward
-        a_h = myopic_acquisition(x_next, mdl, c1, c2, y_hat, dym)[:, 0, 0]
-        a += (discount**h) * a_h
-
-        # fit regression to new point, and update min/max
-        mdl = partial_fit(mdl, x_next, y_hat)
-        y_min = np.minimum(y_min, y_hat)
-        y_max = np.maximum(y_max, y_hat)
-    return a
+    return _compute_acquisition(
+        x, mdl, horizon, discount, c1, c2, lb, ub, n_samples, is_mpc, pso_kwarg, None
+    )
 
 
 def acquisition(
