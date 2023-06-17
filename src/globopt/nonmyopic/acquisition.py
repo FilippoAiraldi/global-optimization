@@ -21,6 +21,48 @@ from globopt.core.regression import RegressorType, partial_fit, predict, repeat
 from globopt.myopic.acquisition import acquisition as myopic_acquisition
 from globopt.util.random import make_seeds
 
+def _check_args(
+    x: Array3d,
+    mdl: RegressorType,
+    horizon: int,
+    type: Literal["rollout", "mpc"],
+    lb: Optional[Array1d],
+    ub: Optional[Array1d],
+) -> None:
+    """Checks input arguments."""
+    assert mdl.Xm_.shape[0] == 1, "regression model must be non-batched"
+    if type == "rollout":
+        assert (
+            ub is not None and lb is not None
+        ), "upper and lower bounds must be provided for rollout"
+        assert x.shape[1] == 1, "x must have only one time step for rollout"
+    else:
+        assert (
+            x.shape[1] == horizon
+        ), "x must have the same number of time steps as the horizon"
+
+
+def _initialize(
+    x: Array3d,
+    mdl: RegressorType,
+    type: Literal["rollout", "mpc"],
+    lb: Optional[Array1d],
+    ub: Optional[Array1d],
+    pso_kwarg: Optional[dict[str, Any]],
+) -> tuple[
+    int, RegressorType, Optional[Array2d], Optional[Array2d], bool, dict[str, Any]
+]:
+    """Initializes the quantities need for computing the acquisition function."""
+    n_samples = x.shape[0]
+    mdl = repeat(mdl, n_samples)
+    is_mpc = type == "mpc"
+    if not is_mpc:
+        lb = lb[np.newaxis].repeat(n_samples, 0)  # type: ignore[index]
+        ub = ub[np.newaxis].repeat(n_samples, 0)  # type: ignore[index]
+    if pso_kwarg is None:
+        pso_kwarg = {}
+    return n_samples, mdl, lb, ub, is_mpc, pso_kwarg
+
 
 def deterministic_acquisition(
     x: Array3d,
@@ -77,43 +119,26 @@ def deterministic_acquisition(
         The deterministic non-myopic acquisition function for each target point.
     """
     if check:
-        assert mdl.Xm_.shape[0] == 1, "regression model must be non-batched"
-        if type == "rollout":
-            assert (
-                ub is not None and lb is not None
-            ), "upper and lower bounds must be provided for rollout"
-            assert x.shape[1] == 1, "x must have only one time step for rollout"
-        else:
-            assert (
-                x.shape[1] == horizon
-            ), "x must have the same number of time steps as the horizon"
-    if pso_kwarg is None:
-        pso_kwarg = {}
-
-    # initialize quantities
-    n_samples = x.shape[0]
+        _check_args(x, mdl, horizon, type, lb, ub)
+    n_samples, mdl, lb, ub, is_mpc, pso_kwarg = _initialize(
+        x, mdl, type, lb, ub, pso_kwarg
+    )
     a = np.zeros(n_samples, dtype=np.float64)
-    mdl = repeat(mdl, n_samples)
     y_min = mdl.ym_.min(1, keepdims=True)
     y_max = mdl.ym_.max(1, keepdims=True)
-    if type == "rollout":
-        lb_: Array2d = lb[np.newaxis].repeat(n_samples, 0)  # type: ignore[index]
-        ub_: Array2d = ub[np.newaxis].repeat(n_samples, 0)  # type: ignore[index]
-
-    # loop through the horizon
     for h, seed_ in zip(range(horizon), make_seeds(seed)):
         # compute the next point to query. If the strategy is "mpc", then the next point
         # is just the next point in the trajectory. If the strategy is "rollout", then,
         # for h=0, the next point is the input, and for h>0, the next point is the
         # minimizer of the myopic acquisition function, i.e., base policy.
         dym = y_max - y_min
-        if type == "mpc":
+        if is_mpc:  # type == "mpc"
             x_next = x[:, h, np.newaxis, :]
-        elif h == 0:  # type == "rollout"
+        elif h == 0:  # type == "rollout" and first iteration
             x_next = x
         else:  # type == "rollout"
             func = lambda x: myopic_acquisition(x, mdl, c1, c2, None, dym)[:, :, 0]
-            x_next = vpso(func, lb_, ub_, **pso_kwarg, seed=seed_)[0][:, np.newaxis, :]
+            x_next = vpso(func, lb, ub, **pso_kwarg, seed=seed_)[0][:, np.newaxis, :]
 
         # predict the sampling of the next point deterministically
         y_hat = predict(mdl, x_next)
