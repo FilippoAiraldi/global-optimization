@@ -19,6 +19,7 @@ from vpso.typing import Array1d, Array2d, Array3d
 
 from globopt.core.regression import RegressorType, partial_fit, predict, repeat
 from globopt.myopic.acquisition import acquisition as myopic_acquisition
+from globopt.util.random import make_seeds
 
 
 def deterministic_acquisition(
@@ -29,12 +30,11 @@ def deterministic_acquisition(
     c1: float = 1.5078,
     c2: float = 1.4246,
     type: Literal["rollout", "mpc"] = "rollout",
-    #
     lb: Optional[Array1d] = None,  # only when `type == "rollout"`
     ub: Optional[Array1d] = None,  # only when `type == "rollout"`
     pso_kwarg: Optional[dict[str, Any]] = None,
-    #
-    check: bool = True
+    seed: Optional[int] = None,
+    check: bool = True,
 ) -> Array1d:
     """Computes the non-myopic acquisition function for IDW/RBF regression models with
     deterministic evolution of the regressor, i.e., without MC integration.
@@ -66,13 +66,15 @@ def deterministic_acquisition(
     lb, ub : 1d array, optional
         Lower and upper bounds of the search domain. Only required when
         `type == "rollout"`.
+    seed : int, optional
+        Seed for the random number generator, by default `None`. Used in `vpso`.
     check : bool, optional
         Whether to perform checks on the inputs, by default `True`.
 
     Returns
     -------
     1d array
-        The non-myopic acquisition function for each target point.
+        The deterministic non-myopic acquisition function for each target point.
     """
     if check:
         assert mdl.Xm_.shape[0] == 1, "regression model must be non-batched"
@@ -94,11 +96,12 @@ def deterministic_acquisition(
     mdl = repeat(mdl, n_samples)
     y_min = mdl.ym_.min(1, keepdims=True)
     y_max = mdl.ym_.max(1, keepdims=True)
-    lb_: Array2d = lb[np.newaxis].repeat(n_samples, 0)  # type: ignore[index]
-    ub_: Array2d = ub[np.newaxis].repeat(n_samples, 0)  # type: ignore[index]
+    if type == "rollout":
+        lb_: Array2d = lb[np.newaxis].repeat(n_samples, 0)  # type: ignore[index]
+        ub_: Array2d = ub[np.newaxis].repeat(n_samples, 0)  # type: ignore[index]
 
     # loop through the horizon
-    for h in range(horizon):
+    for h, seed_ in zip(range(horizon), make_seeds(seed)):
         # compute the next point to query. If the strategy is "mpc", then the next point
         # is just the next point in the trajectory. If the strategy is "rollout", then,
         # for h=0, the next point is the input, and for h>0, the next point is the
@@ -109,13 +112,8 @@ def deterministic_acquisition(
         elif h == 0:  # type == "rollout"
             x_next = x
         else:  # type == "rollout"
-            x_next = vpso(
-                lambda x: myopic_acquisition(x, mdl, c1, c2, None, dym)[:, :, 0],
-                lb_,
-                ub_,
-                **pso_kwarg,
-                # TODO: pass a seed here.. Can be one of the quasi-random numbers
-            )[0][:, np.newaxis, :]
+            func = lambda x: myopic_acquisition(x, mdl, c1, c2, None, dym)[:, :, 0]
+            x_next = vpso(func, lb_, ub_, **pso_kwarg, seed=seed_)[0][:, np.newaxis, :]
 
         # predict the sampling of the next point deterministically
         y_hat = predict(mdl, x_next)
@@ -129,6 +127,7 @@ def deterministic_acquisition(
         y_min = np.minimum(y_min, y_hat)
         y_max = np.maximum(y_max, y_hat)
     return a
+
 
 def acquisition(
     x: Array3d,
