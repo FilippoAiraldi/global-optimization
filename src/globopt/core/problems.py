@@ -288,11 +288,11 @@ def get_benchmark_problem(
 
 # import matplotlib.pyplot as plt
 
-# problem = Rosenbrock(n_var=2)
+# problem = ...
 # n = 1000
-# ls = np.linspace(*problem.bounds(), n)
+# ls = np.linspace(problem.lb, problem.ub, n)
 # X_ = np.stack(np.meshgrid(*ls.T))
-# Z_ = problem.evaluate(X_.reshape(problem.n_var, -1).T).reshape(n, n)
+# Z_ = problem.f(X_.reshape(problem.dim, -1).T).reshape(n, n)
 
 # _, ax = plt.subplots(subplot_kw={"projection": "3d"})
 # ax.plot_surface(X_[0], X_[1], Z_, cmap="jet")

@@ -1,18 +1,18 @@
 """Example application of the non-myopic acquisition function."""
 
 
+from typing import Literal
+
 import matplotlib.pyplot as plt
 import numpy as np
 from vpso import vpso
-from vpso.typing import Array2d, Array3d
+from vpso.typing import Array3d
 
 from globopt.core.problems import Simple1dProblem
 from globopt.core.regression import Rbf, RegressorType, fit, predict
 from globopt.myopic.acquisition import acquisition as myopic_acquisition
 from globopt.nonmyopic.acquisition import acquisition as nonmyopic_acquisition
 from globopt.nonmyopic.helpers import mpc_acquisition_by_brute_force
-
-# from globopt.nonmyopic.acquisition import acquisition as nonmyopic_acquisition
 
 plt.style.use("bmh")
 
@@ -42,27 +42,35 @@ def compute_myopic_acquisition(
 
 
 def compute_nonmyopic_acquisition(
-    x: Array3d, mdl: RegressorType, h: int, c1: float, c2: float, discount: float
+    x: Array3d,
+    mdl: RegressorType,
+    h: int,
+    c1: float,
+    c2: float,
+    discount: float,
+    type: Literal["rollout", "mpc"],
 ) -> tuple[Array3d, tuple[float, float]]:
     # compute the non-myopic acquisition function for x
-    # a = mpc_acquisition_by_brute_force(x[0], mdl, h, c1, c2, discount, 100)
-    a = nonmyopic_acquisition(
-        x.transpose(1, 0, 2),
-        mdl,
-        h,
-        discount,
-        c1,
-        c2,
-        "rollout",
-        lb=np.asarray([lb]),
-        ub=np.asarray([ub]),
-    )
+    if type == "mpc":
+        a = mpc_acquisition_by_brute_force(x[0], mdl, h, c1, c2, discount, 100)
+    else:
+        a = nonmyopic_acquisition(
+            x.transpose(1, 0, 2),
+            mdl,
+            h,
+            discount,
+            c1,
+            c2,
+            "rollout",
+            lb=np.asarray([lb]),
+            ub=np.asarray([ub]),
+        )
 
     # TODO: find the minimium of the non-myopic acquisition function
     return a, (1, 1)
 
 
-# create data points - X has shape (batch, n_samples, n_var), with batch=1
+# create data points - X has shape (batch, n_samples, dim), with batch=1
 X = np.array([-2.62, -1.99, 0.14, 1.01, 2.62]).reshape(1, -1, 1)
 y = f(X)
 mdl = fit(Rbf("thinplatespline", 0.01), X, y)
@@ -76,8 +84,9 @@ myopic_results = compute_myopic_acquisition(x, mdl, c1, c2)
 # compute non-myopic acquisition function
 horizon = 3
 discount = 1.0
-nonmyopic_results = compute_nonmyopic_acquisition(x, mdl, horizon, c1, c2, discount)
-
+nonmyopic_results = compute_nonmyopic_acquisition(
+    x, mdl, horizon, c1, c2, discount, "mpc"
+)
 # plot function and its estimate
 _, ax = plt.subplots(constrained_layout=True, figsize=(5, 3))
 y_hat = predict(mdl, x)

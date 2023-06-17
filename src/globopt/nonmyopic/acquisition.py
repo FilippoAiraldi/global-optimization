@@ -12,7 +12,8 @@ References
 from typing import Any, Literal, Optional
 
 import numpy as np
-from scipy.stats.qmc import MultivariateNormalQMC
+
+# from scipy.stats.qmc import MultivariateNormalQMC
 from vpso import vpso
 from vpso.typing import Array1d, Array2d, Array3d
 
@@ -27,8 +28,9 @@ def acquisition(
     discount: float,
     c1: float = 1.5078,
     c2: float = 1.4246,
-    #
     type: Literal["rollout", "mpc"] = "rollout",
+    #
+    deterministic: bool = False,
     # mc_iters: int = 1024,
     # quasi_monte_carlo: bool = True,
     # common_random_numbers: bool = True,
@@ -38,10 +40,10 @@ def acquisition(
     lb: Optional[Array1d] = None,  # only when `type == "rollout"`
     pso_kwarg: Optional[dict[str, Any]] = None,
     #
-    #
     # seed: Optional[int] = None,
     check: bool = True,  # TODO: set to False
 ) -> Array3d:
+    # TODO: write doc
     if check:
         assert mdl.Xm_.shape[0] == 1, "regression model must be non-batched"
         if type == "rollout":
@@ -77,7 +79,6 @@ def acquisition(
         elif h == 0:  # type == "rollout"
             x_next = x
         else:  # type == "rollout"
-            # minimize the acquisition function
             x_next = vpso(
                 lambda x: myopic_acquisition(x, mdl, c1, c2, None, dym)[:, :, 0],
                 lb_,
@@ -87,11 +88,14 @@ def acquisition(
             )[0][:, np.newaxis, :]
 
         # predict the sampling of the next point
-        y_hat = predict(mdl, x_next)
+        if deterministic:
+            y_hat = predict(mdl, x_next)
+        else:
+            raise NotImplementedError
 
         # add to reward
-        a_h = myopic_acquisition(x_next, mdl, c1, c2, y_hat, y_max - y_min)
-        a += (discount**h) * a_h[:, 0, 0]
+        a_h = myopic_acquisition(x_next, mdl, c1, c2, y_hat, dym)[:, 0, 0]
+        a += (discount**h) * a_h
 
         # fit regression to new point, and update min/max
         mdl = partial_fit(mdl, x_next, y_hat)

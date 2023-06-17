@@ -235,7 +235,7 @@ def _rbf_predict(mdl: Rbf, X: Array3d) -> Array2d:
     kernel, eps = mdl[:2]
     """Predicts target values according to the IDW model."""
     M = _get_rbf_matrix(X, mdl.Xm_, eps, kernel)
-    return M @ mdl.coef_
+    return M @ mdl.coef_  # cannot be jitted due to 3D tensor multiplication
 
 
 @jit(_float[:, :, :](_float[:, :, :], _float[:, :, :], nb.boolean))

@@ -23,7 +23,7 @@ plt.style.use("bmh")
 f = Simple1dProblem.f
 
 
-# create data points - X has shape (batch, n_samples, n_var). Since we only have one
+# create data points - X has shape (batch, n_samples, dim). Since we only have one
 # batch of data, its dimension is 1
 X = np.array([-2.61, -1.92, -0.63, 0.38, 2]).reshape(1, -1, 1)
 y = f(X)

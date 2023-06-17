@@ -31,7 +31,7 @@ plt.style.use("bmh")
 lb, ub = -3, +3
 f = Simple1dProblem.f
 
-# create data points - X has shape (batch, n_samples, n_var)
+# create data points - X has shape (batch, n_samples, dim)
 X = np.array([-2.61, -1.92, -0.63, 0.38, 2]).reshape(1, -1, 1)
 y = f(X)
 

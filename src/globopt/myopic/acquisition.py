@@ -48,22 +48,22 @@ def _idw_distance(W: Array3d) -> Array3d:
         _float[:, :, :],
         _float[:, :, :],
         _float[:, :, :],
-        _float[:, :, :],
-        _float[:, :, :],
         _float,
         _float,
         nb.boolean,
+        _float[:, :, :],
+        _float[:, :, :],
     )
 )
 def _compute_acquisition(
-    Xm: Array3d,
     x: Array3d,
+    Xm: Array3d,
     ym: Array3d,
-    y_hat: Array3d,
-    dym: Array3d,
     c1: float,
     c2: float,
     exp_weighting: bool,
+    y_hat: Array3d,
+    dym: Array3d,
 ) -> Array3d:
     """Runs the computations of the myopic acquisition function for IDW/RBF models."""
     W = _idw_weighting(x, Xm, exp_weighting)
@@ -84,12 +84,11 @@ def acquisition(
 
     Parameters
     ----------
-    x : array of shape (batch, n_samples, n_var)
+    x : array of shape (batch, n_samples, dim)
         Array of points for which to compute the acquisition. `batch` is the dimension
         of the batched regressor model (i.e., multiple regressors batched together),
         `n_samples` is the number of target points for which to compute the acquisition,
-        and `n_var` is the number
-        of features/variables of each point.
+        and `dim` is the number of features/variables of each point.
     mdl : Idw or Rbf
         Fitted model to use for computing the acquisition function.
     c1 : float, optional
@@ -116,4 +115,4 @@ def acquisition(
         y_hat = predict(mdl, x)
     if dym is None:
         dym = ym.ptp(1, keepdims=True)
-    return _compute_acquisition(Xm, x, ym, y_hat, dym, c1, c2, mdl.exp_weighting)
+    return _compute_acquisition(x, Xm, ym, c1, c2, mdl.exp_weighting, y_hat, dym)

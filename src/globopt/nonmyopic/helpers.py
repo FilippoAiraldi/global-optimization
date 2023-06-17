@@ -28,7 +28,7 @@ def mpc_acquisition_by_brute_force(
     chunk_size: int = 2**11,
 ) -> Array1d:
     """Utility to compute the optimal acquisition function by brute force search."""
-    # enumerate all trajectories of length h (n_trajectories, h, n_var), evaluate the
+    # enumerate all trajectories of length h (n_trajectories, h, dim), evaluate the
     # acquisition function for each trajectory, and return the best for each x. The
     # computations are sped up by chunkifying the trajectories and evaluating the
     # acquisition function for each chunk in parallel
