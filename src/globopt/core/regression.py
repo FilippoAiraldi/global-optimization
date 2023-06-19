@@ -11,37 +11,25 @@ References
 """
 
 
-from typing import Literal, NamedTuple, Union
+from enum import IntEnum
+from typing import NamedTuple, Union
 
 import numba as nb
 import numpy as np
 from typing_extensions import TypeAlias
-from vpso.jit import _float, jit
 from vpso.math import batch_cdist, batch_cdist_and_pdist, batch_pdist
 from vpso.typing import Array2d, Array3d
 
-"""Choices of available RBF kernels."""
-RbfKernel: TypeAlias = Literal[
-    "inversequadratic",
-    "multiquadric",
-    "linear",
-    "gaussian",
-    "thinplatespline",
-    "inversemultiquadric",
-]
 
+class Kernel(IntEnum):
+    """Kernels for RBF regression."""
 
-def _regressor_to_str(regressor: NamedTuple) -> str:
-    """Return a string representation of a regressor."""
-
-    def _params_to_str():
-        for param in regressor._fields:
-            if not param.endswith("_"):
-                val = getattr(regressor, param)
-                if val != regressor._field_defaults[param]:
-                    yield f"{param}={val}"
-
-    return f"{regressor.__class__.__name__}(" + ", ".join(_params_to_str()) + ")"
+    InverseQuadratic = 0
+    Multiquadric = 1
+    Linear = 2
+    Gaussian = 3
+    ThinPlateSpline = 4
+    InverseMultiquadric = 5
 
 
 class Rbf(NamedTuple):
@@ -62,7 +50,7 @@ class Rbf(NamedTuple):
         not during regression.
     """
 
-    kernel: RbfKernel = "inversequadratic"
+    kernel: Kernel = Kernel.InverseQuadratic
     eps: float = 1.0775
     svd_tol: float = 1e-9
     exp_weighting: bool = False
@@ -71,12 +59,6 @@ class Rbf(NamedTuple):
     ym_: Array3d = np.empty((0, 0, 0))
     coef_: Array3d = np.empty((0, 0, 0))
     Minv_: Array3d = np.empty((0, 0, 0))
-
-    def __str__(self) -> str:
-        return _regressor_to_str(self)
-
-    def __repr__(self) -> str:
-        return self.__str__()
 
 
 class Idw(NamedTuple):
@@ -93,12 +75,6 @@ class Idw(NamedTuple):
     Xm_: Array3d = np.empty((0, 0, 0))
     ym_: Array3d = np.empty((0, 0, 0))
 
-    def __str__(self) -> str:
-        return _regressor_to_str(self)
-
-    def __repr__(self) -> str:
-        return self.__str__()
-
 
 RegressorType: TypeAlias = Union[Rbf, Idw]
 
@@ -107,37 +83,49 @@ RegressorType: TypeAlias = Union[Rbf, Idw]
 DELTA = 1e-12
 
 
-@jit(
+@nb.njit(
     [
-        _float(_float, _float, nb.types.unicode_type),
-        _float[:, :](_float[:, :], _float, nb.types.unicode_type),
-        _float[:, :, :](_float[:, :, :], _float, nb.types.unicode_type),
+        nb.float64(nb.float64, nb.float64, nb.types.IntEnumMember(Kernel, nb.int64)),
+        nb.float64[:, :](
+            nb.float64[:, :], nb.float64, nb.types.IntEnumMember(Kernel, nb.int64)
+        ),
+        nb.float64[:, :, :](
+            nb.float64[:, :, :], nb.float64, nb.types.IntEnumMember(Kernel, nb.int64)
+        ),
     ],
+    cache=True,
+    nogil=True,
 )
-def rbf(d2: np.ndarray, eps: float, type: str) -> np.ndarray:
-    if type == "inversequadratic":
+def rbf(d2: np.ndarray, eps: float, kernel: Kernel) -> np.ndarray:
+    if kernel == Kernel.InverseQuadratic:
         return 1 / (1 + eps**2 * d2)
-    if type == "multiquadric":
+    if kernel == Kernel.Multiquadric:
         return np.sqrt(1 + eps**2 * d2)
-    if type == "linear":
+    if kernel == Kernel.Linear:
         return eps * np.sqrt(d2)
-    if type == "gaussian":
+    if kernel == Kernel.Gaussian:
         return np.exp(-(eps**2) * d2)
-    if type == "thinplatespline":
+    if kernel == Kernel.ThinPlateSpline:
         return eps**2 * d2 * np.log(np.maximum(eps * d2, DELTA))
-    if type == "inversemultiquadric":
+    if kernel == Kernel.InverseMultiquadric:
         return 1 / np.sqrt(1 + eps**2 * d2)
     raise ValueError(f"unknown RBF kernel type: {type}")
 
 
-@jit(
-    nb.types.UniTuple(_float[:, :, :], 2)(
-        _float[:, :, :], _float[:, :, :], _float, nb.types.unicode_type, _float
+@nb.njit(
+    nb.types.UniTuple(nb.float64[:, :, :], 2)(
+        nb.float64[:, :, :],
+        nb.float64[:, :, :],
+        nb.float64,
+        nb.types.IntEnumMember(Kernel, nb.int64),
+        nb.float64,
     ),
+    cache=True,
+    nogil=True,
     parallel=True,
 )
 def _fit_rbf_via_svd(
-    X: Array3d, y: Array3d, eps: float, kernel: str, svd_tol: float
+    X: Array3d, y: Array3d, eps: float, kernel: Kernel, svd_tol: float
 ) -> tuple[Array3d, Array3d]:
     """Fits the RBF to the data by solving the linear systems via SVD."""
     M = rbf(batch_pdist(X, "sqeuclidean"), eps, kernel)
@@ -161,17 +149,19 @@ def _rbf_fit(mdl: Rbf, X: Array3d, y: Array3d) -> Rbf:
     return Rbf(kernel, eps, svd_tol, exp_weighting, X, y, coef, Minv)
 
 
-@jit(
-    nb.types.UniTuple(_float[:, :, :], 4)(
-        _float[:, :, :],
-        _float[:, :, :],
-        _float[:, :, :],
-        _float[:, :, :],
-        _float[:, :, :],
-        _float,
-        nb.types.unicode_type,
-        _float,
+@nb.njit(
+    nb.types.UniTuple(nb.float64[:, :, :], 4)(
+        nb.float64[:, :, :],
+        nb.float64[:, :, :],
+        nb.float64[:, :, :],
+        nb.float64[:, :, :],
+        nb.float64[:, :, :],
+        nb.float64,
+        nb.types.IntEnumMember(Kernel, nb.int64),
+        nb.float64,
     ),
+    cache=True,
+    nogil=True,
     parallel=True,
 )
 def _partial_fit_via_blockwise_inversion(
@@ -181,7 +171,7 @@ def _partial_fit_via_blockwise_inversion(
     y: Array3d,
     Minv: Array3d,
     eps: float,
-    kernel: str,
+    kernel: Kernel,
     inv_tol: float,
 ) -> tuple[Array3d, Array3d, Array3d, Array3d]:
     """Performs blockwise inversion updates of the RBF kernel matrices."""
@@ -225,8 +215,17 @@ def _rbf_partial_fit(mdl: Rbf, X: Array3d, y: Array2d) -> Rbf:
     return Rbf(kernel, eps, svd_tol, exp_weighting, X_new, y_new, coef_new, Minv_new)
 
 
-@jit(_float[:, :, :](_float[:, :, :], _float[:, :, :], _float, nb.types.unicode_type))
-def _get_rbf_matrix(X: Array3d, Xm: Array3d, eps: float, kernel: str) -> Array3d:
+@nb.njit(
+    nb.float64[:, :, :](
+        nb.float64[:, :, :],
+        nb.float64[:, :, :],
+        nb.float64,
+        nb.types.IntEnumMember(Kernel, nb.int64),
+    ),
+    cache=True,
+    nogil=True,
+)
+def _get_rbf_matrix(X: Array3d, Xm: Array3d, eps: float, kernel: Kernel) -> Array3d:
     d2 = batch_cdist(X, Xm, "sqeuclidean")
     return rbf(d2, eps, kernel)
 
@@ -238,7 +237,7 @@ def _rbf_predict(mdl: Rbf, X: Array3d) -> Array2d:
     return M @ mdl.coef_  # cannot be jitted due to 3D tensor multiplication
 
 
-@jit(_float[:, :, :](_float[:, :, :], _float[:, :, :], nb.boolean))
+@nb.njit(nb.float64[:, :, :](nb.float64[:, :, :], nb.float64[:, :, :], nb.bool_))
 def _idw_weighting(X: Array3d, Xm: Array3d, exp_weighting: bool = False) -> Array3d:
     """Computes the IDW weighting function `w`."""
     d2 = batch_cdist(X, Xm, "sqeuclidean")
@@ -259,7 +258,11 @@ def _idw_partial_fit(mdl: Idw, X: Array3d, y: Array3d) -> Idw:
     return Idw(exp_weighting, np.concatenate((X_, X), 1), np.concatenate((y_, y), 1))
 
 
-@jit(_float[:, :, :](_float[:, :, :], _float[:, :, :], nb.boolean))
+@nb.njit(
+    nb.float64[:, :, :](nb.float64[:, :, :], nb.float64[:, :, :], nb.bool_),
+    cache=True,
+    nogil=True,
+)
 def _idw_contributions(X: Array3d, Xm: Array3d, exp_weighting: bool) -> Array3d:
     """Computes the IDW contributions `v`."""
     W = _idw_weighting(X, Xm, exp_weighting)

@@ -16,7 +16,7 @@ import numpy as np
 from vpso.typing import Array1d
 
 from globopt.core.problems import Simple1dProblem
-from globopt.core.regression import Rbf, predict
+from globopt.core.regression import Kernel, Rbf, predict
 from globopt.myopic.algorithm import acquisition, go
 
 plt.style.use("bmh")
@@ -61,7 +61,7 @@ x_best, y_best = go(
     func=f,
     lb=lb,
     ub=ub,
-    mdl=Rbf("thinplatespline", 0.01),
+    mdl=Rbf(Kernel.ThinPlateSpline, 0.01),
     init_points=x0,
     c1=c1,
     c2=c2,

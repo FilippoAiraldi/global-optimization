@@ -6,7 +6,7 @@ import numpy as np
 from vpso.typing import Array1d
 
 from globopt.core.problems import Simple1dProblem
-from globopt.core.regression import Rbf, fit, predict
+from globopt.core.regression import Kernel, Rbf, fit, predict
 from globopt.myopic.acquisition import (
     _idw_distance,
     _idw_variance,
@@ -32,7 +32,7 @@ class TestAcquisition(unittest.TestCase):
         X = np.array([-2.61, -1.92, -0.63, 0.38, 2]).reshape(1, -1, 1)
         y = f(X)
 
-        mdl = fit(Rbf("thinplatespline", 0.01, svd_tol=0), X, y)
+        mdl = fit(Rbf(Kernel.ThinPlateSpline, 0.01, svd_tol=0), X, y)
         x = np.linspace(-3, 3, 1000).reshape(1, -1, 1)
         y_hat = predict(mdl, x)
         dym = y.ptp(1, keepdims=True)
@@ -69,7 +69,7 @@ class TestAlgorithm(unittest.TestCase):
             func=f,
             lb=lb,
             ub=ub,
-            mdl=Rbf("thinplatespline", 0.01),
+            mdl=Rbf(Kernel.ThinPlateSpline, 0.01),
             init_points=x0,
             c1=c1,
             c2=c2,

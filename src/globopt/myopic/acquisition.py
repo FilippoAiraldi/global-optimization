@@ -13,13 +13,17 @@ from typing import Optional
 
 import numba as nb
 import numpy as np
-from vpso.jit import _float, jit
 from vpso.typing import Array3d
 
 from globopt.core.regression import RegressorType, _idw_weighting, predict
 
 
-@jit(_float[:, :, :](_float[:, :, :], _float[:, :, :]), parallel=True)
+@nb.njit(
+    nb.float64[:, :, :](nb.float64[:, :, :], nb.float64[:, :, :]),
+    cache=True,
+    nogil=True,
+    parallel=True,
+)
 def _idw_variance_inner_loop(V, sqdiff):
     """Parallelized inner loop of the variance function."""
     B, n, _ = V.shape
@@ -29,7 +33,11 @@ def _idw_variance_inner_loop(V, sqdiff):
     return out
 
 
-@jit(_float[:, :, :](_float[:, :, :], _float[:, :, :], _float[:, :, :]))
+@nb.njit(
+    nb.float64[:, :, :](nb.float64[:, :, :], nb.float64[:, :, :], nb.float64[:, :, :]),
+    cache=True,
+    nogil=True,
+)
 def _idw_variance(y_hat: Array3d, ym: Array3d, W: Array3d) -> Array3d:
     """Computes the variance function acquisition term for IDW/RBF regression models."""
     V = W / W.sum(2)[:, :, np.newaxis]
@@ -37,23 +45,29 @@ def _idw_variance(y_hat: Array3d, ym: Array3d, W: Array3d) -> Array3d:
     return np.sqrt(_idw_variance_inner_loop(V, sqdiff))
 
 
-@jit(_float[:, :, :](_float[:, :, :]))
+@nb.njit(
+    nb.float64[:, :, :](nb.float64[:, :, :]),
+    cache=True,
+    nogil=True,
+)
 def _idw_distance(W: Array3d) -> Array3d:
     """Computes the distance function acquisition term for IDW/RBF regression models."""
     return ((2 / np.pi) * np.arctan(1 / W.sum(2)))[:, :, np.newaxis]
 
 
-@jit(
-    _float[:, :, :](
-        _float[:, :, :],
-        _float[:, :, :],
-        _float[:, :, :],
-        _float,
-        _float,
+@nb.njit(
+    nb.float64[:, :, :](
+        nb.float64[:, :, :],
+        nb.float64[:, :, :],
+        nb.float64[:, :, :],
+        nb.float64,
+        nb.float64,
         nb.boolean,
-        _float[:, :, :],
-        _float[:, :, :],
-    )
+        nb.float64[:, :, :],
+        nb.float64[:, :, :],
+    ),
+    cache=True,
+    nogil=True,
 )
 def _compute_acquisition(
     x: Array3d,

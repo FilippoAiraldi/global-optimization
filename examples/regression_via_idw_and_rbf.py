@@ -15,7 +15,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from globopt.core.problems import Simple1dProblem
-from globopt.core.regression import Idw, Rbf, RegressorType, fit, partial_fit, predict
+from globopt.core.regression import (
+    Idw,
+    Kernel,
+    Rbf,
+    RegressorType,
+    fit,
+    partial_fit,
+    predict,
+)
 
 plt.style.use("bmh")
 
@@ -32,8 +40,8 @@ y = f(X)
 mdls: list[RegressorType] = [
     Idw(),
     Idw(True),
-    Rbf("inversequadratic", 0.5),
-    Rbf("thinplatespline", 0.01),
+    Rbf(Kernel.InverseQuadratic, 0.5),
+    Rbf(Kernel.ThinPlateSpline, 0.01),
 ]
 mdls = [fit(mdl, X[:, :3], y[:, :3]) for mdl in mdls]
 

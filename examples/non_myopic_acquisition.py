@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from globopt.core.problems import Simple1dProblem
-from globopt.core.regression import Rbf, fit, predict
+from globopt.core.regression import Kernel, Rbf, fit, predict
 from globopt.myopic.acquisition import acquisition as myopic_acquisition
 from globopt.nonmyopic.acquisition import (
     deterministic_acquisition as nonmyopic_deterministic_acquisition,
@@ -20,7 +20,7 @@ f = Simple1dProblem.f
 # create data points - X has shape (batch, n_samples, dim), with batch=1
 X = np.array([-2.62, -1.99, 0.14, 1.01, 2.62]).reshape(1, -1, 1)
 y = f(X)
-mdl = fit(Rbf("thinplatespline", 0.01), X, y)
+mdl = fit(Rbf(Kernel.ThinPlateSpline, 0.01), X, y)
 
 # compute myopic acquisition function
 c1 = 1.0

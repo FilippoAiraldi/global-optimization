@@ -4,7 +4,7 @@ import numpy as np
 from pymoo.util.normalization import ZeroToOneNormalization
 
 from globopt.core.problems import Adjiman, Simple1dProblem
-from globopt.core.regression import Rbf
+from globopt.core.regression import Kernel, Rbf
 from globopt.myopic.algorithm import go
 from globopt.util.callback import BestSoFarCallback, DpStageCostCallback
 from globopt.util.normalization import backward, forward, normalize_problem
@@ -54,7 +54,7 @@ class TestCallback(unittest.TestCase):
             func=Simple1dProblem.f,
             lb=Simple1dProblem.lb,
             ub=Simple1dProblem.ub,
-            mdl=Rbf("thinplatespline", 0.01),
+            mdl=Rbf(Kernel.ThinPlateSpline, 0.01),
             init_points=[-2.62, -1.2, 0.14, 1.1, 2.82],
             c1=1,
             c2=0.5,
@@ -76,7 +76,7 @@ class TestCallback(unittest.TestCase):
             func=Simple1dProblem.f,
             lb=Simple1dProblem.lb,
             ub=Simple1dProblem.ub,
-            mdl=Rbf("thinplatespline", 0.01, svd_tol=0),
+            mdl=Rbf(Kernel.ThinPlateSpline, 0.01, svd_tol=0),
             init_points=[-2.62, -1.2, 0.14, 1.1, 2.82],
             c1=1,
             c2=0.5,

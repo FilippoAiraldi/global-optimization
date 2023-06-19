@@ -17,7 +17,7 @@ import numpy as np
 from vpso import vpso
 
 from globopt.core.problems import Simple1dProblem
-from globopt.core.regression import Rbf, RegressorType, fit, predict
+from globopt.core.regression import Kernel, Rbf, RegressorType, fit, predict
 from globopt.myopic.acquisition import (
     _idw_distance,
     _idw_variance,
@@ -36,7 +36,7 @@ X = np.array([-2.61, -1.92, -0.63, 0.38, 2]).reshape(1, -1, 1)
 y = f(X)
 
 # create regressor and fit it
-mdl: RegressorType = Rbf("thinplatespline", 0.01)
+mdl: RegressorType = Rbf(Kernel.ThinPlateSpline, 0.01)
 mdl = fit(mdl, X, y)
 
 # predict values over all domain via fitted model

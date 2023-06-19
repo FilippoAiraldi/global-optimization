@@ -22,7 +22,7 @@ from globopt.core.problems import (
     get_available_simple_problems,
     get_benchmark_problem,
 )
-from globopt.core.regression import Idw, Rbf, fit, partial_fit, predict
+from globopt.core.regression import Idw, Kernel, Rbf, fit, partial_fit, predict
 
 RESULTS = loadmat("tests/data_test_core.mat")
 
@@ -43,8 +43,8 @@ class TestRegression(unittest.TestCase):
 
         mdls = [
             Idw(),
-            Rbf("inversequadratic", 0.5, svd_tol=0),
-            Rbf("thinplatespline", 0.01, svd_tol=0),
+            Rbf(Kernel.InverseQuadratic, 0.5, svd_tol=0),
+            Rbf(Kernel.ThinPlateSpline, 0.01, svd_tol=0),
         ]
         fitresults = [fit(mdl, Xs[0], ys[0]) for mdl in mdls]
         for i in range(1, len(Xs)):
@@ -53,14 +53,6 @@ class TestRegression(unittest.TestCase):
         y_hat = np.asarray([predict(fr, x).squeeze() for fr in fitresults])
 
         np.testing.assert_allclose(y_hat, RESULTS["y_hat"])
-
-    def test__to_str(self) -> None:
-        mdl = Rbf("inversemultiquadric", 0.5, svd_tol=0)
-        s = mdl.__str__()
-        self.assertIsInstance(s, str)
-        self.assertIn("kernel=inversemultiquadric", s)
-        self.assertIn("eps=0.5", s)
-        self.assertIn("svd_tol=0", s)
 
 
 EXPECTED_F_OPT: dict[str, float] = {
