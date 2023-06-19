@@ -18,7 +18,10 @@ import numba as nb
 import numpy as np
 from typing_extensions import TypeAlias
 from vpso.math import batch_cdist, batch_cdist_and_pdist, batch_pdist
-from vpso.typing import Array2d, Array3d
+from vpso.typing import Array3d
+
+"""Small value to avoid division by zero."""
+DELTA = 1e-12
 
 
 class Kernel(np.int8, Enum):
@@ -30,6 +33,19 @@ class Kernel(np.int8, Enum):
     Gaussian = 3
     ThinPlateSpline = 4
     InverseMultiquadric = 5
+
+
+def _regressor_to_str(regressor: NamedTuple) -> str:
+    """Return a string representation of a regressor."""
+
+    def _params_to_str():
+        for param in regressor._fields:
+            if not param.endswith("_"):
+                val = getattr(regressor, param)
+                if val != regressor._field_defaults[param]:
+                    yield f"{param}={val}"
+
+    return f"{regressor.__class__.__name__}(" + ", ".join(_params_to_str()) + ")"
 
 
 class Rbf(NamedTuple):
@@ -60,6 +76,12 @@ class Rbf(NamedTuple):
     coef_: Array3d = np.empty((0, 0, 0))
     Minv_: Array3d = np.empty((0, 0, 0))
 
+    def __str__(self) -> str:
+        return _regressor_to_str(self)
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
 
 class Idw(NamedTuple):
     """Options for IDW regression in Global Optimization.
@@ -75,12 +97,30 @@ class Idw(NamedTuple):
     Xm_: Array3d = np.empty((0, 0, 0))
     ym_: Array3d = np.empty((0, 0, 0))
 
+    def __str__(self) -> str:
+        return _regressor_to_str(self)
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
 
 RegressorType: TypeAlias = Union[Rbf, Idw]
 
 
-"""Small value to avoid division by zero."""
-DELTA = 1e-12
+@nb.njit(
+    nb.float64[:, :, :](nb.float64[:, :, :], nb.float64[:, :, :]),
+    cache=True,
+    nogil=True,
+    parallel=True,
+)
+def matmul3d(X: Array3d, Y: Array3d) -> Array3d:
+    """Performs matrix multiplication between two 3d arrays."""
+    B, M, _ = X.shape
+    N = Y.shape[2]
+    out = np.empty((B, M, N), dtype=X.dtype)
+    for i in nb.prange(B):
+        np.dot(X[i], Y[i], out=out[i])
+    return out
 
 
 @nb.njit(
@@ -134,6 +174,7 @@ def _fit_rbf_via_svd(
     return coef, Minv
 
 
+@nb.njit(cache=True, nogil=True)
 def _rbf_fit(mdl: Rbf, X: Array3d, y: Array3d) -> Rbf:
     """Fits an RBF model to the data."""
     # create matrix of kernel evaluations
@@ -199,7 +240,8 @@ def _partial_fit_via_blockwise_inversion(
     return X_new, y_new, coef_new, Minv_new
 
 
-def _rbf_partial_fit(mdl: Rbf, X: Array3d, y: Array2d) -> Rbf:
+@nb.njit(cache=True, nogil=True)
+def _rbf_partial_fit(mdl: Rbf, X: Array3d, y: Array3d) -> Rbf:
     """Fits an already partially fitted RBF model to the additional data."""
     kernel, eps, svd_tol, exp_weighting, Xm, ym, _, Minv = mdl
     X_new, y_new, coef_new, Minv_new = _partial_fit_via_blockwise_inversion(
@@ -208,21 +250,11 @@ def _rbf_partial_fit(mdl: Rbf, X: Array3d, y: Array2d) -> Rbf:
     return Rbf(kernel, eps, svd_tol, exp_weighting, X_new, y_new, coef_new, Minv_new)
 
 
-@nb.njit(
-    nb.float64[:, :, :](nb.float64[:, :, :], nb.float64[:, :, :], nb.float64, nb.int8),
-    cache=True,
-    nogil=True,
-)
-def _get_rbf_matrix(X: Array3d, Xm: Array3d, eps: float, kernel: Kernel) -> Array3d:
-    d2 = batch_cdist(X, Xm, "sqeuclidean")
-    return rbf(d2, eps, kernel)
-
-
-def _rbf_predict(mdl: Rbf, X: Array3d) -> Array2d:
-    kernel, eps = mdl[:2]
+@nb.njit(cache=True, nogil=True)
+def _rbf_predict(mdl: Rbf, X: Array3d) -> Array3d:
     """Predicts target values according to the IDW model."""
-    M = _get_rbf_matrix(X, mdl.Xm_, eps, kernel)
-    return M @ mdl.coef_  # cannot be jitted due to 3D tensor multiplication
+    M = rbf(batch_cdist(X, mdl.Xm_, "sqeuclidean"), mdl.eps, mdl.kernel)
+    return matmul3d(M, mdl.coef_)
 
 
 @nb.njit(nb.float64[:, :, :](nb.float64[:, :, :], nb.float64[:, :, :], nb.bool_))
@@ -235,35 +267,16 @@ def _idw_weighting(X: Array3d, Xm: Array3d, exp_weighting: bool = False) -> Arra
     return W
 
 
-def _idw_fit(mdl: Idw, X: Array3d, y: Array3d) -> Idw:
-    """Fits an IDW model to the data."""
-    return Idw(mdl.exp_weighting, X, y)
-
-
-def _idw_partial_fit(mdl: Idw, X: Array3d, y: Array3d) -> Idw:
-    """Fits an already partially fitted IDW model to the additional data."""
-    exp_weighting, X_, y_ = mdl
-    return Idw(exp_weighting, np.concatenate((X_, X), 1), np.concatenate((y_, y), 1))
-
-
-@nb.njit(
-    nb.float64[:, :, :](nb.float64[:, :, :], nb.float64[:, :, :], nb.bool_),
-    cache=True,
-    nogil=True,
-)
-def _idw_contributions(X: Array3d, Xm: Array3d, exp_weighting: bool) -> Array3d:
-    """Computes the IDW contributions `v`."""
-    W = _idw_weighting(X, Xm, exp_weighting)
-    return W / W.sum(2)[:, :, np.newaxis]
-
-
+@nb.njit(cache=True, nogil=True)
 def _idw_predict(mdl: Idw, X: Array3d) -> Array3d:
     """Predicts target values according to the IDW model."""
     exp_weighting, X_, y_ = mdl
-    v = _idw_contributions(X, X_, exp_weighting)
-    return v @ y_  # cannot be jitted due to 3D tensor multiplication
+    W = _idw_weighting(X, X_, exp_weighting)
+    v = W / W.sum(2)[:, :, np.newaxis]
+    return matmul3d(v, y_)
 
 
+@nb.njit(cache=True, nogil=True)
 def fit(mdl: RegressorType, X: Array3d, y: Array3d) -> RegressorType:
     """Fits an IDW or RBF model to the data.
 
@@ -281,9 +294,10 @@ def fit(mdl: RegressorType, X: Array3d, y: Array3d) -> RegressorType:
     Idw or Rbf
         The result of the fit operation for RBF regression.
     """
-    return _rbf_fit(mdl, X, y) if isinstance(mdl, Rbf) else _idw_fit(mdl, X, y)
+    return Idw(mdl.exp_weighting, X, y) if len(mdl) == 3 else _rbf_fit(mdl, X, y)
 
 
+@nb.njit(cache=True, nogil=True)
 def partial_fit(mdl: RegressorType, X: Array3d, y: Array3d) -> RegressorType:
     """Adds additional data to an already fitted IDW or RBF model.
 
@@ -301,13 +315,17 @@ def partial_fit(mdl: RegressorType, X: Array3d, y: Array3d) -> RegressorType:
     Idw or Rbf
         The newly result of the partial fit operation for the regression.
     """
-    return (
-        _rbf_partial_fit(mdl, X, y)
-        if isinstance(mdl, Rbf)
-        else _idw_partial_fit(mdl, X, y)
-    )
+    if len(mdl) == 3:  # isinstance(mdl, Idw):
+        return Idw(
+            mdl.exp_weighting,
+            np.concatenate((mdl.Xm_, X), 1),
+            np.concatenate((mdl.ym_, y), 1),
+        )
+    else:
+        return _rbf_partial_fit(mdl, X, y)
 
 
+@nb.njit(cache=True, nogil=True)
 def predict(mdl: RegressorType, X: Array3d) -> Array3d:
     """Predicts target values according to the IDW or RBF model.
 
@@ -323,9 +341,20 @@ def predict(mdl: RegressorType, X: Array3d) -> Array3d:
     y: array of floats
         Prediction of `y`.
     """
-    return _rbf_predict(mdl, X) if isinstance(mdl, Rbf) else _idw_predict(mdl, X)
+    return _idw_predict(mdl, X) if len(mdl) == 3 else _rbf_predict(mdl, X)
 
 
+@nb.njit(nb.float64[:, :, :](nb.float64[:, :, :], nb.int64), cache=True, nogil=True)
+def repeat_2d_axis0(x: Array3d, n: int) -> Array3d:
+    """Repeats an array `n` times along axis=0. The dimension of the input array on
+    axis=0 must be 1."""
+    if x.shape[0] != 1:
+        raise ValueError("The first dimension of x must be 1.")
+    _, M, N = x.shape
+    return x.repeat(n).reshape(M, N, n).transpose(2, 0, 1)
+
+
+@nb.njit(cache=True, nogil=True)
 def repeat(mdl: RegressorType, n: int) -> RegressorType:
     """Repeats a regressor model `n` times, so that `n` regressions can be computed in
     batch.
@@ -342,16 +371,18 @@ def repeat(mdl: RegressorType, n: int) -> RegressorType:
     RegressorType
         The repeated regressor model. The repetitions are all the same model.
     """
-    if isinstance(mdl, Idw):
-        return Idw(mdl.exp_weighting, mdl.Xm_.repeat(n, 0), mdl.ym_.repeat(n, 0))
+    if len(mdl) == 3:  # isinstance(mdl, Idw):
+        return Idw(
+            mdl.exp_weighting, repeat_2d_axis0(mdl.Xm_, n), repeat_2d_axis0(mdl.ym_, n)
+        )
     else:
         return Rbf(
-            mdl.kernel,
-            mdl.eps,
-            mdl.svd_tol,
+            mdl.kernel,  # type: ignore[union-attr]
+            mdl.eps,  # type: ignore[union-attr]
+            mdl.svd_tol,  # type: ignore[union-attr]
             mdl.exp_weighting,
-            mdl.Xm_.repeat(n, 0),
-            mdl.ym_.repeat(n, 0),
-            mdl.coef_.repeat(n, 0),
-            mdl.Minv_.repeat(n, 0),
+            repeat_2d_axis0(mdl.Xm_, n),
+            repeat_2d_axis0(mdl.ym_, n),
+            repeat_2d_axis0(mdl.coef_, n),  # type: ignore[union-attr]
+            repeat_2d_axis0(mdl.Minv_, n),  # type: ignore[union-attr]
         )

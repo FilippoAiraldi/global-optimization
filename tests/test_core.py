@@ -22,7 +22,16 @@ from globopt.core.problems import (
     get_available_simple_problems,
     get_benchmark_problem,
 )
-from globopt.core.regression import Idw, Kernel, Rbf, fit, partial_fit, predict
+from globopt.core.regression import (
+    Idw,
+    Kernel,
+    Rbf,
+    fit,
+    partial_fit,
+    predict,
+    repeat_2d_axis0,
+    matmul3d,
+)
 
 RESULTS = loadmat("tests/data_test_core.mat")
 
@@ -36,6 +45,17 @@ def f(x):
 
 
 class TestRegression(unittest.TestCase):
+    def test__matmul3d(self) -> None:
+        B, M, N, K = np.random.randint(5, 20, size=4)
+        x = np.random.randn(B, M, N)
+        y = np.random.randn(B, N, K)
+        np.testing.assert_allclose(matmul3d(x, y), np.matmul(x, y))
+
+    def test__repeat_2d_axis0(self) -> None:
+        n, M, N = np.random.randint(5, 20, size=3)
+        x = np.random.rand(1, M, N)
+        np.testing.assert_array_equal(repeat_2d_axis0(x, n), x.repeat(n, axis=0))
+
     def test__fit_and_partial_fit(self) -> None:
         X = np.array([-2.61, -1.92, -0.63, 0.38, 2]).reshape(1, -1, 1)
         y = f(X)
