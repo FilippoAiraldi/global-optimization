@@ -19,6 +19,18 @@ from globopt.core.regression import RegressorType, _idw_weighting, predict
 
 
 @nb.njit(
+    nb.float64[:, :, :](nb.float64[:, :, :]), cache=True, nogil=True, parallel=True
+)
+def func_range(y: Array3d) -> Array3d:
+    """Computes the range of the observed samples."""
+    B = y.shape[0]
+    out = np.empty((B, 1, 1))
+    for i in nb.prange(B):
+        out[i, 0, 0] = y[i, :, 0].ptp()
+    return out
+
+
+@nb.njit(
     nb.float64[:, :, :](nb.float64[:, :, :], nb.float64[:, :, :]),
     cache=True,
     nogil=True,
@@ -86,6 +98,7 @@ def _compute_acquisition(
     return y_hat - c1 * s - c2 * dym * z
 
 
+@nb.njit(cache=True, nogil=True)
 def acquisition(
     x: Array3d,
     mdl: RegressorType,
@@ -128,5 +141,5 @@ def acquisition(
     if y_hat is None:
         y_hat = predict(mdl, x)
     if dym is None:
-        dym = ym.ptp(1, keepdims=True)
+        dym = func_range(ym)
     return _compute_acquisition(x, Xm, ym, c1, c2, mdl.exp_weighting, y_hat, dym)

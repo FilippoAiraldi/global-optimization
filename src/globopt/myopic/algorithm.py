@@ -131,7 +131,7 @@ def go(
         callback("go", locals())
 
     # main loop
-    for iteration, seed_ in zip(range(1, maxiter + 1), make_seeds(pso_seed)):
+    for _, seed_ in zip(range(maxiter), make_seeds(pso_seed)):
         # choose next point to sample by minimizing the myopic acquisition function
         dym = mdl.ym_.ptp(1, keepdims=True)
         x_new, acq_opt, _ = vpso(

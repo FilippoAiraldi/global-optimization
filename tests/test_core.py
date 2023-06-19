@@ -27,10 +27,10 @@ from globopt.core.regression import (
     Kernel,
     Rbf,
     fit,
+    matmul3d,
     partial_fit,
     predict,
     repeat_2d_axis0,
-    matmul3d,
 )
 
 RESULTS = loadmat("tests/data_test_core.mat")
