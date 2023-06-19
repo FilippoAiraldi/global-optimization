@@ -30,7 +30,7 @@ from globopt.core.regression import (
     matmul3d,
     partial_fit,
     predict,
-    repeat_2d_axis0,
+    repeat_along_first_axis,
 )
 
 RESULTS = loadmat("tests/data_test_core.mat")
@@ -51,10 +51,14 @@ class TestRegression(unittest.TestCase):
         y = np.random.randn(B, N, K)
         np.testing.assert_allclose(matmul3d(x, y), np.matmul(x, y))
 
-    def test__repeat_2d_axis0(self) -> None:
-        n, M, N = np.random.randint(5, 20, size=3)
-        x = np.random.rand(1, M, N)
-        np.testing.assert_array_equal(repeat_2d_axis0(x, n), x.repeat(n, axis=0))
+    @parameterized.expand([(2,), (3,)])
+    def test__repeat_along_first_axis(self, ndim: int) -> None:
+        n = np.random.randint(5, 20)
+        shape = np.random.randint(5, 20, size=ndim - 1)
+        x = np.random.rand(1, *shape)
+        np.testing.assert_array_equal(
+            repeat_along_first_axis(x, n), x.repeat(n, axis=0)
+        )
 
     def test__fit_and_partial_fit(self) -> None:
         X = np.array([-2.61, -1.92, -0.63, 0.38, 2]).reshape(1, -1, 1)

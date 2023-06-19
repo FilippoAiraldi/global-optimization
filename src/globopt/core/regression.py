@@ -344,14 +344,26 @@ def predict(mdl: RegressorType, X: Array3d) -> Array3d:
     return _idw_predict(mdl, X) if len(mdl) == 3 else _rbf_predict(mdl, X)
 
 
-@nb.njit(nb.float64[:, :, :](nb.float64[:, :, :], nb.int64), cache=True, nogil=True)
-def repeat_2d_axis0(x: Array3d, n: int) -> Array3d:
-    """Repeats an array `n` times along axis=0. The dimension of the input array on
-    axis=0 must be 1."""
+@nb.njit(
+    [
+        nb.float64[:, :](nb.float64[:, :], nb.int64),
+        nb.float64[:, :, :](nb.float64[:, :, :], nb.int64),
+    ],
+    cache=True,
+    nogil=True,
+)
+def repeat_along_first_axis(x: Array3d, n: int) -> Array3d:
+    """Repeats an array `n` times along axis=0. The array must be either 2D or 3D, and
+    the size of the input array on axis=0 must be 1."""
     if x.shape[0] != 1:
-        raise ValueError("The first dimension of x must be 1.")
-    _, M, N = x.shape
-    return x.repeat(n).reshape(M, N, n).transpose(2, 0, 1)
+        raise ValueError("first dimension of x must be 1.")
+    if x.ndim == 2:
+        M = x.shape[1]
+        return x.repeat(n).reshape(M, n).T
+    if x.ndim == 3:
+        M, N = x.shape[1:]
+        return x.repeat(n).reshape(M, N, n).transpose(2, 0, 1)
+    raise ValueError("input must be 2D or 3D")
 
 
 @nb.njit(cache=True, nogil=True)
@@ -373,7 +385,9 @@ def repeat(mdl: RegressorType, n: int) -> RegressorType:
     """
     if len(mdl) == 3:  # isinstance(mdl, Idw):
         return Idw(
-            mdl.exp_weighting, repeat_2d_axis0(mdl.Xm_, n), repeat_2d_axis0(mdl.ym_, n)
+            mdl.exp_weighting,
+            repeat_along_first_axis(mdl.Xm_, n),
+            repeat_along_first_axis(mdl.ym_, n),
         )
     else:
         return Rbf(
@@ -381,8 +395,8 @@ def repeat(mdl: RegressorType, n: int) -> RegressorType:
             mdl.eps,  # type: ignore[union-attr]
             mdl.svd_tol,  # type: ignore[union-attr]
             mdl.exp_weighting,
-            repeat_2d_axis0(mdl.Xm_, n),
-            repeat_2d_axis0(mdl.ym_, n),
-            repeat_2d_axis0(mdl.coef_, n),  # type: ignore[union-attr]
-            repeat_2d_axis0(mdl.Minv_, n),  # type: ignore[union-attr]
+            repeat_along_first_axis(mdl.Xm_, n),
+            repeat_along_first_axis(mdl.ym_, n),
+            repeat_along_first_axis(mdl.coef_, n),  # type: ignore[union-attr]
+            repeat_along_first_axis(mdl.Minv_, n),  # type: ignore[union-attr]
         )
