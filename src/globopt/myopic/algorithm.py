@@ -9,7 +9,6 @@ References
 """
 
 
-import logging
 from typing import Any, Callable, Literal, Optional, Union
 
 import numpy as np
@@ -21,8 +20,6 @@ from vpso.typing import Array1d, Array2d
 from globopt.core.regression import Idw, Rbf, fit, partial_fit
 from globopt.myopic.acquisition import acquisition
 from globopt.util.random import make_seeds
-
-logger = logging.getLogger(__name__)
 
 
 def _fit_mdl_to_init_points(
@@ -45,19 +42,13 @@ def _fit_mdl_to_init_points(
 
 
 def _setup_vpso(
-    lb: Array1d,
-    ub: Array1d,
-    seed: Optional[int],
-    verbosity: int,
-    pso_kwargs: Optional[dict[str, Any]],
+    lb: Array1d, ub: Array1d, seed: Optional[int], pso_kwargs: Optional[dict[str, Any]]
 ) -> tuple[Array2d, Array2d, dict[str, Any], Optional[int]]:
     """Sets up the bounds and kwargs for the VPSO algorithm."""
     lb = lb[np.newaxis]
     ub = ub[np.newaxis]
     if pso_kwargs is None:
         pso_kwargs = {}
-    if "verbosity" not in pso_kwargs:
-        pso_kwargs["verbosity"] = verbosity
     return lb, ub, pso_kwargs, pso_kwargs.pop("seed", seed)
 
 
@@ -74,7 +65,6 @@ def go(
     maxiter: int = 50,
     #
     seed: Optional[int] = None,
-    verbosity: int = logging.WARNING,
     callback: Optional[Callable[[Literal["go", "nmgo"], dict[str, Any]], None]] = None,
     #
     pso_kwargs: Optional[dict[str, Any]] = None,
@@ -107,8 +97,6 @@ def go(
         Maximum number of iterations to run the algorithm for, by default `50`.
     seed : int, optional
         Seed for the random number generator, by default `None`.
-    verbosity : int, optional
-        Logger verbosity, by default `logging.WARNING`.
     callback : callable with {"go", "nmgo"} and dict, optional
         A callback function called before the first and at the end of each iteration.
         It must take as input a string indicating the current algorithm and a dictionary
@@ -129,15 +117,13 @@ def go(
         functions. Computational Optimization and Applications, 77(2):571–595, 2020
     """
 
-    logger.setLevel(verbosity)
-
     # add initial points to regression model
     dim = lb.size
     lhs_sampler = LatinHypercube(d=dim, seed=seed)
     mdl = _fit_mdl_to_init_points(mdl, func, dim, ub, lb, init_points, lhs_sampler)
 
     # setup some quantities
-    lb_, ub_, pso_kwargs, pso_seed = _setup_vpso(lb, ub, seed, verbosity, pso_kwargs)
+    lb_, ub_, pso_kwargs, pso_seed = _setup_vpso(lb, ub, seed, pso_kwargs)
     k = mdl.ym_.argmin()
     x_best = mdl.Xm_[0, k]
     y_best = mdl.ym_[0, k].item()
@@ -163,8 +149,6 @@ def go(
         if y_new < y_best:
             x_best = x_new[0]
             y_best = y_new.item()
-        if logger.level <= logging.INFO:
-            logger.info("best values at iteration %i: %e", iteration, y_best)
 
         # partially fit the regression model to the new point
         mdl_new = partial_fit(mdl, x_new.reshape(1, 1, -1), y_new.reshape(1, 1, 1))
