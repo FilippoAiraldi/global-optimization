@@ -11,7 +11,7 @@ References
 """
 
 
-from enum import IntEnum
+from enum import Enum
 from typing import NamedTuple, Union
 
 import numba as nb
@@ -21,7 +21,7 @@ from vpso.math import batch_cdist, batch_cdist_and_pdist, batch_pdist
 from vpso.typing import Array2d, Array3d
 
 
-class Kernel(IntEnum):
+class Kernel(np.int8, Enum):
     """Kernels for RBF regression."""
 
     InverseQuadratic = 0
@@ -85,40 +85,33 @@ DELTA = 1e-12
 
 @nb.njit(
     [
-        nb.float64(nb.float64, nb.float64, nb.types.IntEnumMember(Kernel, nb.int64)),
-        nb.float64[:, :](
-            nb.float64[:, :], nb.float64, nb.types.IntEnumMember(Kernel, nb.int64)
-        ),
-        nb.float64[:, :, :](
-            nb.float64[:, :, :], nb.float64, nb.types.IntEnumMember(Kernel, nb.int64)
-        ),
+        nb.float64(nb.float64, nb.float64, nb.int8),
+        nb.float64[:](nb.float64[:], nb.float64, nb.int8),
+        nb.float64[:, :](nb.float64[:, :], nb.float64, nb.int8),
+        nb.float64[:, :, :](nb.float64[:, :, :], nb.float64, nb.int8),
     ],
     cache=True,
     nogil=True,
 )
 def rbf(d2: np.ndarray, eps: float, kernel: Kernel) -> np.ndarray:
-    if kernel == Kernel.InverseQuadratic:
+    if kernel == Kernel.InverseQuadratic.value:
         return 1 / (1 + eps**2 * d2)
-    if kernel == Kernel.Multiquadric:
+    if kernel == Kernel.Multiquadric.value:
         return np.sqrt(1 + eps**2 * d2)
-    if kernel == Kernel.Linear:
+    if kernel == Kernel.Linear.value:
         return eps * np.sqrt(d2)
-    if kernel == Kernel.Gaussian:
+    if kernel == Kernel.Gaussian.value:
         return np.exp(-(eps**2) * d2)
-    if kernel == Kernel.ThinPlateSpline:
+    if kernel == Kernel.ThinPlateSpline.value:
         return eps**2 * d2 * np.log(np.maximum(eps * d2, DELTA))
-    if kernel == Kernel.InverseMultiquadric:
+    if kernel == Kernel.InverseMultiquadric.value:
         return 1 / np.sqrt(1 + eps**2 * d2)
-    raise ValueError(f"unknown RBF kernel type: {type}")
+    raise ValueError(f"unknown RBF kernel: {kernel}")
 
 
 @nb.njit(
     nb.types.UniTuple(nb.float64[:, :, :], 2)(
-        nb.float64[:, :, :],
-        nb.float64[:, :, :],
-        nb.float64,
-        nb.types.IntEnumMember(Kernel, nb.int64),
-        nb.float64,
+        nb.float64[:, :, :], nb.float64[:, :, :], nb.float64, nb.int8, nb.float64
     ),
     cache=True,
     nogil=True,
@@ -157,7 +150,7 @@ def _rbf_fit(mdl: Rbf, X: Array3d, y: Array3d) -> Rbf:
         nb.float64[:, :, :],
         nb.float64[:, :, :],
         nb.float64,
-        nb.types.IntEnumMember(Kernel, nb.int64),
+        nb.int8,
         nb.float64,
     ),
     cache=True,
@@ -216,12 +209,7 @@ def _rbf_partial_fit(mdl: Rbf, X: Array3d, y: Array2d) -> Rbf:
 
 
 @nb.njit(
-    nb.float64[:, :, :](
-        nb.float64[:, :, :],
-        nb.float64[:, :, :],
-        nb.float64,
-        nb.types.IntEnumMember(Kernel, nb.int64),
-    ),
+    nb.float64[:, :, :](nb.float64[:, :, :], nb.float64[:, :, :], nb.float64, nb.int8),
     cache=True,
     nogil=True,
 )
