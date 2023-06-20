@@ -1,4 +1,4 @@
 joblib>=1.2.0
 prettytable>=3.7.0
 optuna>=3.1.1
-vpso>=1.1.0
+vpso>=1.1.1

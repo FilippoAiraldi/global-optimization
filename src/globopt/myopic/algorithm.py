@@ -19,7 +19,6 @@ from vpso.typing import Array1d, Array2d
 
 from globopt.core.regression import Idw, Rbf, fit, partial_fit
 from globopt.myopic.acquisition import acquisition
-from globopt.util.random import make_seeds
 
 
 def _fit_mdl_to_init_points(
@@ -42,31 +41,27 @@ def _fit_mdl_to_init_points(
 
 
 def _setup_vpso(
-    lb: Array1d, ub: Array1d, seed: Optional[int], pso_kwargs: Optional[dict[str, Any]]
-) -> tuple[Array2d, Array2d, dict[str, Any], Optional[int]]:
+    lb: Array1d, ub: Array1d, pso_kwargs: Optional[dict[str, Any]]
+) -> tuple[Array2d, Array2d, dict[str, Any]]:
     """Sets up the bounds and kwargs for the VPSO algorithm."""
     lb = lb[np.newaxis]
     ub = ub[np.newaxis]
     if pso_kwargs is None:
         pso_kwargs = {}
-    return lb, ub, pso_kwargs, pso_kwargs.pop("seed", seed)
+    return lb, ub, pso_kwargs
 
 
 def go(
     func: Callable[[Array2d], ArrayLike],
     lb: Array1d,
     ub: Array1d,
-    #
     mdl: Union[Idw, Rbf],
     init_points: Union[int, Array2d] = 5,
     c1: float = 1.5078,
     c2: float = 1.4246,
-    #
     maxiter: int = 50,
-    #
-    seed: Optional[int] = None,
+    seed: Union[None, int, np.random.Generator] = None,
     callback: Optional[Callable[[Literal["go", "nmgo"], dict[str, Any]], None]] = None,
-    #
     pso_kwargs: Optional[dict[str, Any]] = None,
 ) -> tuple[Array1d, float]:
     """Global Optimization (GO) based on RBF or IDW regression [1].
@@ -95,8 +90,8 @@ def go(
         acquisition function, by default `1.4246`.
     maxiter : int, optional
         Maximum number of iterations to run the algorithm for, by default `50`.
-    seed : int, optional
-        Seed for the random number generator, by default `None`.
+    seed : int or generator, optional
+        Seed for the random number generator or a generator itself, by default `None`.
     callback : callable with {"go", "nmgo"} and dict, optional
         A callback function called before the first and at the end of each iteration.
         It must take as input a string indicating the current algorithm and a dictionary
@@ -119,11 +114,14 @@ def go(
 
     # add initial points to regression model
     dim = lb.size
-    lhs_sampler = LatinHypercube(d=dim, seed=seed)
+    np_random = (
+        seed if isinstance(seed, np.random.Generator) else np.random.default_rng(seed)
+    )
+    lhs_sampler = LatinHypercube(d=dim, seed=np_random)
     mdl = _fit_mdl_to_init_points(mdl, func, dim, ub, lb, init_points, lhs_sampler)
 
     # setup some quantities
-    lb_, ub_, pso_kwargs, pso_seed = _setup_vpso(lb, ub, seed, pso_kwargs)
+    lb_, ub_, pso_kwargs = _setup_vpso(lb, ub, pso_kwargs)
     k = mdl.ym_.argmin()
     x_best = mdl.Xm_[0, k]
     y_best = mdl.ym_[0, k].item()
@@ -131,15 +129,15 @@ def go(
         callback("go", locals())
 
     # main loop
-    for _, seed_ in zip(range(maxiter), make_seeds(pso_seed)):
+    for _ in range(maxiter):
         # choose next point to sample by minimizing the myopic acquisition function
         dym = mdl.ym_.ptp(1, keepdims=True)
         x_new, acq_opt, _ = vpso(
             lambda x: acquisition(x, mdl, c1, c2, None, dym)[:, :, 0],
             lb_,
             ub_,
+            seed=np_random,
             **pso_kwargs,
-            seed=seed_,
         )
         x_new = x_new[0]
         acq_opt = acq_opt.item()
