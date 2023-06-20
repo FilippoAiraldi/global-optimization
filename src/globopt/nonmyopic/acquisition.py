@@ -9,7 +9,7 @@ References
 """
 
 
-from typing import Any, Literal, Optional
+from typing import Any, Literal, Optional, Union
 
 import numba as nb
 import numpy as np
@@ -27,7 +27,6 @@ from globopt.core.regression import (
 )
 from globopt.myopic.acquisition import _idw_variance, _idw_weighting
 from globopt.myopic.acquisition import acquisition as myopic_acquisition
-from globopt.util.random import make_seeds
 
 
 @nb.njit(
@@ -105,7 +104,7 @@ def _next_query_point(
     ub: Optional[Array1d],
     rollout: bool,
     pso_kwargs: dict[str, Any],
-    seed: Optional[int],
+    seed: np.random.Generator,
 ) -> Array3d:
     """Computes the next point to query. If the strategy is `"mpc"`, then the next point
     is just the next point in the trajectory. If the strategy is `"rollout"`, then, for
@@ -164,20 +163,19 @@ def _compute_acquisition(
     n_samples: int,
     rollout: bool,
     pso_kwargs: dict[str, Any],
-    rng: Optional[Array2d],
+    seed: np.random.Generator,
 ) -> Array1d:
     """Actual computation of the non-myopic acquisition acquisition function."""
-    seeds = make_seeds(str(rng.data.tobytes()) if rng is not None else None)
     a = np.zeros(n_samples, dtype=np.float64)
     y_min = mdl.ym_.min(1, keepdims=True)
     y_max = mdl.ym_.max(1, keepdims=True)
-    for h, seed in zip(range(horizon), seeds):
+    for h in range(horizon):
         x_next = _next_query_point(
             x, mdl, h, c1, c2, y_min, y_max, lb, ub, rollout, pso_kwargs, seed
         )
-        rng_ = rng[h] if rng is not None else None
+        rng_h = rng[h] if rng is not None else None
         mdl, y_min, y_max = _advance_regression(
-            a, x, x_next, mdl, h, gamma, c1, c2, y_min, y_max, rng_
+            a, x, x_next, mdl, h, gamma, c1, c2, y_min, y_max, rng_h
         )
     return a
 
@@ -194,6 +192,7 @@ def deterministic_acquisition(
     ub: Optional[Array1d] = None,  # only when `type == "rollout"`
     pso_kwargs: Optional[dict[str, Any]] = None,
     check: bool = True,
+    seed: Union[None, int, np.random.Generator] = None,
 ) -> Array1d:
     """Computes the non-myopic acquisition function for IDW/RBF regression models with
     deterministic evolution of the regressor, i.e., without MC integration.
@@ -237,9 +236,11 @@ def deterministic_acquisition(
         pso_kwargs = {}
     if check:
         _check_args(x, mdl.Xm_.shape[0], horizon, type, lb, ub)
+    if not isinstance(seed, np.random.Generator):
+        seed = np.random.default_rng(seed)
     n_samples, mdl, lb, ub, rollout = _initialize_mdl_and_bounds(x, mdl, type, lb, ub)
     return _compute_acquisition(
-        x, mdl, horizon, discount, c1, c2, lb, ub, n_samples, rollout, pso_kwargs, None
+        x, mdl, horizon, discount, c1, c2, lb, ub, n_samples, rollout, pso_kwargs, seed
     )
 
 
