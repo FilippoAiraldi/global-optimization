@@ -121,8 +121,7 @@ def _next_query_point(
 
 
 @nb.njit(cache=True, nogil=True)
-def _advance_regression(
-    a: Array1d,
+def _advance(
     x: Array3d,
     x_next: Array3d,
     mdl: RegressorType,
@@ -133,8 +132,8 @@ def _advance_regression(
     y_min: Array3d,
     y_max: Array3d,
     rng: Optional[Array1d],
-) -> tuple[RegressorType, Array3d, Array3d]:
-    """Advances the regression model dynamically, and accumulates the stage cost."""
+) -> tuple[RegressorType, Array1d, Array3d, Array3d]:
+    """Advances the regression model dynamically, and returns the stage cost."""
     # predict dynamics of the regression
     y_hat = predict(mdl, x_next)
     if rng is not None:
@@ -145,11 +144,11 @@ def _advance_regression(
 
     # compute reward, fit regression to new point, and update min/max
     dym = y_max - y_min
-    a += (gamma**h) * myopic_acquisition(x_next, mdl, c1, c2, y_hat, dym)[:, 0, 0]
+    r = (gamma**h) * myopic_acquisition(x_next, mdl, c1, c2, y_hat, dym)[:, 0, 0]
     mdl = partial_fit(mdl, x_next, y_hat)
     y_min = np.minimum(y_min, y_hat)
     y_max = np.maximum(y_max, y_hat)
-    return mdl, y_min, y_max
+    return mdl, r, y_min, y_max
 
 
 def _compute_acquisition(
@@ -176,9 +175,10 @@ def _compute_acquisition(
             x, mdl, h, c1, c2, y_min, y_max, lb, ub, rollout, pso_kwargs, seed
         )
         rng_h = rng[h] if rng is not None else None
-        mdl, y_min, y_max = _advance_regression(
+        mdl, r, y_min, y_max = _advance(
             a, x, x_next, mdl, h, gamma, c1, c2, y_min, y_max, rng_h
         )
+        a += r
     return a
 
 
@@ -226,8 +226,12 @@ def deterministic_acquisition(
     lb, ub : 1d array, optional
         Lower and upper bounds of the search domain. Only required when
         `type == "rollout"`.
+    ps_kwargs : dict, optional
+        Options to be passed to the `vpso` solver. Cannot include `"seed"` key.
     check : bool, optional
         Whether to perform checks on the inputs, by default `True`.
+    seed : int or np.random.Generator, optional
+        Seed for the random number generator or a generator itself, by default `None`.
 
     Returns
     -------
@@ -278,13 +282,69 @@ def acquisition(
     quasi_mc: bool = True,
     common_random_numbers: bool = True,
     antithetic_variates: bool = True,
-    # control_variate: bool = True,
+    # control_variate: bool = True,  # TODO:
     #
     pso_kwargs: Optional[dict[str, Any]] = None,
-    seed: Optional[int] = None,
     check: bool = True,
-) -> Array1d:
-    # TODO: write doc
+    seed: Optional[int] = None,
+    return_as_list: bool = False,
+) -> Union[Array1d, list[Array1d]]:
+    """Computes the non-myopic acquisition function for IDW/RBF regression models with
+    Monte Carlo simulations.
+
+    Parameters
+    ----------
+    x : array of shape (n_samples, horizon, dim) or (n_samples, 1, dim)
+        Array of points for which to compute the acquisition. `n_samples` is the number
+        of target points for which to compute the acquisition, and `dim` is the number
+        of features/variables of each point. In case of `type == "mpc"`, `horizon` is
+        the length of the prediced trajectory of sampled points; while in case of
+        `type == "rollout"`, since only the first sample point is optimized over, this
+        dimension has to be 1.
+    mdl : Idw or Rbf
+        Fitted model to use for computing the acquisition function.
+    horizon : int
+        Length of the prediced trajectory of sampled points.
+    discount : float
+        Discount factor for the lookahead horizon.
+    c1 : float, optional
+        Weight of the contribution of the variance function, by default `1.5078`.
+    c2 : float, optional
+        Weight of the contribution of the distance function, by default `1.4246`.
+    type : {"rollout", "mpc"}, optional
+        The strategy to be used for approximately solving the optimal control problem.
+        `"rollout"` optimizes over only the first sample point and then applies the
+        myopic acquisition as base policy for the remaining horizon. `"mpc"` optimizes
+        over the entire trajectory instead.
+    lb, ub : 1d array, optional
+        Lower and upper bounds of the search domain. Only required when
+        `type == "rollout"`.
+    mc_iters : int, optional
+        Number of Monte Carlo iterations, by default `1024`.
+    quasi_mc : bool, optional
+        Whether to use quasi Monte Carlo sampling, by default `True`.
+    common_random_numbers : bool, optional
+        Whether to use common random numbers, by default `True`. In this case, `seed`,
+        if passed at all, is discarded.
+    antithetic_variates : bool, optional
+        Whether to use antithetic variates, by default `True`.
+    control_variate  # TODO
+    pso_kwargs : dict, optional
+        Options to be passed to the `vpso` solver. Cannot include `"seed"` key.
+    check : bool, optional
+        Whether to perform checks on the inputs, by default `True`.
+    seed : int or np.random.Generator, optional
+        Seed for the random number generator or a generator itself, by default `None`.
+    return_as_list : bool, optional
+        Whether to return the list of iterations of the MC integration or just the
+        resulting average. By default `False`, which only returns the average.
+
+    Returns
+    -------
+    1d array or list of
+        The non-myopic acquisition function for each target point (per MC iteration,
+        if `return_as_list == True`)
+    """
     if pso_kwargs is None:
         pso_kwargs = {}
     if check:
@@ -302,10 +362,8 @@ def acquisition(
         rng = _draw_normal(mc_iters, horizon, n_samples, quasi_mc, np_random)
 
     # loop over MC iterations and return the average
-    # TODO: parallelize this loop with joblib (try threads and processes)
-    a = np.zeros(n_samples)
-    for i in range(mc_iters):
-        a += _compute_acquisition(
+    generator = (
+        _compute_acquisition(
             x,
             mdl,
             horizon,
@@ -320,4 +378,16 @@ def acquisition(
             np_random,
             rng[i],
         )
-    return a / mc_iters
+        for i in range(mc_iters)
+    )
+    return (
+        list(generator)
+        if return_as_list
+        else sum(generator, start=np.zeros(n_samples)) / mc_iters
+    )
+
+
+# TODO:
+# 1. parallelize MC loop with joblib (try threads and processes)
+# 2. implement control variate
+# 3. try to jit as much as possible
