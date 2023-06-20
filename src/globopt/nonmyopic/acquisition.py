@@ -164,6 +164,7 @@ def _compute_acquisition(
     rollout: bool,
     pso_kwargs: dict[str, Any],
     seed: np.random.Generator,
+    rng: Optional[Array2d] = None,
 ) -> Array1d:
     """Actual computation of the non-myopic acquisition acquisition function."""
     a = np.zeros(n_samples, dtype=np.float64)
@@ -236,8 +237,7 @@ def deterministic_acquisition(
         pso_kwargs = {}
     if check:
         _check_args(x, mdl.Xm_.shape[0], horizon, type, lb, ub)
-    if not isinstance(seed, np.random.Generator):
-        seed = np.random.default_rng(seed)
+    seed = np.random.default_rng(seed)
     n_samples, mdl, lb, ub, rollout = _initialize_mdl_and_bounds(x, mdl, type, lb, ub)
     return _compute_acquisition(
         x, mdl, horizon, discount, c1, c2, lb, ub, n_samples, rollout, pso_kwargs, seed
