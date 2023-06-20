@@ -37,29 +37,46 @@ discount = 0.9
 
 # compute the non-myopic acquisition for `x_target` with deterministic dynamics - no
 # MC integration is required
-a_deterministic = deterministic_acquisition(
-    x_target, mdl, horizon, discount, c1, c2, "rollout", lb, ub
-).item()
-# x_ = np.random.rand(1, horizon, 1)
-# a__ = deterministic_acquisition(x_, mdl, horizon, discount, c1, c2, "mpc").item()
+args = (x_target, mdl, horizon, discount, c1, c2, "rollout", lb, ub)
+a_deterministic = deterministic_acquisition(*args).item()
 
-# compute the non-myopic acquisition function for x with no variance reduction but high
-# MC iterations to get a baseline
-a_mc = acquisition(
-    x_target,
-    mdl,
-    horizon,
-    discount,
-    c1,
-    c2,
-    "rollout",
-    lb,
-    ub,
-    mc_iters=4,
+# compute reference MC estimate with a large number of MC iterations
+a_target = acquisition(
+    *args,
+    mc_iters=2**64,
     quasi_mc=False,
     common_random_numbers=False,
+    antithetic_variates=False,
     seed=69,
-    return_as_list=True,
 ).item()
 
-quit()
+# compute the non-myopic acquisition function for x with different variance reductions
+mc_iters = 2**6
+a_no_vr = acquisition(
+    *args,
+    mc_iters=mc_iters,
+    quasi_mc=False,
+    common_random_numbers=False,
+    antithetic_variates=False,
+    seed=69,
+    return_as_list=True,
+)
+a_qmc = acquisition(
+    *args,
+    mc_iters=mc_iters,
+    quasi_mc=True,
+    common_random_numbers=False,
+    antithetic_variates=False,
+    seed=69,
+    return_as_list=True,
+)
+
+
+# plotting
+iters_ = np.arange(1, mc_iters + 1)
+_, ax = plt.subplots(1, 1, constrained_layout=True)
+ax.semilogy(iters_, np.abs(np.cumsum(a_no_vr) / iters_ - a_target), label="No VR")
+ax.semilogy(iters_, np.abs(np.cumsum(a_qmc) / iters_ - a_target), label="Quasi-MC")
+ax.set_xlabel("MC iterations")
+ax.set_ylabel("Estimation error")
+plt.show()

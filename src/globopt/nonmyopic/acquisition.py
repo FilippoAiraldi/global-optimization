@@ -125,8 +125,6 @@ def _advance(
     x: Array3d,
     x_next: Array3d,
     mdl: RegressorType,
-    h: int,
-    gamma: float,
     c1: float,
     c2: float,
     y_min: Array3d,
@@ -144,7 +142,7 @@ def _advance(
 
     # compute reward, fit regression to new point, and update min/max
     dym = y_max - y_min
-    r = (gamma**h) * myopic_acquisition(x_next, mdl, c1, c2, y_hat, dym)[:, 0, 0]
+    r = myopic_acquisition(x_next, mdl, c1, c2, y_hat, dym)[:, 0, 0]
     mdl = partial_fit(mdl, x_next, y_hat)
     y_min = np.minimum(y_min, y_hat)
     y_max = np.maximum(y_max, y_hat)
@@ -155,7 +153,7 @@ def _compute_acquisition(
     x: Array3d,
     mdl: RegressorType,
     horizon: int,
-    gamma: float,
+    discount: float,
     c1: float,
     c2: float,
     lb: Optional[Array1d],
@@ -174,11 +172,10 @@ def _compute_acquisition(
         x_next = _next_query_point(
             x, mdl, h, c1, c2, y_min, y_max, lb, ub, rollout, pso_kwargs, seed
         )
-        rng_h = rng[h] if rng is not None else None
         mdl, r, y_min, y_max = _advance(
-            a, x, x_next, mdl, h, gamma, c1, c2, y_min, y_max, rng_h
+            x, x_next, mdl, c1, c2, y_min, y_max, rng[h] if rng is not None else None
         )
-        a += r
+        a += (discount**h) * r
     return a
 
 
@@ -258,7 +255,7 @@ def _draw_normal(
 ) -> Array3d:
     """Draws a (quasi) random sample from the standard normal distribution."""
     if not quasi_mc:
-        np_random.standard_normal((mc_iters, horizon, n_samples))
+        return np_random.standard_normal((mc_iters, horizon, n_samples))
 
     qmc_sampler = MultivariateNormalQMC(
         mean=np.zeros(horizon * n_samples), inv_transform=False, seed=np_random
@@ -320,7 +317,8 @@ def acquisition(
         Lower and upper bounds of the search domain. Only required when
         `type == "rollout"`.
     mc_iters : int, optional
-        Number of Monte Carlo iterations, by default `1024`.
+        Number of Monte Carlo iterations, by default `1024`. For better sampling, the
+        iterations should be a power of 2.
     quasi_mc : bool, optional
         Whether to use quasi Monte Carlo sampling, by default `True`.
     common_random_numbers : bool, optional
@@ -335,6 +333,7 @@ def acquisition(
         Whether to perform checks on the inputs, by default `True`.
     seed : int or np.random.Generator, optional
         Seed for the random number generator or a generator itself, by default `None`.
+        Only used when `common_random_numbers == False`.
     return_as_list : bool, optional
         Whether to return the list of iterations of the MC integration or just the
         resulting average. By default `False`, which only returns the average.
