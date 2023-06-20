@@ -11,28 +11,57 @@ References
 
 from typing import Any, Literal, Optional
 
+import numba as nb
 import numpy as np
 
 # from scipy.stats.qmc import MultivariateNormalQMC
 from vpso import vpso
 from vpso.typing import Array1d, Array2d, Array3d
 
-from globopt.core.regression import RegressorType, partial_fit, predict, repeat
+from globopt.core.regression import (
+    RegressorType,
+    partial_fit,
+    predict,
+    repeat,
+    repeat_along_first_axis,
+)
 from globopt.myopic.acquisition import _idw_variance, _idw_weighting
 from globopt.myopic.acquisition import acquisition as myopic_acquisition
 from globopt.util.random import make_seeds
 
 
+@nb.njit(
+    [
+        nb.types.void(
+            nb.float64[:, :, :],
+            nb.int64,
+            nb.int64,
+            nb.types.unicode_type,
+            nb.types.none,
+            nb.types.none,
+        ),
+        nb.types.void(
+            nb.float64[:, :, :],
+            nb.int64,
+            nb.int64,
+            nb.types.unicode_type,
+            nb.float64[:],
+            nb.float64[:],
+        ),
+    ],
+    cache=True,
+    nogil=True,
+)
 def _check_args(
     x: Array3d,
-    mdl: RegressorType,
+    batch: int,
     horizon: int,
     type: Literal["rollout", "mpc"],
     lb: Optional[Array1d],
     ub: Optional[Array1d],
 ) -> None:
     """Checks input arguments."""
-    assert mdl.Xm_.shape[0] == 1, "regression model must be non-batched"
+    assert batch == 1, "regression model must be non-batched"
     if type == "rollout":
         assert (
             ub is not None and lb is not None
@@ -44,26 +73,83 @@ def _check_args(
         ), "x must have the same number of time steps as the horizon"
 
 
-def _initialize(
+@nb.njit(cache=True, nogil=True)
+def _initialize_mdl_and_bounds(
     x: Array3d,
     mdl: RegressorType,
     type: Literal["rollout", "mpc"],
     lb: Optional[Array1d],
     ub: Optional[Array1d],
-    pso_kwarg: Optional[dict[str, Any]],
-) -> tuple[
-    int, RegressorType, Optional[Array2d], Optional[Array2d], bool, dict[str, Any]
-]:
+) -> tuple[int, RegressorType, Optional[Array2d], Optional[Array2d], bool]:
     """Initializes the quantities need for computing the acquisition function."""
     n_samples = x.shape[0]
     mdl = repeat(mdl, n_samples)
-    is_mpc = type == "mpc"
-    if not is_mpc:
-        lb = lb[np.newaxis].repeat(n_samples, 0)  # type: ignore[index]
-        ub = ub[np.newaxis].repeat(n_samples, 0)  # type: ignore[index]
-    if pso_kwarg is None:
-        pso_kwarg = {}
-    return n_samples, mdl, lb, ub, is_mpc, pso_kwarg
+    rollout = type != "mpc"
+    if lb is not None and ub is not None:
+        lb_ = repeat_along_first_axis(np.expand_dims(lb, 0), n_samples)
+        ub_ = repeat_along_first_axis(np.expand_dims(ub, 0), n_samples)
+    else:
+        lb_ = ub_ = None
+    return n_samples, mdl, lb_, ub_, rollout
+
+
+def _next_query_point(
+    x: Array3d,
+    mdl: RegressorType,
+    h: int,
+    c1: float,
+    c2: float,
+    y_min: Array3d,
+    y_max: Array3d,
+    lb: Optional[Array1d],
+    ub: Optional[Array1d],
+    rollout: bool,
+    pso_kwargs: dict[str, Any],
+    seed: Optional[int],
+) -> Array3d:
+    """Computes the next point to query. If the strategy is `"mpc"`, then the next point
+    is just the next point in the trajectory. If the strategy is `"rollout"`, then, for
+    `h=0`, the next point is the input, and for `h>0`, the next point is the
+    minimizer of the myopic acquisition function, i.e., base policy."""
+    if not rollout:  # type == "mpc"
+        return x[:, h, np.newaxis, :]
+    elif h == 0:  # type == "rollout" and first iteration
+        return x
+    dym = y_max - y_min
+    func = lambda x: myopic_acquisition(x, mdl, c1, c2, None, dym)[:, :, 0]
+    return vpso(func, lb, ub, **pso_kwargs, seed=seed)[0][:, np.newaxis, :]
+
+
+@nb.njit(cache=True, nogil=True)
+def _advance_regression(
+    a: Array1d,
+    x: Array3d,
+    x_next: Array3d,
+    mdl: RegressorType,
+    h: int,
+    gamma: float,
+    c1: float,
+    c2: float,
+    y_min: Array3d,
+    y_max: Array3d,
+    rng: Optional[Array1d],
+) -> tuple[RegressorType, Array3d, Array3d]:
+    """Advances the regression model dynamically, and accumulates the stage cost."""
+    # predict dynamics of the regression
+    y_hat = predict(mdl, x_next)
+    if rng is not None:
+        std = _idw_variance(
+            y_hat, mdl.ym_, _idw_weighting(x, mdl.Xm_, mdl.exp_weighting)
+        )
+        y_hat[:, 0, 0] += std[:, 0, 0] * rng
+
+    # compute reward, fit regression to new point, and update min/max
+    dym = y_max - y_min
+    a += (gamma**h) * myopic_acquisition(x_next, mdl, c1, c2, y_hat, dym)[:, 0, 0]
+    mdl = partial_fit(mdl, x_next, y_hat)
+    y_min = np.minimum(y_min, y_hat)
+    y_max = np.maximum(y_max, y_hat)
+    return mdl, y_min, y_max
 
 
 def _compute_acquisition(
@@ -76,45 +162,23 @@ def _compute_acquisition(
     lb: Optional[Array1d],
     ub: Optional[Array1d],
     n_samples: int,
-    is_mpc: bool,
-    pso_kwarg: dict[str, Any],
-    normal_rng: Optional[list[float]],
+    rollout: bool,
+    pso_kwargs: dict[str, Any],
+    rng: Optional[Array2d],
 ) -> Array1d:
     """Actual computation of the non-myopic acquisition acquisition function."""
-    seeds = make_seeds(str(normal_rng) if normal_rng else None)
+    seeds = make_seeds(str(rng.data.tobytes()) if rng is not None else None)
     a = np.zeros(n_samples, dtype=np.float64)
     y_min = mdl.ym_.min(1, keepdims=True)
     y_max = mdl.ym_.max(1, keepdims=True)
     for h, seed in zip(range(horizon), seeds):
-        # compute the next point to query. If the strategy is "mpc", then the next point
-        # is just the next point in the trajectory. If the strategy is "rollout", then,
-        # for h=0, the next point is the input, and for h>0, the next point is the
-        # minimizer of the myopic acquisition function, i.e., base policy.
-        dym = y_max - y_min
-        if is_mpc:  # type == "mpc"
-            x_next = x[:, h, np.newaxis, :]
-        elif h == 0:  # type == "rollout" and first iteration
-            x_next = x
-        else:  # type == "rollout"
-            func = lambda x: myopic_acquisition(x, mdl, c1, c2, None, dym)[:, :, 0]
-            x_next = vpso(func, lb, ub, **pso_kwarg, seed=seed)[0][:, np.newaxis, :]
-
-        # predict the sampling of the next point, either deterministically or with some
-        # stochasticity due to the variance
-        y_hat = predict(mdl, x_next)
-        if normal_rng:
-            std = _idw_variance(
-                y_hat, mdl.ym_, _idw_weighting(x, mdl.Xm_, mdl.exp_weighting)
-            )
-            y_hat += std * normal_rng[h]
-
-        # add to reward
-        a += (gamma**h) * myopic_acquisition(x_next, mdl, c1, c2, y_hat, dym)[:, 0, 0]
-
-        # fit regression to new point, and update min/max
-        mdl = partial_fit(mdl, x_next, y_hat)
-        y_min = np.minimum(y_min, y_hat)
-        y_max = np.maximum(y_max, y_hat)
+        x_next = _next_query_point(
+            x, mdl, h, c1, c2, y_min, y_max, lb, ub, rollout, pso_kwargs, seed
+        )
+        rng_ = rng[h] if rng is not None else None
+        mdl, y_min, y_max = _advance_regression(
+            a, x, x_next, mdl, h, gamma, c1, c2, y_min, y_max, rng_
+        )
     return a
 
 
@@ -128,7 +192,7 @@ def deterministic_acquisition(
     type: Literal["rollout", "mpc"] = "rollout",
     lb: Optional[Array1d] = None,  # only when `type == "rollout"`
     ub: Optional[Array1d] = None,  # only when `type == "rollout"`
-    pso_kwarg: Optional[dict[str, Any]] = None,
+    pso_kwargs: Optional[dict[str, Any]] = None,
     check: bool = True,
 ) -> Array1d:
     """Computes the non-myopic acquisition function for IDW/RBF regression models with
@@ -169,13 +233,13 @@ def deterministic_acquisition(
     1d array
         The deterministic non-myopic acquisition function for each target point.
     """
+    if pso_kwargs is None:
+        pso_kwargs = {}
     if check:
-        _check_args(x, mdl, horizon, type, lb, ub)
-    n_samples, mdl, lb, ub, is_mpc, pso_kwarg = _initialize(
-        x, mdl, type, lb, ub, pso_kwarg
-    )
+        _check_args(x, mdl.Xm_.shape[0], horizon, type, lb, ub)
+    n_samples, mdl, lb, ub, rollout = _initialize_mdl_and_bounds(x, mdl, type, lb, ub)
     return _compute_acquisition(
-        x, mdl, horizon, discount, c1, c2, lb, ub, n_samples, is_mpc, pso_kwarg, None
+        x, mdl, horizon, discount, c1, c2, lb, ub, n_samples, rollout, pso_kwargs, None
     )
 
 
