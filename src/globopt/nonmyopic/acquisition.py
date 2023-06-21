@@ -8,6 +8,7 @@ References
     functions. Computational Optimization and Applications, 77(2):571–595, 2020
 """
 
+from itertools import product
 from typing import Any, Literal, Optional, Union
 
 import numba as nb
@@ -18,6 +19,8 @@ from vpso.typing import Array1d, Array2d, Array3d
 
 from globopt.core.regression import (
     RegressorType,
+    nb_Idw,
+    nb_Rbf,
     partial_fit,
     predict,
     repeat,
@@ -33,21 +36,9 @@ FIXED_SEED = 1909
 @nb.njit(
     [
         nb.types.void(
-            nb.float64[:, :, :],
-            nb.int64,
-            nb.int64,
-            nb.types.unicode_type,
-            nb.types.none,
-            nb.types.none,
-        ),
-        nb.types.void(
-            nb.float64[:, :, :],
-            nb.int64,
-            nb.int64,
-            nb.types.unicode_type,
-            nb.float64[:],
-            nb.float64[:],
-        ),
+            nb.float64[:, :, :], nb.int64, nb.int64, nb.types.unicode_type, type, type
+        )
+        for type in (nb.float64[:], nb.types.none)
     ],
     cache=True,
     nogil=True,
@@ -73,7 +64,16 @@ def _check_args(
         ), "x must have the same number of time steps as the horizon"
 
 
-@nb.njit(cache=True, nogil=True)
+@nb.njit(
+    [
+        nb.types.Tuple((nb.int64, types[0], types[1], types[1], nb.bool_))(
+            nb.float64[:, :, :], types[0], nb.types.unicode_type, types[1], types[1]
+        )
+        for types in product((nb_Rbf, nb_Idw), (nb.float64[:], nb.types.none))
+    ],
+    cache=True,
+    nogil=True,
+)
 def _initialize_mdl_and_bounds(
     x: Array3d,
     mdl: RegressorType,
@@ -122,7 +122,24 @@ def _next_query_point(
     return vpso(func, lb, ub, **pso_kwargs, seed=seed)[0][:, np.newaxis, :]
 
 
-@nb.njit(cache=True, nogil=True)
+@nb.njit(
+    [
+        nb.types.Tuple(
+            (types[0], nb.float64[:], nb.float64[:, :, :], nb.float64[:, :, :])
+        )(
+            nb.float64[:, :, :],
+            types[0],
+            nb.float64,
+            nb.float64,
+            nb.float64[:, :, :],
+            nb.float64[:, :, :],
+            types[1],
+        )
+        for types in product((nb_Rbf, nb_Idw), (nb.float64[:], nb.types.none))
+    ],
+    cache=True,
+    nogil=True,
+)
 def _advance(
     x: Array3d,
     x_next: Array3d,
@@ -243,8 +260,8 @@ def deterministic_acquisition(
         pso_kwargs = {}
     if check:
         _check_args(x, mdl.Xm_.shape[0], horizon, type, lb, ub)
-    seed = np.random.default_rng(seed)
     n_samples, mdl, lb, ub, rollout = _initialize_mdl_and_bounds(x, mdl, type, lb, ub)
+    seed = np.random.default_rng(seed)
     return _compute_acquisition(
         x, mdl, horizon, discount, c1, c2, lb, ub, n_samples, rollout, pso_kwargs, seed
     )
