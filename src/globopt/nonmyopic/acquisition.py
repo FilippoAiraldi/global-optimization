@@ -111,13 +111,11 @@ def _next_query_point(
     is just the next point in the trajectory. If the strategy is `"rollout"`, then, for
     `h=0`, the next point is the input, and for `h>0`, the next point is the
     minimizer of the myopic acquisition function, i.e., base policy."""
-    if not rollout:  # type == "mpc"
+    if not rollout or h == 0:  # type == "mpc" or type == "rollout" and first iteration
         return x[:, h, np.newaxis, :]
-    elif h == 0:  # type == "rollout" and first iteration
-        return x
     dym = y_max - y_min
-    func = lambda x: myopic_acquisition(
-        x, mdl.Xm_, mdl.ym_, c1, c2, mdl.exp_weighting, predict(mdl, x), dym
+    func = lambda x_: myopic_acquisition(
+        x_, mdl.Xm_, mdl.ym_, c1, c2, mdl.exp_weighting, predict(mdl, x_), dym
     )[:, :, 0]
     return vpso(func, lb, ub, **pso_kwargs, seed=seed)[0][:, np.newaxis, :]
 
@@ -158,15 +156,14 @@ def _advance(
         )
         y_hat[:, 0, 0] += std[:, 0, 0] * rng
 
-    # compute reward, fit regression to new point, and update min/max
-    dym = y_max - y_min
-    r = myopic_acquisition(
-        x_next, mdl.Xm_, mdl.ym_, c1, c2, mdl.exp_weighting, y_hat, dym
+    # compute cost/reward, fit regression to the new point, and update min/max
+    cost = myopic_acquisition(
+        x_next, mdl.Xm_, mdl.ym_, c1, c2, mdl.exp_weighting, y_hat, y_max - y_min
     )[:, 0, 0]
-    mdl = partial_fit(mdl, x_next, y_hat)
-    y_min = np.minimum(y_min, y_hat)
-    y_max = np.maximum(y_max, y_hat)
-    return mdl, r, y_min, y_max
+    mdl_new = partial_fit(mdl, x_next, y_hat)
+    y_min_new = np.minimum(y_min, y_hat)
+    y_max_new = np.maximum(y_max, y_hat)
+    return mdl_new, cost, y_min_new, y_max_new
 
 
 def _compute_acquisition(
@@ -192,10 +189,10 @@ def _compute_acquisition(
         x_next = _next_query_point(
             x, mdl, h, c1, c2, y_min, y_max, lb, ub, rollout, pso_kwargs, seed
         )
-        mdl, r, y_min, y_max = _advance(
-            x, x_next, mdl, c1, c2, y_min, y_max, rng[h] if rng is not None else None
+        mdl, cost, y_min, y_max = _advance(
+            x_next, mdl, c1, c2, y_min, y_max, rng[h] if rng is not None else None
         )
-        a += (discount**h) * r
+        a += (discount**h) * cost
     return a
 
 
