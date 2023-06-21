@@ -141,7 +141,6 @@ def _next_query_point(
     nogil=True,
 )
 def _advance(
-    x: Array3d,
     x_next: Array3d,
     mdl: RegressorType,
     c1: float,
@@ -155,7 +154,7 @@ def _advance(
     y_hat = predict(mdl, x_next)
     if rng is not None:
         std = _idw_variance(
-            y_hat, mdl.ym_, _idw_weighting(x, mdl.Xm_, mdl.exp_weighting)
+            y_hat, mdl.ym_, _idw_weighting(x_next, mdl.Xm_, mdl.exp_weighting)
         )
         y_hat[:, 0, 0] += std[:, 0, 0] * rng
 
