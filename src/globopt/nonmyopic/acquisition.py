@@ -13,6 +13,7 @@ from typing import Any, Literal, Optional, Union
 
 import numba as nb
 import numpy as np
+from joblib import Parallel, delayed
 from scipy.stats.qmc import MultivariateNormalQMC
 from vpso import vpso
 from vpso.typing import Array1d, Array2d, Array3d
@@ -315,6 +316,7 @@ def acquisition(
     pso_kwargs: Optional[dict[str, Any]] = None,
     check: bool = True,
     seed: Optional[int] = None,
+    parallel: Optional[Parallel] = None,
     return_as_list: bool = False,
 ) -> Union[Array1d, list[Array1d]]:
     """Computes the non-myopic acquisition function for IDW/RBF regression models with
@@ -393,8 +395,10 @@ def acquisition(
     )
 
     # loop over MC iterations and return the average
-    generator = (
-        _compute_acquisition(
+    if parallel is None:
+        parallel = Parallel(n_jobs=-1, verbose=0, prefer="processes")
+    results = parallel(
+        delayed(_compute_acquisition)(
             x,
             mdl,
             horizon,
@@ -412,12 +416,11 @@ def acquisition(
         for i in range(mc_iters)
     )
     return (
-        list(generator)
+        results
         if return_as_list
-        else sum(generator, start=np.zeros(n_samples)) / mc_iters
+        else sum(results, start=np.zeros(n_samples)) / mc_iters
     )
 
 
 # TODO:
-# 1. parallelize MC loop with joblib (try threads and processes)
 # 2. implement control variate
