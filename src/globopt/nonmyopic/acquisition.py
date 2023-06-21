@@ -263,22 +263,36 @@ def deterministic_acquisition(
     )
 
 
-def _draw_normal(
+def _draw_standard_normal_sample(
     mc_iters: int,
     horizon: int,
     n_samples: int,
     quasi_mc: bool,
-    np_random: np.random.Generator,
-) -> Array3d:
-    """Draws a (quasi) random sample from the standard normal distribution."""
-    if not quasi_mc:
-        return np_random.standard_normal((mc_iters, horizon, n_samples))
+    common_random_numbers: bool,
+    antithetic_variates: bool,
+    seed: Union[None, int, np.random.Generator],
+) -> tuple[Array3d, np.random.Generator]:
+    """Draws a (quasi) random sample from the standard normal distribution, optionally
+    with Quasi-MC, CRN, and antithetic variates."""
+    if common_random_numbers:
+        seed = FIXED_SEED  # overwrite seed
+        n_samples = 1  # draw same numbers for all samples
+    np_random = np.random.default_rng(seed)
 
-    qmc_sampler = MultivariateNormalQMC(
-        mean=np.zeros(horizon * n_samples), inv_transform=False, seed=np_random
-    )
-    n_ = 2 ** int(np.ceil(np.log2(mc_iters)))
-    return qmc_sampler.random(n_)[:mc_iters].reshape((mc_iters, horizon, n_samples))
+    n = mc_iters // 2 if antithetic_variates else mc_iters
+    shape = (n, horizon, n_samples)
+
+    if quasi_mc:
+        qmc_sampler = MultivariateNormalQMC(
+            mean=np.zeros(horizon * n_samples), inv_transform=False, seed=np_random
+        )
+        sample = qmc_sampler.random(2 ** int(np.ceil(np.log2(n))))[:n].reshape(shape)
+    else:
+        sample = np_random.standard_normal(shape)
+
+    if antithetic_variates:
+        sample = np.concatenate((sample, -sample), 0)
+    return sample, np_random
 
 
 def acquisition(
@@ -368,14 +382,15 @@ def acquisition(
     n_samples, mdl, lb, ub, rollout = _initialize_mdl_and_bounds(x, mdl, type, lb, ub)
 
     # create random generator and draw all the necessary random numbers
-    np_random = np.random.default_rng(
-        FIXED_SEED if common_random_numbers else seed  # overwrite seed by CRN
+    random_numbers, np_random = _draw_standard_normal_sample(
+        mc_iters,
+        horizon,
+        n_samples,
+        quasi_mc,
+        common_random_numbers,
+        antithetic_variates,
+        seed,
     )
-    if antithetic_variates:
-        rng = _draw_normal(mc_iters // 2, horizon, n_samples, quasi_mc, np_random)
-        rng = np.concatenate((rng, -rng), 0)
-    else:
-        rng = _draw_normal(mc_iters, horizon, n_samples, quasi_mc, np_random)
 
     # loop over MC iterations and return the average
     generator = (
@@ -392,7 +407,7 @@ def acquisition(
             rollout,
             pso_kwargs,
             np_random,
-            rng[i],
+            random_numbers[i],
         )
         for i in range(mc_iters)
     )
@@ -406,4 +421,3 @@ def acquisition(
 # TODO:
 # 1. parallelize MC loop with joblib (try threads and processes)
 # 2. implement control variate
-# 3. try to jit as much as possible
