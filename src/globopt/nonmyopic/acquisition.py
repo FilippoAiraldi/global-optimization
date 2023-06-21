@@ -105,7 +105,7 @@ def _next_query_point(
     ub: Optional[Array1d],
     rollout: bool,
     pso_kwargs: dict[str, Any],
-    seed: np.random.Generator,
+    np_random: np.random.Generator,
 ) -> Array3d:
     """Computes the next point to query. If the strategy is `"mpc"`, then the next point
     is just the next point in the trajectory. If the strategy is `"rollout"`, then, for
@@ -117,7 +117,7 @@ def _next_query_point(
     func = lambda x_: myopic_acquisition(
         x_, mdl.Xm_, mdl.ym_, c1, c2, mdl.exp_weighting, predict(mdl, x_), dym
     )[:, :, 0]
-    return vpso(func, lb, ub, **pso_kwargs, seed=seed)[0][:, np.newaxis, :]
+    return vpso(func, lb, ub, **pso_kwargs, seed=np_random)[0][:, np.newaxis, :]
 
 
 @nb.njit(
@@ -178,7 +178,7 @@ def _compute_acquisition(
     n_samples: int,
     rollout: bool,
     pso_kwargs: dict[str, Any],
-    seed: np.random.Generator,
+    np_random: np.random.Generator,
     rng: Optional[Array2d] = None,
 ) -> Array1d:
     """Actual computation of the non-myopic acquisition acquisition function."""
@@ -187,7 +187,7 @@ def _compute_acquisition(
     y_max = mdl.ym_.max(1, keepdims=True)
     for h in range(horizon):
         x_next = _next_query_point(
-            x, mdl, h, c1, c2, y_min, y_max, lb, ub, rollout, pso_kwargs, seed
+            x, mdl, h, c1, c2, y_min, y_max, lb, ub, rollout, pso_kwargs, np_random
         )
         mdl, cost, y_min, y_max = _advance(
             x_next, mdl, c1, c2, y_min, y_max, rng[h] if rng is not None else None
