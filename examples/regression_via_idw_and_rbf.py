@@ -56,7 +56,7 @@ y_hat = [predict(mdl, x).squeeze() for mdl in mdls]
 x = x.flatten()
 _, ax = plt.subplots(constrained_layout=True, figsize=(7, 3))
 ax.plot(X.squeeze(), y.squeeze(), "o", markersize=9, color="C0")
-ax.plot(x, f(x), label="f(x)", lw=3)
+ax.plot(x, f(x), "--", label="f(x)", lw=3)
 for mdl, y_hat_ in zip(mdls, y_hat):
     ax.plot(x, y_hat_, label=str(mdl))
 ax.set_xlabel("x")

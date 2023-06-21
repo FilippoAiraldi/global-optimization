@@ -32,7 +32,7 @@ class TestAcquisition(unittest.TestCase):
         X = np.array([-2.61, -1.92, -0.63, 0.38, 2]).reshape(1, -1, 1)
         y = f(X)
 
-        mdl = fit(Rbf(Kernel.ThinPlateSpline, 0.01, svd_tol=0), X, y)
+        mdl = fit(Rbf(Kernel.ThinPlateSpline, 0.01, svd_tol=0.0), X, y)
         x = np.linspace(-3, 3, 1000).reshape(1, -1, 1)
         y_hat = predict(mdl, x)
         dym = y.ptp(1, keepdims=True)

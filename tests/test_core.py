@@ -67,8 +67,8 @@ class TestRegression(unittest.TestCase):
 
         mdls = [
             Idw(),
-            Rbf(Kernel.InverseQuadratic, 0.5, svd_tol=0),
-            Rbf(Kernel.ThinPlateSpline, 0.01, svd_tol=0),
+            Rbf(Kernel.InverseQuadratic, 0.5, svd_tol=0.0),
+            Rbf(Kernel.ThinPlateSpline, 0.01, svd_tol=0.0),
         ]
         fitresults = [fit(mdl, Xs[0], ys[0]) for mdl in mdls]
         for i in range(1, len(Xs)):
