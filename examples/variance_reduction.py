@@ -37,46 +37,51 @@ discount = 0.9
 
 # compute the non-myopic acquisition for `x_target` with deterministic dynamics - no
 # MC integration is required
-args = (x_target, mdl, horizon, discount, c1, c2, "rollout", lb, ub)
-a_deterministic = deterministic_acquisition(*args).item()
+kwargs = {
+    "x": x_target,
+    "mdl": mdl,
+    "horizon": horizon,
+    "discount": discount,
+    "c1": c1,
+    "c2": c2,
+    "type": "rollout",
+    "lb": lb,
+    "ub": ub,
+}
+a_deterministic = deterministic_acquisition(**kwargs, seed=420).item()
 
 # compute reference MC estimate with a large number of MC iterations
-a_target = acquisition(
-    *args,
-    mc_iters=2**64,
+a_target = acquisition(  # type: ignore[union-attr]
+    **kwargs,
+    mc_iters=2**8,
     quasi_mc=False,
-    common_random_numbers=False,
+    common_random_numbers=True,  # forces to use the specified seed
     antithetic_variates=False,
     seed=69,
 ).item()
 
 # compute the non-myopic acquisition function for x with different variance reductions
-mc_iters = 2**6
+kwargs["mc_iters"] = 2**7
 a_no_vr = acquisition(
-    *args,
-    mc_iters=mc_iters,
-    quasi_mc=False,
-    common_random_numbers=False,
-    antithetic_variates=False,
-    seed=69,
-    return_as_list=True,
+    **kwargs, quasi_mc=False, antithetic_variates=False, return_as_list=True
 )
 a_qmc = acquisition(
-    *args,
-    mc_iters=mc_iters,
-    quasi_mc=True,
-    common_random_numbers=False,
-    antithetic_variates=False,
-    seed=69,
-    return_as_list=True,
+    **kwargs, quasi_mc=True, antithetic_variates=False, return_as_list=True
+)
+a_qmc_atv = acquisition(
+    **kwargs, quasi_mc=True, antithetic_variates=True, return_as_list=True
 )
 
 
 # plotting
-iters_ = np.arange(1, mc_iters + 1)
+iters_ = np.arange(1, kwargs["mc_iters"] + 1)
 _, ax = plt.subplots(1, 1, constrained_layout=True)
-ax.semilogy(iters_, np.abs(np.cumsum(a_no_vr) / iters_ - a_target), label="No VR")
-ax.semilogy(iters_, np.abs(np.cumsum(a_qmc) / iters_ - a_target), label="Quasi-MC")
+for a, lbl in zip(
+    [a_no_vr, a_qmc, a_qmc_atv],
+    ["Standard MC", "Quasi-MC", "Quasi-MC + Antithetic Variates"],
+):
+    mean_estimate = np.cumsum(a) / iters_
+    ax.semilogy(iters_, np.abs(mean_estimate - a_target), label=lbl)
 ax.set_xlabel("MC iterations")
 ax.set_ylabel("Estimation error")
 plt.show()
