@@ -17,8 +17,8 @@ from scipy.stats.qmc import LatinHypercube
 from vpso import vpso
 from vpso.typing import Array1d, Array2d
 
-from globopt.core.regression import Idw, Rbf, fit, partial_fit
-from globopt.myopic.acquisition import acquisition
+from globopt.core.regression import Idw, Rbf, fit, partial_fit, predict
+from globopt.myopic.acquisition import _compute_acquisition as acquisition
 
 
 def _fit_mdl_to_init_points(
@@ -132,13 +132,10 @@ def go(
     for _ in range(maxiter):
         # choose next point to sample by minimizing the myopic acquisition function
         dym = mdl.ym_.ptp(1, keepdims=True)
-        x_new, acq_opt, _ = vpso(
-            lambda x: acquisition(x, mdl, c1, c2, None, dym)[:, :, 0],
-            lb_,
-            ub_,
-            seed=np_random,
-            **pso_kwargs,
-        )
+        vpso_func = lambda x: acquisition(
+            x, mdl.Xm_, mdl.ym_, c1, c2, mdl.exp_weighting, predict(mdl, x), dym
+        )[:, :, 0]
+        x_new, acq_opt, _ = vpso(vpso_func, lb_, ub_, seed=np_random, **pso_kwargs)
         x_new = x_new[0]
         acq_opt = acq_opt.item()
 
