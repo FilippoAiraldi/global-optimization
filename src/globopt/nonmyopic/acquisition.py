@@ -24,7 +24,7 @@ from globopt.core.regression import (
     repeat_along_first_axis,
 )
 from globopt.myopic.acquisition import _idw_variance, _idw_weighting
-from globopt.myopic.acquisition import acquisition as myopic_acquisition
+from globopt.myopic.acquisition import _compute_acquisition as myopic_acquisition
 
 """Seed that is used for COMMON random numbers generation."""
 FIXED_SEED = 1909
@@ -116,7 +116,9 @@ def _next_query_point(
     elif h == 0:  # type == "rollout" and first iteration
         return x
     dym = y_max - y_min
-    func = lambda x: myopic_acquisition(x, mdl, c1, c2, None, dym)[:, :, 0]
+    func = lambda x: myopic_acquisition(
+        x, mdl.Xm_, mdl.ym_, c1, c2, mdl.exp_weighting, predict(mdl, x), dym
+    )[:, :, 0]
     return vpso(func, lb, ub, **pso_kwargs, seed=seed)[0][:, np.newaxis, :]
 
 
@@ -142,7 +144,9 @@ def _advance(
 
     # compute reward, fit regression to new point, and update min/max
     dym = y_max - y_min
-    r = myopic_acquisition(x_next, mdl, c1, c2, y_hat, dym)[:, 0, 0]
+    r = myopic_acquisition(
+        x_next, mdl.Xm_, mdl.ym_, c1, c2, mdl.exp_weighting, y_hat, dym
+    )[:, 0, 0]
     mdl = partial_fit(mdl, x_next, y_hat)
     y_min = np.minimum(y_min, y_hat)
     y_max = np.maximum(y_max, y_hat)
