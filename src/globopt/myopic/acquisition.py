@@ -10,12 +10,19 @@ References
 
 
 from typing import Optional
+from itertools import product
 
 import numba as nb
 import numpy as np
 from vpso.typing import Array3d
 
-from globopt.core.regression import RegressorType, _idw_weighting, predict
+from globopt.core.regression import (
+    RegressorType,
+    _idw_weighting,
+    predict,
+    nb_Rbf,
+    nb_Idw,
+)
 
 
 @nb.njit(
@@ -98,7 +105,20 @@ def _compute_acquisition(
     return y_hat - c1 * s - c2 * dym * z
 
 
-@nb.njit(cache=True, nogil=True)
+@nb.njit(
+    [
+        nb.float64[:, :, :](
+            nb.float64[:, :, :], types[0], nb.float64, nb.float64, types[1], types[2]
+        )
+        for types in product(
+            (nb_Rbf, nb_Idw),
+            (nb.float64[:, :, :], nb.types.none),
+            (nb.float64[:, :, :], nb.types.none),
+        )
+    ],
+    cache=True,
+    nogil=True,
+)
 def acquisition(
     x: Array3d,
     mdl: RegressorType,
