@@ -9,8 +9,8 @@ References
 """
 
 
-from typing import Optional
 from itertools import product
+from typing import Optional
 
 import numba as nb
 import numpy as np
@@ -19,9 +19,9 @@ from vpso.typing import Array3d
 from globopt.core.regression import (
     RegressorType,
     _idw_weighting,
-    predict,
-    nb_Rbf,
     nb_Idw,
+    nb_Rbf,
+    predict,
 )
 
 
