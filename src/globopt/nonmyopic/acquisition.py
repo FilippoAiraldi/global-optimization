@@ -9,7 +9,7 @@ References
 """
 
 from itertools import product
-from typing import Any, Literal, Optional, Union
+from typing import Any, Optional, Union
 
 import numba as nb
 import numpy as np
@@ -36,62 +36,54 @@ FIXED_SEED = 1909
 
 @nb.njit(
     [
-        nb.types.void(
-            nb.float64[:, :, :], nb.int64, nb.int64, nb.types.unicode_type, type, type
+        nb.types.Tuple((nb.int64, types[0], types[1][1], types[1][1]))(
+            nb.float64[:, :, :],
+            types[0],
+            nb.int64,
+            nb.bool_,
+            types[1][0],
+            types[1][0],
+            nb.bool_,
         )
-        for type in (nb.float64[:], nb.types.none)
+        for types in product(
+            (nb_Rbf, nb_Idw),
+            ((nb.float64[:], nb.float64[:, :]), (nb.types.none, nb.types.none)),
+        )
     ],
     cache=True,
     nogil=True,
 )
-def _check_args(
-    x: Array3d,
-    batch: int,
-    horizon: int,
-    type: Literal["rollout", "mpc"],
-    lb: Optional[Array1d],
-    ub: Optional[Array1d],
-) -> None:
-    """Checks input arguments."""
-    assert batch == 1, "regression model must be non-batched"
-    if type == "rollout":
-        assert (
-            ub is not None and lb is not None
-        ), "upper and lower bounds must be provided for rollout"
-        assert x.shape[1] == 1, "x must have only one time step for rollout"
-    else:
-        assert (
-            x.shape[1] == horizon
-        ), "x must have the same number of time steps as the horizon"
-
-
-@nb.njit(
-    [
-        nb.types.Tuple((nb.int64, types[0], types[1], types[1], nb.bool_))(
-            nb.float64[:, :, :], types[0], nb.types.unicode_type, types[1], types[1]
-        )
-        for types in product((nb_Rbf, nb_Idw), (nb.float64[:], nb.types.none))
-    ],
-    cache=True,
-    nogil=True,
-)
-def _initialize_mdl_and_bounds(
+def _initialize(
     x: Array3d,
     mdl: RegressorType,
-    type: Literal["rollout", "mpc"],
+    horizon: int,
+    rollout: bool,
     lb: Optional[Array1d],
     ub: Optional[Array1d],
-) -> tuple[int, RegressorType, Optional[Array2d], Optional[Array2d], bool]:
+    check: bool,
+) -> tuple[int, RegressorType, Optional[Array2d], Optional[Array2d]]:
     """Initializes the quantities need for computing the acquisition function."""
-    n_samples = x.shape[0]
+    n_samples, sample_h, _ = x.shape
+    if check:
+        assert mdl.Xm_.shape[0] == 1, "regression model must be non-batched"
+        if rollout:
+            assert (
+                ub is not None and lb is not None
+            ), "upper and lower bounds must be provided for rollout"
+            assert sample_h == 1, "x must have only one time step for rollout"
+        else:
+            assert (
+                sample_h == horizon
+            ), "x must have the same number of time steps as the horizon"
+
     mdl = repeat(mdl, n_samples)
-    rollout = type != "mpc"
     if lb is not None and ub is not None:
         lb_ = repeat_along_first_axis(np.expand_dims(lb, 0), n_samples)
         ub_ = repeat_along_first_axis(np.expand_dims(ub, 0), n_samples)
     else:
-        lb_ = ub_ = None
-    return n_samples, mdl, lb_, ub_, rollout
+        lb_ = None
+        ub_ = None
+    return n_samples, mdl, lb_, ub_
 
 
 def _next_query_point(
@@ -112,7 +104,7 @@ def _next_query_point(
     is just the next point in the trajectory. If the strategy is `"rollout"`, then, for
     `h=0`, the next point is the input, and for `h>0`, the next point is the
     minimizer of the myopic acquisition function, i.e., base policy."""
-    if not rollout or h == 0:  # type == "mpc" or type == "rollout" and first iteration
+    if not rollout or h == 0:
         return x[:, h, np.newaxis, :]
     dym = y_max - y_min
     func = lambda x_: myopic_acquisition(
@@ -204,9 +196,9 @@ def deterministic_acquisition(
     discount: float,
     c1: float = 1.5078,
     c2: float = 1.4246,
-    type: Literal["rollout", "mpc"] = "rollout",
-    lb: Optional[Array1d] = None,  # only when `type == "rollout"`
-    ub: Optional[Array1d] = None,  # only when `type == "rollout"`
+    rollout: bool = True,
+    lb: Optional[Array1d] = None,
+    ub: Optional[Array1d] = None,
     pso_kwargs: Optional[dict[str, Any]] = None,
     check: bool = True,
     seed: Union[None, int, np.random.Generator] = None,
@@ -219,10 +211,10 @@ def deterministic_acquisition(
     x : array of shape (n_samples, horizon, dim) or (n_samples, 1, dim)
         Array of points for which to compute the acquisition. `n_samples` is the number
         of target points for which to compute the acquisition, and `dim` is the number
-        of features/variables of each point. In case of `type == "mpc"`, `horizon` is
+        of features/variables of each point. In case of `rollout = False`, `horizon` is
         the length of the prediced trajectory of sampled points; while in case of
-        `type == "rollout"`, since only the first sample point is optimized over, this
-        dimension has to be 1.
+        `rollout == True"`, this dimension has to be 1, since only the first sample
+        point is optimized over.
     mdl : Idw or Rbf
         Fitted model to use for computing the acquisition function.
     horizon : int
@@ -233,14 +225,15 @@ def deterministic_acquisition(
         Weight of the contribution of the variance function, by default `1.5078`.
     c2 : float, optional
         Weight of the contribution of the distance function, by default `1.4246`.
-    type : {"rollout", "mpc"}, optional
+    rollout : bool, optional
         The strategy to be used for approximately solving the optimal control problem.
-        `"rollout"` optimizes over only the first sample point and then applies the
-        myopic acquisition as base policy for the remaining horizon. `"mpc"` optimizes
-        over the entire trajectory instead.
+        If `True`, rollout is used where only the first sample point is optimized and
+        then the remaining samples in the horizon are computed via the myopic
+        acquisition base policy. If `False`, the whole horizon trajectory is optimized
+        in an MPC fashion.
     lb, ub : 1d array, optional
         Lower and upper bounds of the search domain. Only required when
-        `type == "rollout"`.
+        `rollout == True`.
     ps_kwargs : dict, optional
         Options to be passed to the `vpso` solver. Cannot include `"seed"` key.
     check : bool, optional
@@ -255,9 +248,7 @@ def deterministic_acquisition(
     """
     if pso_kwargs is None:
         pso_kwargs = {}
-    if check:
-        _check_args(x, mdl.Xm_.shape[0], horizon, type, lb, ub)
-    n_samples, mdl, lb, ub, rollout = _initialize_mdl_and_bounds(x, mdl, type, lb, ub)
+    n_samples, mdl, lb, ub = _initialize(x, mdl, horizon, rollout, lb, ub, check)
     seed = np.random.default_rng(seed)
     return _compute_acquisition(
         x, mdl, horizon, discount, c1, c2, lb, ub, n_samples, rollout, pso_kwargs, seed
@@ -303,9 +294,9 @@ def acquisition(
     discount: float,
     c1: float = 1.5078,
     c2: float = 1.4246,
-    type: Literal["rollout", "mpc"] = "rollout",
-    lb: Optional[Array1d] = None,  # only when `type == "rollout"`
-    ub: Optional[Array1d] = None,  # only when `type == "rollout"`
+    rollout: bool = True,
+    lb: Optional[Array1d] = None,
+    ub: Optional[Array1d] = None,
     #
     mc_iters: int = 1024,
     quasi_mc: bool = True,
@@ -327,10 +318,10 @@ def acquisition(
     x : array of shape (n_samples, horizon, dim) or (n_samples, 1, dim)
         Array of points for which to compute the acquisition. `n_samples` is the number
         of target points for which to compute the acquisition, and `dim` is the number
-        of features/variables of each point. In case of `type == "mpc"`, `horizon` is
+        of features/variables of each point. In case of `rollout = False`, `horizon` is
         the length of the prediced trajectory of sampled points; while in case of
-        `type == "rollout"`, since only the first sample point is optimized over, this
-        dimension has to be 1.
+        `rollout == True"`, this dimension has to be 1, since only the first sample
+        point is optimized over.
     mdl : Idw or Rbf
         Fitted model to use for computing the acquisition function.
     horizon : int
@@ -341,14 +332,15 @@ def acquisition(
         Weight of the contribution of the variance function, by default `1.5078`.
     c2 : float, optional
         Weight of the contribution of the distance function, by default `1.4246`.
-    type : {"rollout", "mpc"}, optional
+    rollout : bool, optional
         The strategy to be used for approximately solving the optimal control problem.
-        `"rollout"` optimizes over only the first sample point and then applies the
-        myopic acquisition as base policy for the remaining horizon. `"mpc"` optimizes
-        over the entire trajectory instead.
+        If `True`, rollout is used where only the first sample point is optimized and
+        then the remaining samples in the horizon are computed via the myopic
+        acquisition base policy. If `False`, the whole horizon trajectory is optimized
+        in an MPC fashion.
     lb, ub : 1d array, optional
         Lower and upper bounds of the search domain. Only required when
-        `type == "rollout"`.
+        `rollout == True`.
     mc_iters : int, optional
         Number of Monte Carlo iterations, by default `1024`. For better sampling, the
         iterations should be a power of 2.
@@ -379,9 +371,7 @@ def acquisition(
     """
     if pso_kwargs is None:
         pso_kwargs = {}
-    if check:
-        _check_args(x, mdl.Xm_.shape[0], horizon, type, lb, ub)
-    n_samples, mdl, lb, ub, rollout = _initialize_mdl_and_bounds(x, mdl, type, lb, ub)
+    n_samples, mdl, lb, ub = _initialize(x, mdl, horizon, rollout, lb, ub, check)
 
     # create random generator and draw all the necessary random numbers
     random_numbers, np_random = _draw_standard_normal_sample(
@@ -396,7 +386,7 @@ def acquisition(
 
     # loop over MC iterations and return the average
     if parallel is None:
-        parallel = Parallel(n_jobs=-1, verbose=0, prefer="processes")
+        parallel = Parallel(n_jobs=1, verbose=0, prefer="processes")
     results = parallel(
         delayed(_compute_acquisition)(
             x,
