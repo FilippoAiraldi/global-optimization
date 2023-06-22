@@ -112,8 +112,8 @@ def _compute_acquisition(
         )
         for types in product(
             (nb_Rbf, nb_Idw),
-            (nb.float64[:, :, :], nb.types.none),
-            (nb.float64[:, :, :], nb.types.none),
+            (nb.float64[:, :, :], nb.types.none, nb.types.Omitted(None)),
+            (nb.float64[:, :, :], nb.types.none, nb.types.Omitted(None)),
         )
     ],
     cache=True,

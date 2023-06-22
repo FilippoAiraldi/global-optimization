@@ -39,7 +39,7 @@ class TestAcquisition(unittest.TestCase):
         W = _idw_weighting(x, X, mdl.exp_weighting)
         s = _idw_variance(y_hat, y, W)
         z = _idw_distance(W)
-        a = acquisition(x, mdl, 1, 0.5, y_hat, dym)
+        a = acquisition(x, mdl, 1.0, 0.5, y_hat, dym)
 
         out = np.asarray((s.squeeze(), z.squeeze(), a.squeeze()))
         np.testing.assert_allclose(out, RESULTS["acquisitions"], atol=1e-6, rtol=1e-6)
@@ -51,7 +51,7 @@ class TestAlgorithm(unittest.TestCase):
         lb = Simple1dProblem.lb
         ub = Simple1dProblem.ub
         x0 = [-2.62, -1.2, 0.14, 1.1, 2.82]
-        c1 = 1
+        c1 = 1.0
         c2 = 0.5
         history: list[tuple[Array1d, ...]] = []
         x = np.linspace(lb, ub, 500)
