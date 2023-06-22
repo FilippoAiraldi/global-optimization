@@ -112,8 +112,8 @@ def _compute_acquisition(
         )
         for types in product(
             (nb_Rbf, nb_Idw),
-            (nb.float64[:, :, :], nb.types.none, nb.types.Omitted(None)),
-            (nb.float64[:, :, :], nb.types.none, nb.types.Omitted(None)),
+            (nb.float64[:, :, :], nb.types.none),
+            (nb.float64[:, :, :], nb.types.none),
         )
     ],
     cache=True,
@@ -122,10 +122,10 @@ def _compute_acquisition(
 def acquisition(
     x: Array3d,
     mdl: RegressorType,
-    c1: float = 1.5078,
-    c2: float = 1.4246,
-    y_hat: Optional[Array3d] = None,
-    dym: Optional[Array3d] = None,
+    c1: float,
+    c2: float,
+    y_hat: Optional[Array3d],
+    dym: Optional[Array3d],
 ) -> Array3d:
     """Computes the myopic acquisition function for IDW/RBF regression models.
 
@@ -139,17 +139,17 @@ def acquisition(
     mdl : Idw or Rbf
         Fitted model to use for computing the acquisition function.
     c1 : float, optional
-        Weight of the contribution of the variance function, by default `1.5078`.
+        Weight of the contribution of the variance function.
     c2 : float, optional
-        Weight of the contribution of the distance function, by default `1.4246`.
+        Weight of the contribution of the distance function.
     y_hat : array of shape (batch, n_samples, 1), optional
         Predictions of the regression model at `x`. If `None`, they are computed based
         on the fitted `mdl`. If pre-computed, can be provided to speed up computations;
-        otherwise is computed on-the-fly automatically. By default, `None`.
+        otherwise is computed on-the-fly automatically.
     dym : array of shape (batch, 1, 1), optional
         Delta between the maximum and minimum values of `ym`. If pre-computed, can be
         provided to speed up computations; otherwise is computed on-the-fly
-        automatically. If `None`, it is computed automatically. By default, `None`.
+        automatically. If `None`, it is computed automatically.
 
     Returns
     -------

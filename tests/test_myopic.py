@@ -61,7 +61,7 @@ class TestAlgorithm(unittest.TestCase):
                 x_ = x.reshape(1, -1, 1)
                 mdl = locals["mdl"]
                 y_hat = predict(mdl, x_)
-                a = acquisition(x_, mdl, c1, c2, y_hat)
+                a = acquisition(x_, mdl, c1, c2, y_hat, None)
                 history.append((y_hat, mdl.Xm_, mdl.ym_, a, locals["x_new"]))
 
         # run the optimization
