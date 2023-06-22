@@ -7,9 +7,6 @@ of the non-myopic acquisition function.
 import time
 
 import ray
-
-ray.init()
-
 from joblib import Parallel, delayed
 
 print("Importing... ", end="")
@@ -82,7 +79,7 @@ acquisition(
     n_jobs=1,
 )
 
-p = 2**13
+p = 13
 N = 10
 
 print("MC (n_jobs=1)... ", end="")
@@ -120,6 +117,8 @@ a_target2 = np.squeeze(
     )
 )
 print(f"time = {time.time() - t0:.3f}s\n")
+
+ray.init()
 
 print("MC (ray)... ", end="")
 t0 = time.time()
