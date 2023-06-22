@@ -167,19 +167,17 @@ def rbf(d2: np.ndarray, eps: float, kernel: Kernel) -> np.ndarray:
 
 
 @nb.njit(
-    nb.types.UniTuple(nb.float64[:, :, :], 2)(
-        nb.float64[:, :, :], nb.float64[:, :, :], nb.float64, nb_Kernel, nb.float64
-    ),
+    nb_Rbf(nb_Rbf, nb.float64[:, :, :], nb.float64[:, :, :]),
     cache=True,
     nogil=True,
     parallel=True,
 )
-def _fit_rbf_via_svd(
-    X: Array3d, y: Array3d, eps: float, kernel: Kernel, svd_tol: float
-) -> tuple[Array3d, Array3d]:
-    """Fits the RBF to the data by solving the linear systems via SVD."""
-    M = rbf(batch_pdist(X, "sqeuclidean"), eps, kernel)
+def _rbf_fit(mdl: Rbf, X: Array3d, y: Array3d) -> Rbf:
+    """Fits an RBF model to the data (via SVD)."""
+    kernel, eps, svd_tol, exp_weighting = mdl[:4]
     B, n, _ = y.shape
+
+    M = rbf(batch_pdist(X, "sqeuclidean"), eps, kernel)
     coef = np.empty((B, n, 1), dtype=np.float64)
     Minv = np.empty((B, n, n), dtype=np.float64)
     for i in nb.prange(B):
@@ -188,17 +186,7 @@ def _fit_rbf_via_svd(
         Minv_ = (VT.T / S) @ U.T
         Minv[i] = Minv_
         coef[i] = Minv_ @ y[i]
-    return coef, Minv
 
-
-@nb.njit(
-    nb_Rbf(nb_Rbf, nb.float64[:, :, :], nb.float64[:, :, :]), cache=True, nogil=True
-)
-def _rbf_fit(mdl: Rbf, X: Array3d, y: Array3d) -> Rbf:
-    """Fits an RBF model to the data."""
-    # create matrix of kernel evaluations
-    kernel, eps, svd_tol, exp_weighting = mdl[:4]
-    coef, Minv = _fit_rbf_via_svd(X, y, eps, kernel, svd_tol)
     return Rbf(
         kernel,
         eps,
@@ -212,51 +200,30 @@ def _rbf_fit(mdl: Rbf, X: Array3d, y: Array3d) -> Rbf:
 
 
 @nb.njit(
-    nb.types.UniTuple(nb.float64[:, :, :], 4)(
-        nb.float64[:, :, :],
-        nb.float64[:, :, :],
-        nb.float64[:, :, :],
-        nb.float64[:, :, :],
-        nb.float64[:, :, :],
-        nb.float64,
-        nb_Kernel,
-        nb.float64,
-    ),
+    nb_Rbf(nb_Rbf, nb.float64[:, :, :], nb.float64[:, :, :]),
     cache=True,
     nogil=True,
     parallel=True,
 )
-def _partial_fit_via_blockwise_inversion(
-    Xm: Array3d,
-    ym: Array3d,
-    X: Array3d,
-    y: Array3d,
-    Minv: Array3d,
-    eps: float,
-    kernel: Kernel,
-    inv_tol: float,
-) -> tuple[Array3d, Array3d, Array3d, Array3d]:
-    """Performs blockwise inversion updates of the RBF kernel matrices."""
-    # create matrix of kernel evals of new elements w.r.t. training data and themselves
+def _rbf_partial_fit(mdl: Rbf, X: Array3d, y: Array3d) -> Rbf:
+    """Fits an already partially fitted RBF model to the additional data (via blockwise
+    inversion)."""
+    kernel, eps, svd_tol, exp_weighting, Xm, ym, _, Minv = mdl
+
+    X_new = np.concatenate((Xm, X), 1)
+    y_new = np.concatenate((ym, y), 1)
+    B, n, _ = y_new.shape
+    coef_new = np.empty((B, n, 1), dtype=np.float64)
+    Minv_new = np.empty((B, n, n), dtype=np.float64)
     Phi_and_phi = batch_cdist_and_pdist(X, Xm, "sqeuclidean")
     Phi = rbf(Phi_and_phi[0].transpose(0, 2, 1), eps, kernel)
     phi = rbf(Phi_and_phi[1], eps, kernel)
-
-    # update data
-    X_new = np.concatenate((Xm, X), 1)
-    y_new = np.concatenate((ym, y), 1)
-
-    # update inverse blockwise
-    B, n, _ = ym.shape
-    n += y.shape[1]
-    coef_new = np.empty((B, n, 1), dtype=np.float64)
-    Minv_new = np.empty((B, n, n), dtype=np.float64)
     for i in nb.prange(B):
         Minv_ = Minv[i]
         Phi_ = Phi[i]
         L = Minv_ @ Phi_
         c = phi[i] - Phi_.T @ L
-        c = np.where(np.abs(c) <= inv_tol, inv_tol, c)
+        c = np.where(np.abs(c) <= svd_tol, svd_tol, c)
         c_inv = np.linalg.inv(c)
         B = -L @ c_inv
         A = Minv[i] - B @ L.T
@@ -265,18 +232,7 @@ def _partial_fit_via_blockwise_inversion(
         )
         Minv_new[i] = Minv_new_
         coef_new[i] = Minv_new_ @ y_new[i]
-    return X_new, y_new, coef_new, Minv_new
 
-
-@nb.njit(
-    nb_Rbf(nb_Rbf, nb.float64[:, :, :], nb.float64[:, :, :]), cache=True, nogil=True
-)
-def _rbf_partial_fit(mdl: Rbf, X: Array3d, y: Array3d) -> Rbf:
-    """Fits an already partially fitted RBF model to the additional data."""
-    kernel, eps, svd_tol, exp_weighting, Xm, ym, _, Minv = mdl
-    X_new, y_new, coef_new, Minv_new = _partial_fit_via_blockwise_inversion(
-        Xm, ym, X, y, Minv, eps, kernel, svd_tol
-    )
     return Rbf(
         kernel,
         eps,
@@ -289,13 +245,6 @@ def _rbf_partial_fit(mdl: Rbf, X: Array3d, y: Array3d) -> Rbf:
     )
 
 
-@nb.njit(nb.float64[:, :, :](nb_Rbf, nb.float64[:, :, :]), cache=True, nogil=True)
-def _rbf_predict(mdl: Rbf, X: Array3d) -> Array3d:
-    """Predicts target values according to the IDW model."""
-    M = rbf(batch_cdist(X, mdl.Xm_, "sqeuclidean"), mdl.eps, mdl.kernel)
-    return matmul3d(M, mdl.coef_)
-
-
 @nb.njit(nb.float64[:, :, :](nb.float64[:, :, :], nb.float64[:, :, :], nb.bool_))
 def _idw_weighting(X: Array3d, Xm: Array3d, exp_weighting: bool = False) -> Array3d:
     """Computes the IDW weighting function `w`."""
@@ -304,35 +253,6 @@ def _idw_weighting(X: Array3d, Xm: Array3d, exp_weighting: bool = False) -> Arra
     if exp_weighting:
         W *= np.exp(-d2)
     return W
-
-
-@nb.njit(
-    nb_Idw(nb_Idw, nb.float64[:, :, :], nb.float64[:, :, :]), cache=True, nogil=True
-)
-def _idw_fit(mdl: Idw, X: Array3d, y: Array3d) -> Idw:
-    """Fits an IDW model to the data."""
-    return Idw(mdl.exp_weighting, np.ascontiguousarray(X), np.ascontiguousarray(y))
-
-
-@nb.njit(
-    nb_Idw(nb_Idw, nb.float64[:, :, :], nb.float64[:, :, :]), cache=True, nogil=True
-)
-def _idw_partial_fit(mdl: Idw, X: Array3d, y: Array3d) -> Idw:
-    """Fits an already partially fitted IDW model to the additional data."""
-    return Idw(
-        mdl.exp_weighting,
-        np.ascontiguousarray(np.concatenate((mdl.Xm_, X), 1)),
-        np.ascontiguousarray(np.concatenate((mdl.ym_, y), 1)),
-    )
-
-
-@nb.njit(nb.float64[:, :, :](nb_Idw, nb.float64[:, :, :]), cache=True, nogil=True)
-def _idw_predict(mdl: Idw, X: Array3d) -> Array3d:
-    """Predicts target values according to the IDW model."""
-    exp_weighting, X_, y_ = mdl
-    W = _idw_weighting(X, X_, exp_weighting)
-    v = W / W.sum(2)[:, :, np.newaxis]
-    return matmul3d(v, y_)
 
 
 @nb.njit(
@@ -360,7 +280,11 @@ def fit(mdl: RegressorType, X: Array3d, y: Array3d) -> RegressorType:
     Idw or Rbf
         The result of the fit operation for RBF regression.
     """
-    return _idw_fit(mdl, X, y) if len(mdl) == 3 else _rbf_fit(mdl, X, y)
+    return (
+        Idw(mdl.exp_weighting, np.ascontiguousarray(X), np.ascontiguousarray(y))
+        if len(mdl) == 3
+        else _rbf_fit(mdl, X, y)
+    )
 
 
 @nb.njit(
@@ -388,7 +312,15 @@ def partial_fit(mdl: RegressorType, X: Array3d, y: Array3d) -> RegressorType:
     Idw or Rbf
         The newly result of the partial fit operation for the regression.
     """
-    return _idw_partial_fit(mdl, X, y) if len(mdl) == 3 else _rbf_partial_fit(mdl, X, y)
+    return (
+        Idw(
+            mdl.exp_weighting,
+            np.ascontiguousarray(np.concatenate((mdl.Xm_, X), 1)),
+            np.ascontiguousarray(np.concatenate((mdl.ym_, y), 1)),
+        )
+        if len(mdl) == 3
+        else _rbf_partial_fit(mdl, X, y)
+    )
 
 
 @nb.njit(
@@ -414,7 +346,14 @@ def predict(mdl: RegressorType, X: Array3d) -> Array3d:
     y: array of floats
         Prediction of `y`.
     """
-    return _idw_predict(mdl, X) if len(mdl) == 3 else _rbf_predict(mdl, X)
+    if len(mdl) == 3:  # IDW
+        exp_weighting, X_, y_ = mdl  # type: ignore[misc]
+        W = _idw_weighting(X, X_, exp_weighting)
+        v = W / W.sum(2)[:, :, np.newaxis]
+        return matmul3d(v, y_)
+
+    M = rbf(batch_cdist(X, mdl.Xm_, "sqeuclidean"), mdl.eps, mdl.kernel)  # type: ignore
+    return matmul3d(M, mdl.coef_)  # type: ignore[union-attr]
 
 
 @nb.njit(
