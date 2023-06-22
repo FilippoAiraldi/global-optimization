@@ -8,7 +8,7 @@ References
     functions. Computational Optimization and Applications, 77(2):571–595, 2020
 """
 
-from itertools import product
+from itertools import chain, product
 from typing import Any, Optional, Union
 
 import numba as nb
@@ -34,6 +34,9 @@ from globopt.util.ray import batched, wait_tasks
 
 """Seed that is used for COMMON random numbers generation."""
 FIXED_SEED = 1909
+
+"""Number of elements per batch to use for parallelization."""
+BATCH_SIZE = 3  # 2**5
 
 
 @nb.njit(
@@ -206,28 +209,31 @@ def _compute_acquisition_batched(
     pso_kwargs: dict[str, Any],
     np_random: np.random.Generator,
     rng_batch: Array3d,
-) -> Array1d:
+    return_as_list: bool,
+) -> Union[Array1d, list[Array1d]]:
     """Batched computation of the non-myopic acquisition acquisition function."""
-    return sum(
-        (
-            _compute_acquisition(
-                x,
-                mdl,
-                horizon,
-                discount,
-                c1,
-                c2,
-                lb,
-                ub,
-                n_samples,
-                rollout,
-                pso_kwargs,
-                np_random,
-                rng,
-            )
-            for rng in rng_batch
-        ),
-        start=np.zeros(n_samples, dtype=np.float64),
+    generator = (
+        _compute_acquisition(
+            x,
+            mdl,
+            horizon,
+            discount,
+            c1,
+            c2,
+            lb,
+            ub,
+            n_samples,
+            rollout,
+            pso_kwargs,
+            np_random,
+            rng,
+        )
+        for rng in rng_batch
+    )
+    return (
+        list(generator)
+        if return_as_list
+        else sum(generator, start=np.zeros(n_samples))  # type: ignore[arg-type]
     )
 
 
@@ -329,7 +335,7 @@ def _draw_standard_normal_sample(
     return sample, np_random
 
 
-def acquisition(
+def acquisition_joblib(
     x: Array3d,
     mdl: RegressorType,
     horizon: int,
@@ -349,69 +355,9 @@ def acquisition(
     pso_kwargs: Optional[dict[str, Any]] = None,
     check: bool = True,
     seed: Optional[int] = None,
-    # parallel: Optional[Parallel] = None,
     n_jobs: int = -1,
     return_as_list: bool = False,
 ) -> Union[Array1d, list[Array1d]]:
-    """Computes the non-myopic acquisition function for IDW/RBF regression models with
-    Monte Carlo simulations.
-
-    Parameters
-    ----------
-    x : array of shape (n_samples, horizon, dim) or (n_samples, 1, dim)
-        Array of points for which to compute the acquisition. `n_samples` is the number
-        of target points for which to compute the acquisition, and `dim` is the number
-        of features/variables of each point. In case of `rollout = False`, `horizon` is
-        the length of the prediced trajectory of sampled points; while in case of
-        `rollout == True"`, this dimension has to be 1, since only the first sample
-        point is optimized over.
-    mdl : Idw or Rbf
-        Fitted model to use for computing the acquisition function.
-    horizon : int
-        Length of the prediced trajectory of sampled points.
-    discount : float
-        Discount factor for the lookahead horizon.
-    c1 : float, optional
-        Weight of the contribution of the variance function, by default `1.5078`.
-    c2 : float, optional
-        Weight of the contribution of the distance function, by default `1.4246`.
-    rollout : bool, optional
-        The strategy to be used for approximately solving the optimal control problem.
-        If `True`, rollout is used where only the first sample point is optimized and
-        then the remaining samples in the horizon are computed via the myopic
-        acquisition base policy. If `False`, the whole horizon trajectory is optimized
-        in an MPC fashion.
-    lb, ub : 1d array, optional
-        Lower and upper bounds of the search domain. Only required when
-        `rollout == True`.
-    mc_iters : int, optional
-        Number of Monte Carlo iterations, by default `1024`. For better sampling, the
-        iterations should be a power of 2.
-    quasi_mc : bool, optional
-        Whether to use quasi Monte Carlo sampling, by default `True`.
-    common_random_numbers : bool, optional
-        Whether to use common random numbers, by default `True`. In this case, `seed`,
-        if passed at all, is discarded.
-    antithetic_variates : bool, optional
-        Whether to use antithetic variates, by default `True`.
-    control_variate  # TODO
-    pso_kwargs : dict, optional
-        Options to be passed to the `vpso` solver. Cannot include `"seed"` key.
-    check : bool, optional
-        Whether to perform checks on the inputs, by default `True`.
-    seed : int or np.random.Generator, optional
-        Seed for the random number generator or a generator itself, by default `None`.
-        Only used when `common_random_numbers == False`.
-    return_as_list : bool, optional
-        Whether to return the list of iterations of the MC integration or just the
-        resulting average. By default `False`, which only returns the average.
-
-    Returns
-    -------
-    1d array or list of
-        The non-myopic acquisition function for each target point (per MC iteration,
-        if `return_as_list == True`)
-    """
     if pso_kwargs is None:
         pso_kwargs = {}
     n_samples, mdl, lb, ub = _initialize(x, mdl, horizon, rollout, lb, ub, check)
@@ -456,7 +402,7 @@ def acquisition(
 
 
 @ray.remote
-def acquisition_ray(
+def acquisition(
     x: Array3d,
     mdl: RegressorType,
     horizon: int,
@@ -569,12 +515,13 @@ def acquisition_ray(
                 pso_kwargs,
                 np_random,
                 rng,
+                return_as_list,
             )
-            for rng in batched(random_numbers, 32)
+            for rng in batched(random_numbers, BATCH_SIZE)
         ]
     )
     return (
-        results
+        list(chain.from_iterable(results))
         if return_as_list
         else sum(results, start=np.zeros(n_samples)) / mc_iters
     )
@@ -583,3 +530,4 @@ def acquisition_ray(
 # TODO:
 # 1. implement control variate
 # 2: set boundcheks to 0, delete cache and see if faster
+# 3. remove implementations with return_as_list, and move them to dedicated example file

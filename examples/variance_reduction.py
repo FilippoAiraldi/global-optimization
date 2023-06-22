@@ -18,8 +18,8 @@ from scipy.io import savemat
 from globopt.core.problems import Simple1dProblem
 from globopt.core.regression import Kernel, Rbf, fit
 from globopt.nonmyopic.acquisition import (
+    acquisition_joblib,
     acquisition,
-    acquisition_ray,
     deterministic_acquisition,
 )
 from globopt.util.ray import wait_tasks
@@ -69,9 +69,9 @@ print(f"time = {time.time() - t0:.3f}s\n")
 
 
 # warm-up
-acquisition(
+acquisition_joblib(
     **kwargs,
-    mc_iters=2**4,
+    mc_iters=2**2,
     quasi_mc=False,
     common_random_numbers=True,
     antithetic_variates=False,
@@ -86,7 +86,7 @@ print("MC (n_jobs=1)... ", end="")
 t0 = time.time()
 a_target1 = np.squeeze(
     Parallel(n_jobs=-1)(
-        delayed(acquisition)(
+        delayed(acquisition_joblib)(
             **kwargs,
             mc_iters=2**p,
             quasi_mc=False,
@@ -104,7 +104,7 @@ print("MC (n_jobs=-1)... ", end="")
 t0 = time.time()
 a_target2 = np.squeeze(
     Parallel(n_jobs=-1)(
-        delayed(acquisition)(
+        delayed(acquisition_joblib)(
             **kwargs,
             mc_iters=2**p,
             quasi_mc=False,
@@ -125,7 +125,7 @@ t0 = time.time()
 a_target3 = np.squeeze(
     wait_tasks(
         [
-            acquisition_ray.remote(
+            acquisition.remote(
                 **kwargs,
                 mc_iters=2**p,
                 quasi_mc=False,
