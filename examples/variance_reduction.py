@@ -4,7 +4,8 @@ of the non-myopic acquisition function.
 """
 
 
-import time
+from time import perf_counter
+from datetime import datetime
 
 import ray
 
@@ -12,8 +13,8 @@ ray.init()
 
 from joblib import Parallel, delayed
 
-print("Importing... ", end="")
-t0 = time.time()
+print(f"{datetime.now()} | Importing... ")
+t0 = perf_counter()
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -26,14 +27,14 @@ from globopt.nonmyopic.acquisition import (
 )
 from globopt.util.ray import wait_tasks
 
-print(f"time = {time.time() - t0:.3f}s\n")
+print(f"{datetime.now()} | time = {perf_counter() - t0:.3f}s")
 
 plt.style.use("bmh")
 
 
 # define the function and its domain
-print("Setup... ", end="")
-t0 = time.time()
+print(f"{datetime.now()} | Setup... ")
+t0 = perf_counter()
 lb, ub = np.array([-3.0]), np.array([+3.0])
 f = Simple1dProblem.f
 
@@ -49,12 +50,12 @@ c1 = 1.0
 c2 = 0.5
 horizon = 3
 discount = 0.9
-print(f"time = {time.time() - t0:.3f}s\n")
+print(f"{datetime.now()} | time = {perf_counter() - t0:.3f}s")
 
 # compute the non-myopic acquisition for `x_target` with deterministic dynamics - no
 # MC integration is required
-print("Deterministic... ", end="")
-t0 = time.time()
+print(f"{datetime.now()} | Deterministic... ")
+t0 = perf_counter()
 kwargs = {
     "x": x_target,
     "mdl": mdl,
@@ -67,7 +68,7 @@ kwargs = {
     "ub": ub,
 }
 a_deterministic = deterministic_acquisition(**kwargs, seed=420).item()
-print(f"time = {time.time() - t0:.3f}s\n")
+print(f"{datetime.now()} | time = {perf_counter() - t0:.3f}s")
 
 
 # warm-up
@@ -84,46 +85,46 @@ acquisition_joblib(
 p = 13
 N = 10
 
-print("MC (n_jobs=1)... ", end="")
-t0 = time.time()
-a_target1 = np.squeeze(
-    Parallel(n_jobs=-1)(
-        delayed(acquisition_joblib)(
-            **kwargs,
-            mc_iters=2**p,
-            quasi_mc=False,
-            common_random_numbers=True,
-            antithetic_variates=False,
-            return_as_list=True,
-            n_jobs=1,
+print(f"{datetime.now()} | MC (n_jobs=1)... ")
+t0 = perf_counter()
+with Parallel(n_jobs=-1) as parallel:
+    a_target1 = np.squeeze(
+        parallel(
+            delayed(acquisition_joblib)(
+                **kwargs,
+                mc_iters=2**p,
+                quasi_mc=False,
+                common_random_numbers=True,
+                antithetic_variates=False,
+                return_as_list=True,
+                n_jobs=1,
+            )
+            for _ in range(N)
         )
-        for _ in range(N)
     )
-)
-print(f"time = {time.time() - t0:.3f}s\n")
+print(f"{datetime.now()} | time = {perf_counter() - t0:.3f}s")
 
-print("MC (n_jobs=-1)... ", end="")
-t0 = time.time()
-a_target2 = np.squeeze(
-    Parallel(n_jobs=-1)(
-        delayed(acquisition_joblib)(
-            **kwargs,
-            mc_iters=2**p,
-            quasi_mc=False,
-            common_random_numbers=True,
-            antithetic_variates=False,
-            return_as_list=True,
-            n_jobs=-1,
+print(f"{datetime.now()} | MC (n_jobs=-1)... ")
+t0 = perf_counter()
+with Parallel(n_jobs=-1) as parallel:
+    a_target2 = np.squeeze(
+        parallel(
+            delayed(acquisition_joblib)(
+                **kwargs,
+                mc_iters=2**p,
+                quasi_mc=False,
+                common_random_numbers=True,
+                antithetic_variates=False,
+                return_as_list=True,
+                n_jobs=-1,
+            )
+            for _ in range(N)
         )
-        for _ in range(N)
-    )
 )
-print(f"time = {time.time() - t0:.3f}s\n")
+print(f"{datetime.now()} | time = {perf_counter() - t0:.3f}s")
 
-print("-" * 80)
-
-print("MC (ray)... ", end="")
-t0 = time.time()
+print(f"{datetime.now()} | MC (ray)... ")
+t0 = perf_counter()
 a_target3 = np.squeeze(
     wait_tasks(
         [
@@ -139,7 +140,8 @@ a_target3 = np.squeeze(
         ]
     )
 )
-print(f"time = {time.time() - t0:.3f}s\n")
+print(f"{datetime.now()} | time = {perf_counter() - t0:.3f}s")
+
 a_target1.sort(axis=-1)
 a_target2.sort(axis=-1)
 a_target3.sort(axis=-1)
