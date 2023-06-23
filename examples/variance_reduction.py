@@ -17,9 +17,9 @@ import numpy as np
 from globopt.core.problems import Simple1dProblem
 from globopt.core.regression import Kernel, Rbf, fit
 from globopt.nonmyopic.acquisition import (
+    acquisition,
     acquisition_batched,
     deterministic_acquisition,
-    acquisition,
 )
 
 print(f"{datetime.now()} | time = {perf_counter() - t0:.3f}s")
@@ -66,8 +66,8 @@ print(f"{datetime.now()} | time = {perf_counter() - t0:.3f}s")
 # a_deterministic = deterministic_acquisition(**kwargs, seed=420).item()
 # print(f"{datetime.now()} | time = {perf_counter() - t0:.3f}s")
 
-p = 5
-N = 3
+p = 13
+N = 10
 
 print(f"{datetime.now()} | MC (n_jobs=1)... ")
 t0 = perf_counter()
