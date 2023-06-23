@@ -7,19 +7,21 @@ of the non-myopic acquisition function.
 import time
 
 import ray
+
+ray.init()
+
 from joblib import Parallel, delayed
 
 print("Importing... ", end="")
 t0 = time.time()
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.io import savemat
 
 from globopt.core.problems import Simple1dProblem
 from globopt.core.regression import Kernel, Rbf, fit
 from globopt.nonmyopic.acquisition import (
-    acquisition_joblib,
     acquisition,
+    acquisition_joblib,
     deterministic_acquisition,
 )
 from globopt.util.ray import wait_tasks
@@ -118,7 +120,7 @@ a_target2 = np.squeeze(
 )
 print(f"time = {time.time() - t0:.3f}s\n")
 
-ray.init()
+print("-" * 80)
 
 print("MC (ray)... ", end="")
 t0 = time.time()
@@ -138,15 +140,13 @@ a_target3 = np.squeeze(
     )
 )
 print(f"time = {time.time() - t0:.3f}s\n")
-
+a_target1.sort(axis=-1)
+a_target2.sort(axis=-1)
+a_target3.sort(axis=-1)
 print(np.sum(a_target1) - np.sum(a_target2))
 print(np.sum(a_target1) - np.sum(a_target3))
 print(np.sum(a_target2) - np.sum(a_target3))
-savemat(
-    "a_targets.mat",
-    {"a_target1": a_target1, "a_target2": a_target2, "a_target3": a_target3},
-)
-quit()
+np.savez("a_targets.npz", a_target1=a_target1, a_target2=a_target2, a_target3=a_target3)
 
 
 # # compute the non-myopic acquisition function for x with different variance reductions
