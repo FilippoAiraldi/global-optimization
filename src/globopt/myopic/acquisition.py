@@ -9,16 +9,25 @@ References
 """
 
 
+from itertools import product
 from typing import Optional
 
 import numba as nb
 import numpy as np
 from vpso.typing import Array3d
 
-from globopt.core.regression import RegressorType, _idw_weighting, predict
+from globopt.core.regression import (
+    RegressorType,
+    _idw_weighting,
+    nb_Idw,
+    nb_Rbf,
+    predict,
+)
 
 
-@nb.njit(cache=True, nogil=True, parallel=True)
+@nb.njit(
+    nb.float64[:, :, :](nb.float64[:, :, :]), cache=True, nogil=True, parallel=True
+)
 def func_range(y: Array3d) -> Array3d:
     """Computes the range of the observed samples."""
     B = y.shape[0]
@@ -28,7 +37,12 @@ def func_range(y: Array3d) -> Array3d:
     return out
 
 
-@nb.njit(cache=True, nogil=True, parallel=True)
+@nb.njit(
+    nb.float64[:, :, :](nb.float64[:, :, :], nb.float64[:, :, :]),
+    cache=True,
+    nogil=True,
+    parallel=True,
+)
 def _idw_variance_inner_loop(V, sqdiff):
     """Parallelized inner loop of the variance function."""
     B, n, _ = V.shape
@@ -38,7 +52,11 @@ def _idw_variance_inner_loop(V, sqdiff):
     return out
 
 
-@nb.njit(cache=True, nogil=True)
+@nb.njit(
+    nb.float64[:, :, :](nb.float64[:, :, :], nb.float64[:, :, :], nb.float64[:, :, :]),
+    cache=True,
+    nogil=True,
+)
 def _idw_variance(y_hat: Array3d, ym: Array3d, W: Array3d) -> Array3d:
     """Computes the variance function acquisition term for IDW/RBF regression models."""
     V = W / W.sum(2)[:, :, np.newaxis]
@@ -46,13 +64,30 @@ def _idw_variance(y_hat: Array3d, ym: Array3d, W: Array3d) -> Array3d:
     return np.sqrt(_idw_variance_inner_loop(V, sqdiff))
 
 
-@nb.njit(cache=True, nogil=True)
+@nb.njit(
+    nb.float64[:, :, :](nb.float64[:, :, :]),
+    cache=True,
+    nogil=True,
+)
 def _idw_distance(W: Array3d) -> Array3d:
     """Computes the distance function acquisition term for IDW/RBF regression models."""
     return ((2 / np.pi) * np.arctan(1 / W.sum(2)))[:, :, np.newaxis]
 
 
-@nb.njit(cache=True, nogil=True)
+@nb.njit(
+    nb.float64[:, :, :](
+        nb.float64[:, :, :],
+        nb.float64[:, :, :],
+        nb.float64[:, :, :],
+        nb.float64,
+        nb.float64,
+        nb.boolean,
+        nb.float64[:, :, :],
+        nb.float64[:, :, :],
+    ),
+    cache=True,
+    nogil=True,
+)
 def _compute_acquisition(
     x: Array3d,
     Xm: Array3d,
@@ -70,14 +105,27 @@ def _compute_acquisition(
     return y_hat - c1 * s - c2 * dym * z
 
 
-@nb.njit(cache=True, nogil=True)
+@nb.njit(
+    [
+        nb.float64[:, :, :](
+            nb.float64[:, :, :], types[0], nb.float64, nb.float64, types[1], types[2]
+        )
+        for types in product(
+            (nb_Rbf, nb_Idw),
+            (nb.float64[:, :, :], nb.types.none),
+            (nb.float64[:, :, :], nb.types.none),
+        )
+    ],
+    cache=True,
+    nogil=True,
+)
 def acquisition(
     x: Array3d,
     mdl: RegressorType,
-    c1: float = 1.5078,
-    c2: float = 1.4246,
-    y_hat: Optional[Array3d] = None,
-    dym: Optional[Array3d] = None,
+    c1: float,
+    c2: float,
+    y_hat: Optional[Array3d],
+    dym: Optional[Array3d],
 ) -> Array3d:
     """Computes the myopic acquisition function for IDW/RBF regression models.
 
@@ -91,17 +139,17 @@ def acquisition(
     mdl : Idw or Rbf
         Fitted model to use for computing the acquisition function.
     c1 : float, optional
-        Weight of the contribution of the variance function. By default, `1.5078`.
+        Weight of the contribution of the variance function.
     c2 : float, optional
-        Weight of the contribution of the distance function. By default, `1.4246`.
+        Weight of the contribution of the distance function.
     y_hat : array of shape (batch, n_samples, 1), optional
         Predictions of the regression model at `x`. If `None`, they are computed based
         on the fitted `mdl`. If pre-computed, can be provided to speed up computations;
-        otherwise is computed on-the-fly automatically. By default, `None`.
+        otherwise is computed on-the-fly automatically.
     dym : array of shape (batch, 1, 1), optional
         Delta between the maximum and minimum values of `ym`. If pre-computed, can be
         provided to speed up computations; otherwise is computed on-the-fly
-        automatically. If `None`, it is computed automatically. By default, `None`.
+        automatically. If `None`, it is computed automatically.
 
     Returns
     -------
