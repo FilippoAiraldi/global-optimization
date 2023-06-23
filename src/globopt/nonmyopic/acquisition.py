@@ -101,7 +101,7 @@ def _next_query_point(
     ub: Optional[Array1d],
     rollout: bool,
     pso_kwargs: dict[str, Any],
-    np_random: np.random.Generator,
+    seed: Union[None, int, np.random.Generator],
 ) -> Array3d:
     """Computes the next point to query. If the strategy is `"mpc"`, then the next point
     is just the next point in the trajectory. If the strategy is `"rollout"`, then, for
@@ -113,7 +113,7 @@ def _next_query_point(
     func = lambda x_: myopic_acquisition(
         x_, mdl.Xm_, mdl.ym_, c1, c2, mdl.exp_weighting, predict(mdl, x_), dym
     )[:, :, 0]
-    return vpso(func, lb, ub, **pso_kwargs, seed=np_random)[0][:, np.newaxis, :]
+    return vpso(func, lb, ub, **pso_kwargs, seed=seed)[0][:, np.newaxis, :]
 
 
 @nb.njit(
@@ -174,7 +174,7 @@ def _compute_acquisition(
     n_samples: int,
     rollout: bool,
     pso_kwargs: dict[str, Any],
-    np_random: np.random.Generator,
+    seed: Union[None, int, np.random.Generator],
     rng: Optional[Array2d] = None,
 ) -> Array1d:
     """Actual computation of the non-myopic acquisition acquisition function."""
@@ -183,7 +183,7 @@ def _compute_acquisition(
     y_max = mdl.ym_.max(1, keepdims=True)
     for h in range(horizon):
         x_next = _next_query_point(
-            x, mdl, h, c1, c2, y_min, y_max, lb, ub, rollout, pso_kwargs, np_random
+            x, mdl, h, c1, c2, y_min, y_max, lb, ub, rollout, pso_kwargs, seed
         )
         mdl, cost, y_min, y_max = _advance(
             x_next, mdl, c1, c2, y_min, y_max, rng[h] if rng is not None else None
@@ -309,7 +309,7 @@ def acquisition(
     #
     pso_kwargs: Optional[dict[str, Any]] = None,
     check: bool = True,
-    seed: Optional[int] = None,
+    seed: Union[None, int, np.random.Generator] = None,
     n_jobs: int = -1,
     return_as_list: bool = False,
 ) -> Union[Array1d, list[Array1d]]:
@@ -386,6 +386,7 @@ def acquisition(
         antithetic_variates,
         seed,
     )
+    seeds = np_random.bit_generator._seed_seq.spawn(mc_iters)  # type: ignore
 
     # loop over MC iterations and return the average
     # if parallel is None:
@@ -403,7 +404,7 @@ def acquisition(
             n_samples,
             rollout,
             pso_kwargs,
-            np_random,
+            seeds[i],
             random_numbers[i],
         )
         for i in range(mc_iters)
@@ -443,6 +444,8 @@ def _compute_acquisition_batched(
     return_as_list: bool,
 ) -> Union[Array1d, list[Array1d]]:
     """Batched computation of the non-myopic acquisition acquisition function."""
+    iters = rng_batch.shape[0]
+    seeds = np_random.bit_generator._seed_seq.spawn(iters)  # type: ignore
     generator = (
         _compute_acquisition(
             x,
@@ -456,10 +459,10 @@ def _compute_acquisition_batched(
             n_samples,
             rollout,
             pso_kwargs,
-            np_random,
-            rng,
+            seeds[i],
+            rng_batch[i],
         )
-        for rng in rng_batch
+        for i in range(iters)
     )
     return (
         list(generator)
@@ -487,7 +490,7 @@ def acquisition_batched(
     #
     pso_kwargs: Optional[dict[str, Any]] = None,
     check: bool = True,
-    seed: Optional[int] = None,
+    seed: Union[None, int, np.random.Generator] = None,
     n_jobs: int = -1,
     return_as_list: bool = False,
 ) -> Union[Array1d, list[Array1d]]:
