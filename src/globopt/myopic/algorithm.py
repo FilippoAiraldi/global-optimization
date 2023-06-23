@@ -129,7 +129,7 @@ def go(
         callback("go", locals())
 
     # main loop
-    for _ in range(maxiter):
+    for iteration in range(maxiter):
         # choose next point to sample by minimizing the myopic acquisition function
         dym = mdl.ym_.ptp(1, keepdims=True)
         vpso_func = lambda x: acquisition(
