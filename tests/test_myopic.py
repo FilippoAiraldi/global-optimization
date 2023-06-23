@@ -55,14 +55,16 @@ class TestAlgorithm(unittest.TestCase):
         c2 = 0.5
         history: list[tuple[Array1d, ...]] = []
         x = np.linspace(lb, ub, 500)
+        ITERS = 6
 
         def save_history(_: Literal["go", "nmgo"], locals: dict[str, Any]) -> None:
-            if locals.get("iteration", 0) > 0:
-                x_ = x.reshape(1, -1, 1)
-                mdl = locals["mdl"]
-                y_hat = predict(mdl, x_)
-                a = acquisition(x_, mdl, c1, c2, y_hat, None)
-                history.append((y_hat, mdl.Xm_, mdl.ym_, a, locals["x_new"]))
+            if locals.get("iteration", 0) == 0:
+                return
+            x_ = x.reshape(1, -1, 1)
+            mdl = locals["mdl"]
+            y_hat = predict(mdl, x_)
+            a = acquisition(x_, mdl, c1, c2, y_hat, None)
+            history.append((y_hat, mdl.Xm_, mdl.ym_, a, locals["x_new"]))
 
         # run the optimization
         go(
@@ -73,11 +75,12 @@ class TestAlgorithm(unittest.TestCase):
             init_points=x0,
             c1=c1,
             c2=c2,
-            maxiter=6,
+            maxiter=ITERS,
             seed=1909,
             callback=save_history,
         )
 
+        self.assertTrue(len(history) == ITERS)
         out = dict(enumerate(history, start=1))
         for key in out:
             for actual, expected in zip(out[key], RESULTS[key]):
