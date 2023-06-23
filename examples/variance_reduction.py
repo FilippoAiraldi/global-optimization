@@ -4,8 +4,8 @@ of the non-myopic acquisition function.
 """
 
 
-from time import perf_counter
 from datetime import datetime
+from time import perf_counter
 
 import ray
 
@@ -120,7 +120,7 @@ with Parallel(n_jobs=-1) as parallel:
             )
             for _ in range(N)
         )
-)
+    )
 print(f"{datetime.now()} | time = {perf_counter() - t0:.3f}s")
 
 print(f"{datetime.now()} | MC (ray)... ")
@@ -142,12 +142,9 @@ a_target3 = np.squeeze(
 )
 print(f"{datetime.now()} | time = {perf_counter() - t0:.3f}s")
 
-a_target1.sort(axis=-1)
-a_target2.sort(axis=-1)
-a_target3.sort(axis=-1)
-print(np.sum(a_target1) - np.sum(a_target2))
-print(np.sum(a_target1) - np.sum(a_target3))
-print(np.sum(a_target2) - np.sum(a_target3))
+print(a_target1.mean(-1))
+print(a_target2.mean(-1))
+print(a_target3.mean(-1))
 np.savez("a_targets.npz", a_target1=a_target1, a_target2=a_target2, a_target3=a_target3)
 
 
