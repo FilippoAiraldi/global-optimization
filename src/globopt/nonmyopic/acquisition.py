@@ -13,6 +13,7 @@ from typing import Any, Iterable, Optional, Union
 
 import numba as nb
 import numpy as np
+import ray
 from joblib import Parallel, delayed
 from scipy.stats.qmc import MultivariateNormalQMC
 from vpso import vpso
@@ -20,8 +21,6 @@ from vpso.typing import Array1d, Array2d, Array3d
 
 from globopt.core.regression import (
     RegressorType,
-    nb_Idw,
-    nb_Rbf,
     partial_fit,
     predict,
     repeat,
@@ -37,25 +36,7 @@ FIXED_SEED = 1909
 BATCH_SIZE = 2**5
 
 
-@nb.njit(
-    [
-        nb.types.Tuple((nb.int64, types[0], types[1][1], types[1][1]))(
-            nb.float64[:, :, :],
-            types[0],
-            nb.int64,
-            nb.bool_,
-            types[1][0],
-            types[1][0],
-            nb.bool_,
-        )
-        for types in product(
-            (nb_Rbf, nb_Idw),
-            ((nb.float64[:], nb.float64[:, :]), (nb.types.none, nb.types.none)),
-        )
-    ],
-    cache=True,
-    nogil=True,
-)
+@nb.njit(cache=True, nogil=True)
 def _initialize(
     x: Array3d,
     mdl: RegressorType,
@@ -116,24 +97,7 @@ def _next_query_point(
     return vpso(func, lb, ub, **pso_kwargs, seed=seed)[0][:, np.newaxis, :]
 
 
-@nb.njit(
-    [
-        nb.types.Tuple(
-            (types[0], nb.float64[:], nb.float64[:, :, :], nb.float64[:, :, :])
-        )(
-            nb.float64[:, :, :],
-            types[0],
-            nb.float64,
-            nb.float64,
-            nb.float64[:, :, :],
-            nb.float64[:, :, :],
-            types[1],
-        )
-        for types in product((nb_Rbf, nb_Idw), (nb.float64[:], nb.types.none))
-    ],
-    cache=True,
-    nogil=True,
-)
+@nb.njit(cache=True, nogil=True)
 def _advance(
     x_next: Array3d,
     mdl: RegressorType,
@@ -427,6 +391,20 @@ def batched(iterable: Iterable[Any], n: int) -> Iterable[tuple[Any, ...]]:
         yield batch
 
 
+def wait_ray_tasks(refs: list[ray.ObjectRef], num_returns: int = 1) -> list[Any]:
+    """Waits for a list of Ray object refs to complete and return the results."""
+    # https://docs.ray.io/en/latest/ray-core/patterns/ray-get-submission-order.html
+    results: list[Any] = []
+    unfinished = refs
+    while unfinished:
+        finished, unfinished = ray.wait(
+            unfinished, num_returns=min(num_returns, len(unfinished))
+        )
+        results.extend(ray.get(finished))
+    return results
+
+
+@ray.remote  # type: ignore[arg-type]
 def _compute_acquisition_batched(
     x: Array3d,
     mdl: RegressorType,
@@ -439,13 +417,10 @@ def _compute_acquisition_batched(
     n_samples: int,
     rollout: bool,
     pso_kwargs: dict[str, Any],
-    np_random: np.random.Generator,
-    rng_batch: Array3d,
+    rng_and_seeds: Iterable[tuple[Array2d, int]],
     return_as_list: bool,
 ) -> Union[Array1d, list[Array1d]]:
     """Batched computation of the non-myopic acquisition acquisition function."""
-    iters = rng_batch.shape[0]
-    seeds = np_random.bit_generator._seed_seq.spawn(iters)  # type: ignore
     generator = (
         _compute_acquisition(
             x,
@@ -459,10 +434,10 @@ def _compute_acquisition_batched(
             n_samples,
             rollout,
             pso_kwargs,
-            seeds[i],
-            rng_batch[i],
+            seed,
+            rng,
         )
-        for i in range(iters)
+        for rng, seed in rng_and_seeds
     )
     return (
         list(generator)
@@ -471,6 +446,7 @@ def _compute_acquisition_batched(
     )
 
 
+@ray.remote
 def acquisition_batched(
     x: Array3d,
     mdl: RegressorType,
@@ -491,7 +467,6 @@ def acquisition_batched(
     pso_kwargs: Optional[dict[str, Any]] = None,
     check: bool = True,
     seed: Union[None, int, np.random.Generator] = None,
-    n_jobs: int = -1,
     return_as_list: bool = False,
 ) -> Union[Array1d, list[Array1d]]:
     if pso_kwargs is None:
@@ -508,28 +483,28 @@ def acquisition_batched(
         antithetic_variates,
         seed,
     )
+    seeds = np_random.bit_generator._seed_seq.spawn(mc_iters)  # type: ignore
 
     # loop over MC iterations and return the average
-    # if parallel is None:
-    #     parallel = Parallel(n_jobs=-1, verbose=0, prefer="processes")
-    results = Parallel(n_jobs=n_jobs, verbose=0, prefer="processes")(
-        delayed(_compute_acquisition_batched)(
-            x,
-            mdl,
-            horizon,
-            discount,
-            c1,
-            c2,
-            lb,
-            ub,
-            n_samples,
-            rollout,
-            pso_kwargs,
-            np_random,
-            rng,
-            return_as_list,
-        )
-        for rng in batched(random_numbers, BATCH_SIZE)
+    results = wait_ray_tasks(
+        [
+            _compute_acquisition_batched.remote(  # type: ignore[call-arg]
+                x,
+                mdl,
+                horizon,
+                discount,
+                c1,
+                c2,
+                lb,
+                ub,
+                n_samples,
+                rollout,
+                pso_kwargs,
+                rng_and_seeds,
+                return_as_list,
+            )
+            for rng_and_seeds in batched(zip(random_numbers, seeds), BATCH_SIZE)
+        ]
     )
     return (
         list(chain.from_iterable(results))

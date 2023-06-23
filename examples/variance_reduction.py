@@ -13,13 +13,14 @@ print(f"{datetime.now()} | Importing... ")
 t0 = perf_counter()
 import matplotlib.pyplot as plt
 import numpy as np
+import ray
 
 from globopt.core.problems import Simple1dProblem
 from globopt.core.regression import Kernel, Rbf, fit
-from globopt.nonmyopic.acquisition import (
+from globopt.nonmyopic.acquisition import (  # deterministic_acquisition,
     acquisition,
     acquisition_batched,
-    deterministic_acquisition,
+    wait_ray_tasks,
 )
 
 print(f"{datetime.now()} | time = {perf_counter() - t0:.3f}s")
@@ -88,23 +89,25 @@ with Parallel(n_jobs=-1) as parallel:
     )
 print(f"{datetime.now()} | time = {perf_counter() - t0:.3f}s")
 
-print(f"{datetime.now()} | MC (n_jobs=-1)... ")
+ray.init()
+
+print(f"{datetime.now()} | MC (ray)... ")
 t0 = perf_counter()
-with Parallel(n_jobs=-1) as parallel:
-    a_target2 = np.squeeze(
-        parallel(
-            delayed(acquisition)(
+a_target2 = np.squeeze(
+    wait_ray_tasks(
+        [
+            acquisition_batched.remote(
                 **kwargs,
                 mc_iters=2**p,
                 quasi_mc=False,
                 common_random_numbers=True,
                 antithetic_variates=False,
                 return_as_list=True,
-                n_jobs=-1,
             )
             for _ in range(N)
-        )
+        ]
     )
+)
 print(f"{datetime.now()} | time = {perf_counter() - t0:.3f}s")
 
 

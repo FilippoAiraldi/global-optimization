@@ -106,26 +106,13 @@ class Idw(NamedTuple):
 
 RegressorType: TypeAlias = Union[Rbf, Idw]
 nb_Kernel = nb.types.IntEnumMember(Kernel, nb.int64)
-nb_Rbf = nb.types.NamedTuple(
-    (
-        nb_Kernel,
-        nb.float64,
-        nb.float64,
-        nb.bool_,
-        nb.float64[:, :, ::1],
-        nb.float64[:, :, ::1],
-        nb.float64[:, :, ::1],
-        nb.float64[:, :, ::1],
-    ),
-    Rbf,
-)
-nb_Idw = nb.types.NamedTuple(
-    (nb.bool_, nb.float64[:, :, ::1], nb.float64[:, :, ::1]), Idw
-)
 
 
 @nb.njit(
-    nb.float64[:, :, :](nb.float64[:, :, :], nb.float64[:, :, :]),
+    nb.types.Array(nb.float64, 3, "A")(
+        nb.types.Array(nb.float64, 3, "A", readonly=True),
+        nb.types.Array(nb.float64, 3, "A", readonly=True),
+    ),
     cache=True,
     nogil=True,
     parallel=True,
@@ -143,9 +130,15 @@ def matmul3d(X: Array3d, Y: Array3d) -> Array3d:
 @nb.njit(
     [
         nb.float64(nb.float64, nb.float64, nb_Kernel),
-        nb.float64[:](nb.float64[:], nb.float64, nb_Kernel),
-        nb.float64[:, :](nb.float64[:, :], nb.float64, nb_Kernel),
-        nb.float64[:, :, :](nb.float64[:, :, :], nb.float64, nb_Kernel),
+        nb.types.Array(nb.float64, 1, "A")(
+            nb.types.Array(nb.float64, 1, "A", readonly=True), nb.float64, nb_Kernel
+        ),
+        nb.types.Array(nb.float64, 2, "A")(
+            nb.types.Array(nb.float64, 2, "A", readonly=True), nb.float64, nb_Kernel
+        ),
+        nb.types.Array(nb.float64, 3, "A")(
+            nb.types.Array(nb.float64, 3, "A", readonly=True), nb.float64, nb_Kernel
+        ),
     ],
     cache=True,
     nogil=True,
@@ -166,12 +159,7 @@ def rbf(d2: np.ndarray, eps: float, kernel: Kernel) -> np.ndarray:
     raise ValueError(f"unknown RBF kernel: {kernel}")
 
 
-@nb.njit(
-    nb_Rbf(nb_Rbf, nb.float64[:, :, :], nb.float64[:, :, :]),
-    cache=True,
-    nogil=True,
-    parallel=True,
-)
+@nb.njit(cache=True, nogil=True, parallel=True)
 def _rbf_fit(mdl: Rbf, X: Array3d, y: Array3d) -> Rbf:
     """Fits an RBF model to the data (via SVD)."""
     kernel, eps, svd_tol, exp_weighting = mdl[:4]
@@ -192,12 +180,7 @@ def _rbf_fit(mdl: Rbf, X: Array3d, y: Array3d) -> Rbf:
     return Rbf(kernel, eps, svd_tol, exp_weighting, X, y, coef, Minv)
 
 
-@nb.njit(
-    nb_Rbf(nb_Rbf, nb.float64[:, :, :], nb.float64[:, :, :]),
-    cache=True,
-    nogil=True,
-    parallel=True,
-)
+@nb.njit(cache=True, nogil=True, parallel=True)
 def _rbf_partial_fit(mdl: Rbf, X: Array3d, y: Array3d) -> Rbf:
     """Fits an already partially fitted RBF model to the additional data (via blockwise
     inversion)."""
@@ -229,7 +212,15 @@ def _rbf_partial_fit(mdl: Rbf, X: Array3d, y: Array3d) -> Rbf:
     return Rbf(kernel, eps, svd_tol, exp_weighting, X_new, y_new, coef_new, Minv_new)
 
 
-@nb.njit(nb.float64[:, :, :](nb.float64[:, :, :], nb.float64[:, :, :], nb.bool_))
+@nb.njit(
+    nb.types.Array(nb.float64, 3, "A")(
+        nb.types.Array(nb.float64, 3, "A", readonly=True),
+        nb.types.Array(nb.float64, 3, "A", readonly=True),
+        nb.bool_,
+    ),
+    cache=True,
+    nogil=True,
+)
 def _idw_weighting(X: Array3d, Xm: Array3d, exp_weighting: bool = False) -> Array3d:
     """Computes the IDW weighting function `w`."""
     d2 = batch_cdist(X, Xm, "sqeuclidean")
@@ -239,14 +230,7 @@ def _idw_weighting(X: Array3d, Xm: Array3d, exp_weighting: bool = False) -> Arra
     return W
 
 
-@nb.njit(
-    [
-        nb_Idw(nb_Idw, nb.float64[:, :, :], nb.float64[:, :, :]),
-        nb_Rbf(nb_Rbf, nb.float64[:, :, :], nb.float64[:, :, :]),
-    ],
-    cache=True,
-    nogil=True,
-)
+@nb.njit(cache=True, nogil=True)
 def fit(mdl: RegressorType, X: Array3d, y: Array3d) -> RegressorType:
     """Fits an IDW or RBF model to the data.
 
@@ -271,14 +255,7 @@ def fit(mdl: RegressorType, X: Array3d, y: Array3d) -> RegressorType:
     )
 
 
-@nb.njit(
-    [
-        nb_Idw(nb_Idw, nb.float64[:, :, :], nb.float64[:, :, :]),
-        nb_Rbf(nb_Rbf, nb.float64[:, :, :], nb.float64[:, :, :]),
-    ],
-    cache=True,
-    nogil=True,
-)
+@nb.njit(cache=True, nogil=True)
 def partial_fit(mdl: RegressorType, X: Array3d, y: Array3d) -> RegressorType:
     """Adds additional data to an already fitted IDW or RBF model.
 
@@ -307,14 +284,7 @@ def partial_fit(mdl: RegressorType, X: Array3d, y: Array3d) -> RegressorType:
     )
 
 
-@nb.njit(
-    [
-        nb.float64[:, :, :](nb_Idw, nb.float64[:, :, :]),
-        nb.float64[:, :, :](nb_Rbf, nb.float64[:, :, :]),
-    ],
-    cache=True,
-    nogil=True,
-)
+@nb.njit(cache=True, nogil=True)
 def predict(mdl: RegressorType, X: Array3d) -> Array3d:
     """Predicts target values according to the IDW or RBF model.
 
@@ -342,8 +312,12 @@ def predict(mdl: RegressorType, X: Array3d) -> Array3d:
 
 @nb.njit(
     [
-        nb.float64[:, :](nb.float64[:, :], nb.int64),
-        nb.float64[:, :, :](nb.float64[:, :, :], nb.int64),
+        nb.types.Array(nb.float64, 2, "A")(
+            nb.types.Array(nb.float64, 2, "A", readonly=True), nb.int64
+        ),
+        nb.types.Array(nb.float64, 3, "A")(
+            nb.types.Array(nb.float64, 3, "A", readonly=True), nb.int64
+        ),
     ],
     cache=True,
     nogil=True,
@@ -362,7 +336,7 @@ def repeat_along_first_axis(x: Array3d, n: int) -> Array3d:
     raise ValueError("input must be 2D or 3D")
 
 
-@nb.njit([nb_Idw(nb_Idw, nb.int64), nb_Rbf(nb_Rbf, nb.int64)], cache=True, nogil=True)
+@nb.njit(cache=True, nogil=True)
 def repeat(mdl: RegressorType, n: int) -> RegressorType:
     """Repeats a regressor model `n` times, so that `n` regressions can be computed in
     batch.
