@@ -8,7 +8,7 @@ References
     functions. Computational Optimization and Applications, 77(2):571–595, 2020
 """
 
-from itertools import chain, product
+from itertools import chain
 from typing import Any, Optional, Union
 
 import numba as nb
@@ -21,8 +21,6 @@ from vpso.typing import Array1d, Array2d, Array3d
 
 from globopt.core.regression import (
     RegressorType,
-    nb_Idw,
-    nb_Rbf,
     partial_fit,
     predict,
     repeat,
@@ -39,25 +37,7 @@ FIXED_SEED = 1909
 BATCH_SIZE = 3  # 2**5
 
 
-@nb.njit(
-    [
-        nb.types.Tuple((nb.int64, types[0], types[1][1], types[1][1]))(
-            nb.float64[:, :, :],
-            types[0],
-            nb.int64,
-            nb.bool_,
-            types[1][0],
-            types[1][0],
-            nb.bool_,
-        )
-        for types in product(
-            (nb_Rbf, nb_Idw),
-            ((nb.float64[:], nb.float64[:, :]), (nb.types.none, nb.types.none)),
-        )
-    ],
-    cache=True,
-    nogil=True,
-)
+@nb.njit(cache=True, nogil=True)
 def _initialize(
     x: Array3d,
     mdl: RegressorType,
@@ -115,27 +95,11 @@ def _next_query_point(
     func = lambda x_: myopic_acquisition(
         x_, mdl.Xm_, mdl.ym_, c1, c2, mdl.exp_weighting, predict(mdl, x_), dym
     )[:, :, 0]
+    # np_random = np.random.default_rng(FIXED_SEED * 3)
     return vpso(func, lb, ub, **pso_kwargs, seed=np_random)[0][:, np.newaxis, :]
 
 
-@nb.njit(
-    [
-        nb.types.Tuple(
-            (types[0], nb.float64[:], nb.float64[:, :, :], nb.float64[:, :, :])
-        )(
-            nb.float64[:, :, :],
-            types[0],
-            nb.float64,
-            nb.float64,
-            nb.float64[:, :, :],
-            nb.float64[:, :, :],
-            types[1],
-        )
-        for types in product((nb_Rbf, nb_Idw), (nb.float64[:], nb.types.none))
-    ],
-    cache=True,
-    nogil=True,
-)
+@nb.njit(cache=True, nogil=True)
 def _advance(
     x_next: Array3d,
     mdl: RegressorType,
