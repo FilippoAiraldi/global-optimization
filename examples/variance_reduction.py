@@ -110,6 +110,7 @@ print(f"{datetime.now()} | time = {perf_counter() - t0:.3f}s")
 
 print(a_target1.mean(-1))
 print(a_target2.mean(-1))
+print(a_target2.mean(-1) - a_target1.mean(-1))
 np.savez("a_targets.npz", a_target1=a_target1, a_target2=a_target2)
 
 

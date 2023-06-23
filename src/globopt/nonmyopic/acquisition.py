@@ -540,5 +540,4 @@ def acquisition_batched(
 
 # TODO:
 # 1. implement control variate
-# 2: set boundcheks to 0, delete cache and see if faster
 # 3. remove implementations with return_as_list, and move them to dedicated example file
