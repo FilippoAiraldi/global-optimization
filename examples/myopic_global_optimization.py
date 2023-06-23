@@ -17,7 +17,8 @@ from vpso.typing import Array1d
 
 from globopt.core.problems import Simple1dProblem
 from globopt.core.regression import Kernel, Rbf, predict
-from globopt.myopic.algorithm import acquisition, go
+from globopt.myopic.acquisition import acquisition
+from globopt.myopic.algorithm import go
 
 plt.style.use("bmh")
 
