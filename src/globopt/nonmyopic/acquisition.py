@@ -34,7 +34,7 @@ from globopt.myopic.acquisition import _idw_variance, _idw_weighting
 FIXED_SEED = 1909
 
 """Number of elements per batch to use for parallelization."""
-BATCH_SIZE = 3  # 2**5
+BATCH_SIZE = 2**5
 
 
 @nb.njit(
@@ -390,7 +390,7 @@ def acquisition(
     # loop over MC iterations and return the average
     # if parallel is None:
     #     parallel = Parallel(n_jobs=-1, verbose=0, prefer="processes")
-    results = Parallel(n_jobs=n_jobs, verbose=0, backend="threading")(
+    results = Parallel(n_jobs=n_jobs, verbose=0, prefer="processes")(
         delayed(_compute_acquisition)(
             x,
             mdl,
@@ -509,7 +509,7 @@ def acquisition_batched(
     # loop over MC iterations and return the average
     # if parallel is None:
     #     parallel = Parallel(n_jobs=-1, verbose=0, prefer="processes")
-    results = Parallel(n_jobs=n_jobs, verbose=0, backend="threading")(
+    results = Parallel(n_jobs=n_jobs, verbose=0, prefer="processes")(
         delayed(_compute_acquisition_batched)(
             x,
             mdl,
