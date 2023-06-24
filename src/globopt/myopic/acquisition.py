@@ -9,22 +9,24 @@ References
 """
 
 
+from itertools import product
 from typing import Optional
 
 import numba as nb
 import numpy as np
 from vpso.typing import Array3d
 
-from globopt.core.regression import RegressorType, _idw_weighting, predict
+from globopt.core.regression import (
+    RegressorType,
+    _idw_weighting,
+    nb_Idw,
+    nb_Rbf,
+    predict,
+)
 
 
 @nb.njit(
-    nb.types.Array(nb.float64, 3, "A")(
-        nb.types.Array(nb.float64, 3, "A", readonly=True)
-    ),
-    cache=True,
-    nogil=True,
-    parallel=True,
+    nb.float64[:, :, :](nb.float64[:, :, :]), cache=True, nogil=True, parallel=True
 )
 def func_range(y: Array3d) -> Array3d:
     """Computes the range of the observed samples."""
@@ -36,10 +38,7 @@ def func_range(y: Array3d) -> Array3d:
 
 
 @nb.njit(
-    nb.types.Array(nb.float64, 3, "A")(
-        nb.types.Array(nb.float64, 3, "A", readonly=True),
-        nb.types.Array(nb.float64, 3, "A", readonly=True),
-    ),
+    nb.float64[:, :, :](nb.float64[:, :, :], nb.float64[:, :, :]),
     cache=True,
     nogil=True,
     parallel=True,
@@ -54,11 +53,7 @@ def _idw_variance_inner_loop(V, sqdiff):
 
 
 @nb.njit(
-    nb.types.Array(nb.float64, 3, "A")(
-        nb.types.Array(nb.float64, 3, "A", readonly=True),
-        nb.types.Array(nb.float64, 3, "A", readonly=True),
-        nb.types.Array(nb.float64, 3, "A", readonly=True),
-    ),
+    nb.float64[:, :, :](nb.float64[:, :, :], nb.float64[:, :, :], nb.float64[:, :, :]),
     cache=True,
     nogil=True,
 )
@@ -70,9 +65,7 @@ def _idw_variance(y_hat: Array3d, ym: Array3d, W: Array3d) -> Array3d:
 
 
 @nb.njit(
-    nb.types.Array(nb.float64, 3, "A")(
-        nb.types.Array(nb.float64, 3, "A", readonly=True)
-    ),
+    nb.float64[:, :, :](nb.float64[:, :, :]),
     cache=True,
     nogil=True,
 )
@@ -82,15 +75,15 @@ def _idw_distance(W: Array3d) -> Array3d:
 
 
 @nb.njit(
-    nb.types.Array(nb.float64, 3, "A")(
-        nb.types.Array(nb.float64, 3, "A", readonly=True),
-        nb.types.Array(nb.float64, 3, "A", readonly=True),
-        nb.types.Array(nb.float64, 3, "A", readonly=True),
+    nb.float64[:, :, :](
+        nb.float64[:, :, :],
+        nb.float64[:, :, :],
+        nb.float64[:, :, :],
         nb.float64,
         nb.float64,
         nb.boolean,
-        nb.types.Array(nb.float64, 3, "A", readonly=True),
-        nb.types.Array(nb.float64, 3, "A", readonly=True),
+        nb.float64[:, :, :],
+        nb.float64[:, :, :],
     ),
     cache=True,
     nogil=True,
@@ -112,7 +105,20 @@ def _compute_acquisition(
     return y_hat - c1 * s - c2 * dym * z
 
 
-@nb.njit(cache=True, nogil=True)
+@nb.njit(
+    [
+        nb.float64[:, :, :](
+            nb.float64[:, :, :], types[0], nb.float64, nb.float64, types[1], types[2]
+        )
+        for types in product(
+            (nb_Rbf, nb_Idw),
+            (nb.float64[:, :, :], nb.types.none),
+            (nb.float64[:, :, :], nb.types.none),
+        )
+    ],
+    cache=True,
+    nogil=True,
+)
 def acquisition(
     x: Array3d,
     mdl: RegressorType,

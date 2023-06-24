@@ -4,33 +4,18 @@ of the non-myopic acquisition function.
 """
 
 
-from datetime import datetime
-from time import perf_counter
-
-from joblib import Parallel, delayed
-
-print(f"{datetime.now()} | Importing... ")
-t0 = perf_counter()
 import matplotlib.pyplot as plt
 import numpy as np
-import ray
+from joblib import Parallel
 
 from globopt.core.problems import Simple1dProblem
 from globopt.core.regression import Kernel, Rbf, fit
-from globopt.nonmyopic.acquisition import (  # deterministic_acquisition,
-    acquisition,
-    acquisition_batched,
-    wait_ray_tasks,
-)
-
-print(f"{datetime.now()} | time = {perf_counter() - t0:.3f}s")
+from globopt.nonmyopic.acquisition import acquisition, deterministic_acquisition
 
 plt.style.use("bmh")
 
 
 # define the function and its domain
-print(f"{datetime.now()} | Setup... ")
-t0 = perf_counter()
 lb, ub = np.array([-3.0]), np.array([+3.0])
 f = Simple1dProblem.f
 
@@ -57,64 +42,27 @@ kwargs = {
     "lb": lb,
     "ub": ub,
 }
-print(f"{datetime.now()} | time = {perf_counter() - t0:.3f}s")
 
 
-# compute the non-myopic acquisition for `x_target` with deterministic dynamics - no
-# MC integration is required
-# print(f"{datetime.now()} | Deterministic... ")
-# t0 = perf_counter()
-# a_deterministic = deterministic_acquisition(**kwargs, seed=420).item()
-# print(f"{datetime.now()} | time = {perf_counter() - t0:.3f}s")
-
-p = 13
-N = 10
-
-print(f"{datetime.now()} | MC (n_jobs=1)... ")
-t0 = perf_counter()
-with Parallel(n_jobs=-1) as parallel:
-    a_target1 = np.squeeze(
-        parallel(
-            delayed(acquisition)(
-                **kwargs,
-                mc_iters=2**p,
-                quasi_mc=False,
-                common_random_numbers=True,
-                antithetic_variates=False,
-                return_as_list=True,
-                n_jobs=1,
-            )
-            for _ in range(N)
+# compute the non-myopic acquisition for `x_target` with deterministic dynamics (without
+# Monte Carlo integration) and with stochastic dynamics (via MC)
+a_deterministic = deterministic_acquisition(**kwargs, seed=420).item()
+with Parallel(n_jobs=-1, verbose=100) as parallel:
+    a_target = np.squeeze(
+        acquisition(
+            **kwargs,
+            mc_iters=2**7,
+            quasi_mc=False,
+            common_random_numbers=True,
+            antithetic_variates=False,
+            parallel=parallel,
+            return_as_list=True,
         )
     )
-print(f"{datetime.now()} | time = {perf_counter() - t0:.3f}s")
-
-ray.init()
-
-print(f"{datetime.now()} | MC (ray)... ")
-t0 = perf_counter()
-a_target2 = np.squeeze(
-    wait_ray_tasks(
-        [
-            acquisition_batched.remote(
-                **kwargs,
-                mc_iters=2**p,
-                quasi_mc=False,
-                common_random_numbers=True,
-                antithetic_variates=False,
-                return_as_list=True,
-            )
-            for _ in range(N)
-        ]
-    )
-)
-print(f"{datetime.now()} | time = {perf_counter() - t0:.3f}s")
 
 
-print(a_target1.mean(-1))
-print(a_target2.mean(-1))
-print(a_target2.mean(-1) - a_target1.mean(-1))
-np.savez("a_targets.npz", a_target1=a_target1, a_target2=a_target2)
+print(a_target.mean(-1))
+np.savez("a_targets.npz", a_target1=a_target)
 
 
 # # compute the non-myopic acquisition function for x with different variance reductions
