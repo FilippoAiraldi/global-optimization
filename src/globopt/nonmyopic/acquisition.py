@@ -310,7 +310,7 @@ def acquisition(
     pso_kwargs: Optional[dict[str, Any]] = None,
     check: bool = True,
     seed: Union[None, int, np.random.Generator] = None,
-    parallel: Optional[Parallel] = None,
+    parallel: Union[None, Parallel, dict[str, Any]] = None,
     return_as_list: bool = False,
 ) -> Union[Array1d, list[Array1d]]:
     """Computes the non-myopic acquisition function for IDW/RBF regression models with
@@ -362,6 +362,10 @@ def acquisition(
     seed : int or np.random.Generator, optional
         Seed for the random number generator or a generator itself, by default `None`.
         Only used when `common_random_numbers == False`.
+    parallel : Parallel or dict, optional
+        Parallelization of MC iterations. If an instance of `Parallel` is passed, it is
+        used to parallelize the loop. If a dictionary is passed, it is used as kwargs to
+        instantiate a `Parallel` object. If `None`, no parallelization is performed.
     return_as_list : bool, optional
         Whether to return the list of iterations of the MC integration or just the
         resulting average. By default `False`, which only returns the average.
@@ -388,9 +392,13 @@ def acquisition(
     )
     seeds = np_random.bit_generator._seed_seq.spawn(mc_iters)  # type: ignore
 
-    # loop over MC iterations and return the average
+    # instantiate the parallel object
     if parallel is None:
-        parallel = Parallel(n_jobs=-1, verbose=0, prefer="processes")
+        parallel = Parallel(n_jobs=1, verbose=0)
+    elif isinstance(parallel, dict):
+        parallel = Parallel(**parallel)
+
+    # run the MC iterations, possibly in paralle
     results = parallel(
         delayed(_compute_acquisition)(
             x,
