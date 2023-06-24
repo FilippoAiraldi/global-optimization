@@ -6,7 +6,7 @@ of the non-myopic acquisition function.
 
 import matplotlib.pyplot as plt
 import numpy as np
-from joblib import Parallel
+from joblib import Parallel, delayed
 
 from globopt.core.problems import Simple1dProblem
 from globopt.core.regression import Kernel, Rbf, fit
@@ -43,26 +43,31 @@ kwargs = {
     "ub": ub,
 }
 
-
 # compute the non-myopic acquisition for `x_target` with deterministic dynamics (without
 # Monte Carlo integration) and with stochastic dynamics (via MC)
 a_deterministic = deterministic_acquisition(**kwargs, seed=420).item()
-with Parallel(n_jobs=-1, verbose=100) as parallel:
-    a_target = np.squeeze(
-        acquisition(
+a_target = np.squeeze(
+    Parallel(n_jobs=-1, verbose=1)(
+        delayed(acquisition)(
             **kwargs,
-            mc_iters=2**7,
+            mc_iters=2**13,
             quasi_mc=False,
-            common_random_numbers=True,
+            common_random_numbers=False,
             antithetic_variates=False,
-            parallel=parallel,
+            parallel={"n_jobs": -1, "verbose": 1, "backend": "loky"},
             return_as_list=True,
+            seed=420 + i,
         )
+        for i in range(3)
     )
+)
+
+
+# TODO: ablation studies repeated for different seeds (target can be run only once)
 
 
 print(a_target.mean(-1))
-np.savez("a_targets.npz", a_target1=a_target)
+np.savez("examples/variance_reduction.npz", a_target=a_target)
 
 
 # # compute the non-myopic acquisition function for x with different variance reductions
