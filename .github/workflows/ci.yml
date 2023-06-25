@@ -3,14 +3,16 @@ name: Tests
 on: [push]
 
 jobs:
+  # https://github.com/philschmid/github-actions/blob/master/python/run-unittest-on-pr-open.yaml
+  # https://docs.codeclimate.com/docs/github-actions-test-coverage
 
   test-coverage:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10"]
-        # TODO: re-instate 3.11
+        python-version: ["3.9", "3.10", "3.11"]
+        DISABLE_JIT: [0, 1]
 
     steps:
       - uses: actions/checkout@v3
@@ -27,8 +29,12 @@ jobs:
       - name: Test with unittest
         run: |
           coverage run -m unittest discover ./tests 'test_*.py'
+        env:
+          NUMBA_DISABLE_JIT: ${{ matrix.DISABLE_JIT }}
       # - name: Coverage with Code Climate
-      #   uses: paambaati/codeclimate-action@v3.2.0
+      #   uses: paambaati/codeclimate-action@v4.0.0
+      #   # send report only when jit is disabled, and for python 3.11
+      #   if: ${{ matrix.DISABLE_JIT == 1 }}
       #   env:
       #     CC_TEST_REPORTER_ID: ${{ secrets.CODECLIMATE_REPORTER_ID }}
       #   with:
