@@ -55,11 +55,12 @@ try:
     data = np.load("examples/variance_reduction.npz")
     a_target = data["a_target"]
     a_qmc = data["a_qmc"]
+    a_qmc_av = data["a_qmc_av"]
     print("Loaded data from disk.")
 
 except FileNotFoundError:
     print("Computing data from scratch...")
-    N = 3
+    N = 10  # number of independent runs
 
     # run the computations
     with Parallel(n_jobs=-1, backend="loky", verbose=1) as parallel:
@@ -68,12 +69,12 @@ except FileNotFoundError:
                 delayed(acquisition)(
                     **kwargs,
                     mc_iters=2**14,
-                    quasi_mc=False,
-                    common_random_numbers=False,  # CRN have no influece here
-                    antithetic_variates=False,
-                    parallel={"n_jobs": -1, "verbose": 1, "backend": "loky"},
+                    parallel={"n_jobs": -1, "backend": "loky", "verbose": 1},
                     return_as_list=True,
                     seed=seed + i,
+                    common_random_numbers=False,  # CRN have no influece here
+                    quasi_mc=False,
+                    antithetic_variates=False,
                 )
                 for i in range(N)
             )
@@ -84,29 +85,56 @@ except FileNotFoundError:
             parallel(
                 delayed(acquisition)(
                     **kwargs,
-                    mc_iters=2**11,
-                    quasi_mc=True,
-                    common_random_numbers=False,
-                    antithetic_variates=False,
-                    parallel={"n_jobs": -1, "verbose": 1, "backend": "loky"},
+                    mc_iters=2**12,
+                    parallel={"n_jobs": -1, "backend": "loky", "verbose": 1},
                     return_as_list=True,
                     seed=seed + i,
+                    common_random_numbers=False,
+                    quasi_mc=True,
+                    antithetic_variates=False,
                 )
                 for i in range(N)
             )
         )
 
-    np.savez("examples/variance_reduction.npz", a_target=a_target, a_qmc=a_qmc)
+        a_qmc_av = np.squeeze(
+            parallel(
+                delayed(acquisition)(
+                    **kwargs,
+                    mc_iters=2**12,
+                    parallel={"n_jobs": -1, "backend": "loky", "verbose": 1},
+                    return_as_list=True,
+                    seed=seed + i,
+                    common_random_numbers=False,
+                    quasi_mc=True,
+                    antithetic_variates=True,
+                )
+                for i in range(N)
+            )
+        )
+
+    np.savez(
+        "examples/variance_reduction.npz",
+        a_target=a_target,
+        a_qmc=a_qmc,
+        a_qmc_av=a_qmc_av,
+    )
 
 
 # plotting
-a_target_avg = a_target.mean(-1).mean(-1)
-_, ax = plt.subplots(1, 1, constrained_layout=True)
-for a, lbl in zip([a_target, a_qmc], ["Standard MC", "Quasi-MC"]):
+a_target_avg = a_target.mean(-1, keepdims=True)
+fig, ax = plt.subplots(constrained_layout=True)
+for a, lbl in zip(
+    [a_target, a_qmc, a_qmc_av], ["Standard MC", "Quasi-MC", "Quasi-MC + AV"]
+):
     iters = np.arange(1, a.shape[-1] + 1)
-    avg = np.cumsum(a, axis=-1) / iters.reshape(1, -1)
-    ax.semilogy(iters, np.abs(avg - a_target_avg), label=lbl)
+    delta = np.abs(np.cumsum(a, -1) / iters.reshape(1, -1) - a_target_avg)
+    delta_avg = delta.mean(0)
+    delta_std = delta.std(0)
+    ax.semilogy(iters, delta_avg, label=lbl)
+    ax.fill_between(iters, delta_avg - delta_std, delta_avg + delta_std, alpha=0.2)
 ax.set_xlabel("MC iterations")
 ax.set_ylabel("Estimation error")
-ax.set_xlim(2**7, 2**11)
+ax.set_xlim(2**7, 2**12)
+ax.set_ylim(1e-4, 1e-0)
 plt.show()
