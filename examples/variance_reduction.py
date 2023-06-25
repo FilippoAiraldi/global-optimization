@@ -56,10 +56,10 @@ try:
     a_target = data["a_target"]
     a_qmc = data["a_qmc"]
     a_qmc_av = data["a_qmc_av"]
-    print("Loaded data from disk.")
+    print("Loaded from disk.")
 
 except FileNotFoundError:
-    print("Computing data from scratch...")
+    print("Computing from scratch...")
     N = 10  # number of independent runs
 
     # run the computations
@@ -133,8 +133,9 @@ for a, lbl in zip(
     delta_std = delta.std(0)
     ax.semilogy(iters, delta_avg, label=lbl)
     ax.fill_between(iters, delta_avg - delta_std, delta_avg + delta_std, alpha=0.2)
-ax.set_xlabel("MC iterations")
-ax.set_ylabel("Estimation error")
+ax.set_xlabel("Iterations")
+ax.set_ylabel("Estimation Error")
 ax.set_xlim(2**7, 2**12)
 ax.set_ylim(1e-4, 1e-0)
+ax.legend()
 plt.show()
