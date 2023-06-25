@@ -10,7 +10,7 @@ authors = [
 ]
 description = "Myopic and Non-Myopic Global Optimization"
 readme = "README.md"
-requires-python = ">=3.9,<3.11"
+requires-python = ">=3.9"
 license = { text = "MIT" }
 classifiers = [
 	"Programming Language :: Python :: 3.9",
