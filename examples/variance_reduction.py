@@ -10,7 +10,7 @@ from joblib import Parallel, delayed
 
 from globopt.core.problems import Simple1dProblem
 from globopt.core.regression import Kernel, Rbf, fit
-from globopt.nonmyopic.acquisition import acquisition, deterministic_acquisition
+from globopt.nonmyopic.acquisition import acquisition
 
 plt.style.use("bmh")
 
@@ -46,7 +46,7 @@ kwargs = {
 # compute the non-myopic acquisition for `x_target` with deterministic dynamics (without
 # Monte Carlo integration)
 seed = 420
-a_deterministic = deterministic_acquisition(**kwargs, seed=seed).item()
+a_deterministic = acquisition(**kwargs, mc_iters=0, seed=seed).item()
 
 # compute the acquisition with stochastic dynamics (via MC and no variance reduction).
 # Use a huge number of MC iterations to get a good estimate of the target.

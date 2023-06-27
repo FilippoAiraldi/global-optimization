@@ -87,8 +87,6 @@ def _compute_first_step(
         x_next, mdl.Xm_, mdl.ym_, c1, c2, mdl.exp_weighting, predict(mdl, x_next), dym
     )[0, :, 0]
 
-    # add batch dimension to the regressor, bounds and y-deltas to parallelize
-    # computations across samples
     mdl_ = repeat(mdl, n_samples)
     if lb is not None and ub is not None:
         lb_ = repeat_along_first_axis(np.expand_dims(lb, 0), n_samples)
@@ -124,17 +122,16 @@ def _advance(
     mdl: RegressorType,
     y_min: Array3d,
     y_max: Array3d,
-    rng: Optional[Array1d],
+    prediction_rng: Optional[Array1d],
 ) -> tuple[RegressorType, Array3d, Array3d, Array3d]:
-    """Advances the regression model and the y-delta."""
-    # predict sample at the new point (possibly, noisy)
+    """Predicts the function value at the next point and (deterministically or
+    stochastically) advances the regression model's dynamics and the y-delta."""
     y_hat = predict(mdl, x_next)
-    if rng is not None:
+    if prediction_rng is not None:
         W = _idw_weighting(x_next, mdl.Xm_, mdl.exp_weighting)
         std = _idw_variance(y_hat, mdl.ym_, W)
-        y_hat[:, 0, 0] += std[:, 0, 0] * rng
+        y_hat[:, 0, 0] += std[:, 0, 0] * prediction_rng
 
-    # update regression model and y-delta
     mdl_ = partial_fit(mdl, x_next, y_hat)
     y_min_ = np.minimum(y_min, y_hat)
     y_max_ = np.maximum(y_max, y_hat)
@@ -187,25 +184,19 @@ def _compute_along_remaining_horizon(
     ub: Optional[Array1d],
     rollout: bool,
     pso_kwargs: dict[str, Any],
+    prediction_rng: Optional[Array2d],
     seed: Union[None, int, np.random.Generator],
-    rng: Optional[Array2d] = None,
 ) -> None:
-    """After the first step, computes the cost along the remaining horizon."""
-    # skip first step as it has already been computed
+    """After the first step, computes the cost along the remaining horizon by predicting
+    the function value at the next point and updating the regression model's dynamics
+    with such predictions."""
     h = 1
     x_next = x_trajectory[:, 0, np.newaxis, :]  # ∈ (n_samples, 1, n_features)
     while True:
-        # predict function at new sample point (possibly, noisy)
-        mdl, y_min, y_max, dym = _advance(
-            x_next, mdl, y_min, y_max, rng[h] if rng is not None else None
-        )
-
-        # if we have reached the end of the horizon, stop
+        rng = prediction_rng[h] if prediction_rng is not None else None
+        mdl, y_min, y_max, dym = _advance(x_next, mdl, y_min, y_max, rng)
         if h >= horizon:
-            del x_next
             break
-
-        # otherwise, pick next sample point and compute associated cost and prediction
         x_next, current_cost = _next_query_point(
             x_trajectory, mdl, h, c1, c2, dym, lb, ub, rollout, pso_kwargs, seed
         )
@@ -371,9 +362,10 @@ def acquisition(
             ub,
             rollout,
             pso_kwargs,
-            np_random,
             None,
+            np_random,
         )
+        return cost
 
     # TODO: MC integration
 
