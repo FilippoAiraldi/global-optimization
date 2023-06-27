@@ -65,7 +65,7 @@ BATCH_SIZE = 2**5
     cache=True,
     nogil=True,
 )
-def _compute_first_step(
+def _compute_myopic_cost(
     x_trajectory: Array3d,
     mdl: RegressorType,
     n_samples: int,
@@ -78,7 +78,7 @@ def _compute_first_step(
 ]:
     """Computes the first step of the non-myopic acquisition function (which uses the
     starting common regressor and is not dependent on the number of MC iterations) and
-    returns the batch-dimension-expanded models."""
+    returns the associated cost and batch-dimension-expanded models."""
     y_min = mdl.ym_.min()  # ym_ ∈ (1, n_samples, 1)
     y_max = mdl.ym_.max()
     dym = np.full((1, 1, 1), y_max - y_min)
@@ -164,10 +164,10 @@ def _next_query_point(
     return x_next[:, np.newaxis, :], cost
 
 
-def _compute_along_remaining_horizon(
-    cost: Array1d,
+def _compute_nonmyopic_cost(
     x_trajectory: Array3d,
     mdl: RegressorType,
+    n_samples: int,
     horizon: int,
     discount: float,
     y_min: Array3d,
@@ -180,23 +180,25 @@ def _compute_along_remaining_horizon(
     pso_kwargs: dict[str, Any],
     prediction_rng: Optional[Array2d],
     seed: Union[None, int, np.random.Generator],
-) -> None:
-    """After the first step, computes the cost along the remaining horizon by predicting
-    the function value at the next point and updating the regression model's dynamics
-    with such predictions."""
-    h = 1
+) -> Array1d:
+    """After the first myopic tep, computes the cost along the remaining horizon by
+    predicting the function value at the next point and updating the regression model's
+    dynamics with such predictions."""
+    cost = np.zeros(n_samples)
     x_next = x_trajectory[:, 0, np.newaxis, :]  # ∈ (n_samples, 1, n_features)
+    h = 0
     while True:
         rng = prediction_rng[h] if prediction_rng is not None else None
         mdl, y_min, y_max, dym = _advance(x_next, mdl, y_min, y_max, rng)
+        h += 1
         if h >= horizon:
             break
         x_next, current_cost = _next_query_point(
             x_trajectory, mdl, h, c1, c2, dym, lb, ub, rollout, pso_kwargs, seed
         )
-        cost += (discount**h) * current_cost
-        h += 1
+        cost += (discount**h) * current_cost  # accumulate in-place
     # NOTE: terminal cost can be computed here
+    return cost
 
 
 def _draw_standard_normal_sample(
@@ -335,17 +337,17 @@ def acquisition(
 
     # compute the first (myopic) iteration of the acquisition function - this is in
     # common across all MC iterations
-    cost, mdl, lb, ub, y_min, y_max = _compute_first_step(
+    myopic_cost, mdl, lb, ub, y_min, y_max = _compute_myopic_cost(
         x, mdl, n_samples, c1, c2, lb, ub
     )
 
     # if mc_iters is 0, solve the problem deterministically
     if mc_iters == 0:
         np_random = np.random.default_rng(seed)
-        _compute_along_remaining_horizon(
-            cost,
+        nonmyopic_cost = _compute_nonmyopic_cost(
             x,
             mdl,
+            n_samples,
             horizon,
             discount,
             y_min,
@@ -359,7 +361,7 @@ def acquisition(
             None,
             np_random,
         )
-        return cost
+        return myopic_cost + nonmyopic_cost
 
     # TODO: MC integration
 
