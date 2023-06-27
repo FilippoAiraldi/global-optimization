@@ -27,7 +27,7 @@ from globopt.core.regression import (
     repeat,
     repeat_along_first_axis,
 )
-from globopt.myopic.acquisition import _compute_acquisition as myopic_acquisition
+from globopt.myopic.acquisition import acquisition as myopic_acquisition
 from globopt.myopic.acquisition import _idw_variance, _idw_weighting
 
 """Seed that is used for COMMON random numbers generation."""
@@ -83,9 +83,7 @@ def _compute_first_step(
     y_max = mdl.ym_.max()
     dym = np.full((1, 1, 1), y_max - y_min)
     x_next = x_trajectory[np.newaxis, :, 0, :]  # take first element in the horizon
-    cost = myopic_acquisition(
-        x_next, mdl.Xm_, mdl.ym_, c1, c2, mdl.exp_weighting, predict(mdl, x_next), dym
-    )[0, :, 0]
+    cost = myopic_acquisition(x_next, mdl, c1, c2, None, dym)[0, :, 0]  # ∈ (n_samples,)
 
     mdl_ = repeat(mdl, n_samples)
     if lb is not None and ub is not None:
@@ -155,16 +153,12 @@ def _next_query_point(
     `"mpc"`, then the next point is just the next point in the trajectory. If the
     strategy is `"rollout"`, then the next point is the minimizer of the myopic
     acquisition function, i.e., base policy."""
-    Xm = mdl.Xm_
-    ym = mdl.ym_
-    ep = mdl.exp_weighting
     if not rollout:
         x_next = x[:, current_step, np.newaxis, :]
-        return myopic_acquisition(x, Xm, ym, c1, c2, ep, predict(mdl, x), dym)[:, :, 0]
+        return myopic_acquisition(x, mdl, c1, c2, None, dym)[:, :, 0]
 
-    def func(x_: Array3d) -> Array2d:
-        y_hat = predict(mdl, x_)
-        return myopic_acquisition(x_, Xm, ym, c1, c2, ep, y_hat, dym)[:, :, 0]
+    def func(q: Array3d) -> Array2d:
+        return myopic_acquisition(q, mdl, c1, c2, None, dym)[:, :, 0]
 
     x_next, cost, _ = vpso(func, lb, ub, **pso_kwargs, seed=seed)
     return x_next[:, np.newaxis, :], cost
