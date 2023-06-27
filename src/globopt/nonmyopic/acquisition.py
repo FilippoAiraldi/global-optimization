@@ -363,9 +363,50 @@ def acquisition(
         )
         return myopic_cost + nonmyopic_cost
 
-    # TODO: MC integration
+    # draw the standard normal samples for the prediction noise
+    prediction_random_numbers, np_random = _draw_standard_normal_sample(
+        mc_iters,
+        horizon,
+        n_samples,
+        quasi_mc,
+        common_random_numbers,
+        antithetic_variates,
+        seed,
+    )
+    seeds = np_random.bit_generator._seed_seq.spawn(mc_iters)  # type: ignore
 
-    return cost
+    # instantiate the parallel object
+    if parallel is None:
+        parallel = Parallel(n_jobs=1, verbose=0)
+    elif isinstance(parallel, dict):
+        parallel = Parallel(**parallel)
+
+    # run the MC iterations, possibly in parallel
+    nonmyopic_costs = parallel(
+        delayed(_compute_nonmyopic_cost)(
+            x,
+            mdl,
+            n_samples,
+            horizon,
+            discount,
+            y_min,
+            y_max,
+            c1,
+            c2,
+            lb,
+            ub,
+            rollout,
+            pso_kwargs,
+            prediction_random_numbers[i],
+            seeds[i],
+        )
+        for i in range(mc_iters)
+    )
+    return (
+        [myopic_cost + nonmyopic_cost for nonmyopic_cost in nonmyopic_costs]
+        if return_as_list
+        else sum(nonmyopic_cost, start=myopic_cost) / mc_iters
+    )
 
 
 # TODO:
