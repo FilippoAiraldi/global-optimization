@@ -248,13 +248,12 @@ def acquisition(
     quasi_mc: bool = True,
     common_random_numbers: bool = True,
     antithetic_variates: bool = True,
-    # control_variate: bool = True,  # TODO:
     #
     pso_kwargs: Optional[dict[str, Any]] = None,
     check: bool = True,
     seed: Union[None, int, np.random.Generator] = None,
     parallel: Union[None, Parallel, dict[str, Any]] = None,
-    return_as_list: bool = False,
+    return_iters: bool = False,
 ) -> Union[Array1d, list[Array1d]]:
     """Computes the non-myopic acquisition function for IDW/RBF regression models with
     Monte Carlo simulations.
@@ -298,7 +297,6 @@ def acquisition(
         if passed at all, is discarded.
     antithetic_variates : bool, optional
         Whether to use antithetic variates, by default `True`.
-    control_variate  # TODO
     pso_kwargs : dict, optional
         Options to be passed to the `vpso` solver. Cannot include `"seed"` key.
     check : bool, optional
@@ -310,7 +308,7 @@ def acquisition(
         Parallelization of MC iterations. If an instance of `Parallel` is passed, it is
         used to parallelize the loop. If a dictionary is passed, it is used as kwargs to
         instantiate a `Parallel` object. If `None`, no parallelization is performed.
-    return_as_list : bool, optional
+    return_iters : bool, optional
         Whether to return the list of iterations of the MC integration or just the
         resulting average. By default `False`, which only returns the average.
 
@@ -363,7 +361,8 @@ def acquisition(
         )
         return myopic_cost + nonmyopic_cost
 
-    # draw the standard normal samples for the prediction noise
+    # draw the standard normal samples for the prediction noise. These can be random
+    # or pseudo-random (QMC), and can be antithetic or not.
     prediction_random_numbers, np_random = _draw_standard_normal_sample(
         mc_iters,
         horizon,
@@ -375,13 +374,11 @@ def acquisition(
     )
     seeds = np_random.bit_generator._seed_seq.spawn(mc_iters)  # type: ignore
 
-    # instantiate the parallel object
+    # run the MC iterations, possibly in parallel
     if parallel is None:
         parallel = Parallel(n_jobs=1, verbose=0)
     elif isinstance(parallel, dict):
         parallel = Parallel(**parallel)
-
-    # run the MC iterations, possibly in parallel
     nonmyopic_costs = parallel(
         delayed(_compute_nonmyopic_cost)(
             x,
@@ -402,12 +399,6 @@ def acquisition(
         )
         for i in range(mc_iters)
     )
-    return (
-        [myopic_cost + nonmyopic_cost for nonmyopic_cost in nonmyopic_costs]
-        if return_as_list
-        else sum(nonmyopic_cost, start=myopic_cost) / mc_iters
-    )
-
-
-# TODO:
-# 1. implement control variate
+    if return_iters:
+        return [myopic_cost + nonmyopic_cost for nonmyopic_cost in nonmyopic_costs]
+    return myopic_cost + sum(nonmyopic_costs) / mc_iters
