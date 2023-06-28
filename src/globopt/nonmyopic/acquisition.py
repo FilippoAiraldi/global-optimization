@@ -33,9 +33,6 @@ from globopt.myopic.acquisition import _idw_variance, _idw_weighting
 """Seed that is used for COMMON random numbers generation."""
 FIXED_SEED = 1909
 
-"""Number of elements per batch to use for parallelization."""
-BATCH_SIZE = 2**5
-
 
 @nb.njit(
     [
