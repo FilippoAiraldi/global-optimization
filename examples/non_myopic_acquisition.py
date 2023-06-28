@@ -30,24 +30,25 @@ myopic_a = myopic_acquisition(x.transpose(1, 0, 2), mdl, c1, c2, None, None).squ
 # compute deterministic non-myopic acquisition function
 horizon = 3
 discount = 1.0
-nonmyopic_deterministic_a = nonmyopic_acquisition(
-    x, mdl, horizon, discount, lb, ub, c1, c2, rollout=True, mc_iters=0, seed=0
-)
+kwargs = {
+    "x": x,
+    "mdl": mdl,
+    "horizon": horizon,
+    "discount": discount,
+    "lb": lb,
+    "ub": ub,
+    "c1": c1,
+    "c2": c2,
+    "rollout": True,
+    "seed": 0,
+}
+nonmyopic_deterministic_a = nonmyopic_acquisition(**kwargs, mc_iters=0)
 
 # compute MC non-myopic acquisition function
 mc_iters = 2**10
 nonmyopic_mc_a = nonmyopic_acquisition(
-    x,
-    mdl,
-    horizon,
-    discount,
-    lb,
-    ub,
-    c1,
-    c2,
-    rollout=True,
+    **kwargs,
     mc_iters=mc_iters,
-    seed=0,
     parallel={"n_jobs": -1, "verbose": 1},
 )
 
