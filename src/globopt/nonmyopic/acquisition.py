@@ -27,8 +27,8 @@ from globopt.core.regression import (
     repeat,
     repeat_along_first_axis,
 )
-from globopt.myopic.acquisition import acquisition as myopic_acquisition
 from globopt.myopic.acquisition import _idw_variance, _idw_weighting
+from globopt.myopic.acquisition import acquisition as myopic_acquisition
 
 """Seed that is used for COMMON random numbers generation."""
 FIXED_SEED = 1909

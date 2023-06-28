@@ -1,11 +1,11 @@
 import pickle
-from itertools import product
 import unittest
+from itertools import product
 
 import numpy as np
 from parameterized import parameterized
 
-from globopt.core.regression import Idw, Rbf, fit, predict
+from globopt.core.regression import Idw, fit
 from globopt.nonmyopic.acquisition import acquisition
 
 with open(r"tests/data_test_non_myopic.pkl", "rb") as f:
