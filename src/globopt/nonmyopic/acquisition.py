@@ -144,7 +144,7 @@ def _next_query_point(
     ub: Optional[Array2d],
     rollout: bool,
     pso_kwargs: dict[str, Any],
-    seed: Union[None, int, np.random.Generator],
+    np_random: np.random.Generator,
 ) -> Array3d:
     """Computes the next point to query and its associated cost. If the strategy is
     `"mpc"`, then the next point is just the next point in the trajectory. If the
@@ -157,7 +157,7 @@ def _next_query_point(
     def func(q: Array3d) -> Array2d:
         return myopic_acquisition(q, mdl, c1, c2, None, dym)[:, :, 0]
 
-    x_next, cost, _ = vpso(func, lb, ub, **pso_kwargs, seed=seed)
+    x_next, cost, _ = vpso(func, lb, ub, **pso_kwargs, seed=np_random)
     return x_next[:, np.newaxis, :], cost
 
 
@@ -181,6 +181,7 @@ def _compute_nonmyopic_cost(
     """After the first myopic tep, computes the cost along the remaining horizon by
     predicting the function value at the next point and updating the regression model's
     dynamics with such predictions."""
+    np_random = np.random.default_rng(seed)
     cost = np.zeros(n_samples)
     x_next = x_trajectory[:, 0, np.newaxis, :]  # ∈ (n_samples, 1, n_features)
     h = 0
@@ -191,7 +192,7 @@ def _compute_nonmyopic_cost(
         if h >= horizon:
             break
         x_next, current_cost = _next_query_point(
-            x_trajectory, mdl, h, c1, c2, dym, lb, ub, rollout, pso_kwargs, seed
+            x_trajectory, mdl, h, c1, c2, dym, lb, ub, rollout, pso_kwargs, np_random
         )
         cost += (discount**h) * current_cost  # accumulate in-place
     # NOTE: terminal cost can be computed here
