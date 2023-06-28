@@ -68,7 +68,7 @@ except FileNotFoundError:
             parallel(
                 delayed(acquisition)(
                     **kwargs,
-                    mc_iters=2**14,
+                    mc_iters=2**13,
                     parallel={"n_jobs": -1, "backend": "loky", "verbose": 1},
                     return_iters=True,
                     seed=seed + i,
@@ -85,7 +85,7 @@ except FileNotFoundError:
             parallel(
                 delayed(acquisition)(
                     **kwargs,
-                    mc_iters=2**12,
+                    mc_iters=2**11,
                     parallel={"n_jobs": -1, "backend": "loky", "verbose": 1},
                     return_iters=True,
                     seed=seed + i,
@@ -101,7 +101,7 @@ except FileNotFoundError:
             parallel(
                 delayed(acquisition)(
                     **kwargs,
-                    mc_iters=2**12,
+                    mc_iters=2**11,
                     parallel={"n_jobs": -1, "backend": "loky", "verbose": 1},
                     return_iters=True,
                     seed=seed + i,
@@ -135,7 +135,7 @@ for a, lbl in zip(
     ax.fill_between(iters, delta_avg - delta_std, delta_avg + delta_std, alpha=0.2)
 ax.set_xlabel("Iterations")
 ax.set_ylabel("Estimation Error")
-ax.set_xlim(2**7, 2**12)
+ax.set_xlim(2**5, 2**11)
 ax.set_ylim(1e-4, 1e-0)
 ax.legend()
 plt.show()
