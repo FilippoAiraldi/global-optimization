@@ -43,6 +43,7 @@ class TestAcquisition(unittest.TestCase):
             seed=np_random,
             parallel={"n_jobs": -1, "verbose": 0},
             return_iters=True,
+            pso_kwargs={"maxiter": 2000, "ftol": 1e-12, "xtol": 1e-12},
         )
 
         expected = RESULTS[(mc_iters, rollout)]
