@@ -161,6 +161,18 @@ def _next_query_point(
     return x_next[:, np.newaxis, :], cost
 
 
+def _terminal_cost(
+    mdl: RegressorType,
+    lb: Optional[Array1d],
+    ub: Optional[Array1d],
+    pso_kwargs: dict[str, Any],
+    np_random: np.random.Generator
+) -> Array1d:
+    """Computes the terminal cost of the sample trajectory as the greedy minimum of the
+    predicted function, with no exploration."""
+    return vpso(lambda x: predict(mdl, x), lb, ub, **pso_kwargs, seed=np_random)[1]
+
+
 def _compute_nonmyopic_cost(
     x_trajectory: Array3d,
     mdl: RegressorType,
@@ -195,7 +207,7 @@ def _compute_nonmyopic_cost(
             x_trajectory, mdl, h, c1, c2, dym, lb, ub, rollout, pso_kwargs, np_random
         )
         cost += (discount**h) * current_cost  # accumulate in-place
-    # NOTE: terminal cost can be computed here
+    cost += _terminal_cost(mdl, lb, ub, pso_kwargs, np_random)
     return cost
 
 
@@ -268,7 +280,9 @@ def acquisition(
     mdl : Idw or Rbf
         Fitted model to use for computing the acquisition function.
     horizon : int
-        Length of the prediced trajectory of sampled points.
+        Length of the prediced trajectory of sampled points. Note that if `horizon=0`,
+        this acquisition function does not fall back to the myopic version, since it
+        takes into account the final terminal cost.
     discount : float
         Discount factor for the lookahead horizon.
     c1 : float, optional
