@@ -40,8 +40,8 @@ FIXED_SEED = 1909
             (
                 nb.float64[:],
                 mdl_type,
-                bnds_out,
-                bnds_out,
+                nb.float64[:, :],
+                nb.float64[:, :],
                 nb.float64[:, :, :],
                 nb.float64[:, :, :],
             )
@@ -51,13 +51,10 @@ FIXED_SEED = 1909
             nb.int64,
             nb.float64,
             nb.float64,
-            bnds_in,
-            bnds_in,
+            nb.float64[:],
+            nb.float64[:],
         )
-        for mdl_type, (bnds_in, bnds_out) in product(
-            (nb_Rbf, nb_Idw),
-            ((nb.float64[:], nb.float64[:, :]), (nb.types.none, nb.types.none)),
-        )
+        for mdl_type in (nb_Rbf, nb_Idw)
     ],
     cache=True,
     nogil=True,
@@ -68,11 +65,9 @@ def _compute_myopic_cost(
     n_samples: int,
     c1: float,
     c2: float,
-    lb: Optional[Array1d],
-    ub: Optional[Array1d],
-) -> tuple[
-    Array1d, RegressorType, Optional[Array3d], Optional[Array3d], Array3d, Array3d
-]:
+    lb: Array1d,
+    ub: Array1d,
+) -> tuple[Array1d, RegressorType, Array3d, Array3d, Array3d, Array3d]:
     """Computes the first step of the non-myopic acquisition function (which uses the
     starting common regressor and is not dependent on the number of MC iterations) and
     returns the associated cost and batch-dimension-expanded models."""
@@ -83,12 +78,8 @@ def _compute_myopic_cost(
     cost = myopic_acquisition(x_next, mdl, c1, c2, None, dym)[0, :, 0]  # ∈ (n_samples,)
 
     mdl_ = repeat(mdl, n_samples)
-    if lb is not None and ub is not None:
-        lb_ = repeat_along_first_axis(np.expand_dims(lb, 0), n_samples)
-        ub_ = repeat_along_first_axis(np.expand_dims(ub, 0), n_samples)
-    else:
-        lb_ = None
-        ub_ = None
+    lb_ = repeat_along_first_axis(np.expand_dims(lb, 0), n_samples)
+    ub_ = repeat_along_first_axis(np.expand_dims(ub, 0), n_samples)
     y_min_ = np.full((n_samples, 1, 1), y_min)
     y_max_ = np.full((n_samples, 1, 1), y_max)
     return cost, mdl_, lb_, ub_, y_min_, y_max_
@@ -140,19 +131,19 @@ def _next_query_point(
     c1: float,
     c2: float,
     dym: Array3d,
-    lb: Optional[Array2d],
-    ub: Optional[Array2d],
+    lb: Array2d,
+    ub: Array2d,
     rollout: bool,
     pso_kwargs: dict[str, Any],
     np_random: np.random.Generator,
-) -> Array3d:
+) -> tuple[Array3d, Array1d]:
     """Computes the next point to query and its associated cost. If the strategy is
     `"mpc"`, then the next point is just the next point in the trajectory. If the
     strategy is `"rollout"`, then the next point is the minimizer of the myopic
     acquisition function, i.e., base policy."""
     if not rollout:
-        x_next = x[:, current_step, np.newaxis, :]
-        return myopic_acquisition(x, mdl, c1, c2, None, dym)[:, :, 0]
+        x_next = x[:, current_step, np.newaxis, :]  # ∈ (n_samples, 1, dim)
+        return x_next, myopic_acquisition(x_next, mdl, c1, c2, None, dym)[:, 0, 0]
 
     def func(q: Array3d) -> Array2d:
         return myopic_acquisition(q, mdl, c1, c2, None, dym)[:, :, 0]
@@ -163,10 +154,10 @@ def _next_query_point(
 
 def _terminal_cost(
     mdl: RegressorType,
-    lb: Optional[Array1d],
-    ub: Optional[Array1d],
+    lb: Array1d,
+    ub: Array1d,
     pso_kwargs: dict[str, Any],
-    np_random: np.random.Generator
+    np_random: np.random.Generator,
 ) -> Array1d:
     """Computes the terminal cost of the sample trajectory as the greedy minimum of the
     predicted function, with no exploration."""
@@ -183,8 +174,8 @@ def _compute_nonmyopic_cost(
     y_max: Array3d,
     c1: float,
     c2: float,
-    lb: Optional[Array1d],
-    ub: Optional[Array1d],
+    lb: Array1d,
+    ub: Array1d,
     rollout: bool,
     pso_kwargs: dict[str, Any],
     prediction_rng: Optional[Array2d],
@@ -248,11 +239,11 @@ def acquisition(
     mdl: RegressorType,
     horizon: int,
     discount: float,
+    lb: Array1d,
+    ub: Array1d,
     c1: float = 1.5078,
     c2: float = 1.4246,
     rollout: bool = True,
-    lb: Optional[Array1d] = None,
-    ub: Optional[Array1d] = None,
     #
     mc_iters: int = 1024,
     quasi_mc: bool = True,
@@ -283,6 +274,8 @@ def acquisition(
         Length of the prediced trajectory of sampled points. Note that if `horizon=0`,
         this acquisition function does not fall back to the myopic version, since it
         takes into account the final terminal cost.
+    lb, ub : 1d array of shape (dim,)
+        Lower and upper bounds of the search domain.
     discount : float
         Discount factor for the lookahead horizon.
     c1 : float, optional
@@ -295,9 +288,6 @@ def acquisition(
         then the remaining samples in the horizon are computed via the myopic
         acquisition base policy. If `False`, the whole horizon trajectory is optimized
         in an MPC fashion.
-    lb, ub : 1d array, optional
-        Lower and upper bounds of the search domain. Only required when
-        `rollout == True`.
     mc_iters : int, optional
         Number of Monte Carlo iterations, by default `1024`. For better sampling, the
         iterations should be a power of 2. If `0`, the acquisition is computed
@@ -334,9 +324,6 @@ def acquisition(
     if check:
         assert mdl.Xm_.shape[0] == 1, "regression model must be non-batched"
         if rollout:
-            assert (
-                ub is not None and lb is not None
-            ), "upper and lower bounds must be provided for rollout"
             assert h_ == 1, "x must have only one time step for rollout"
         else:
             assert (
@@ -351,8 +338,8 @@ def acquisition(
         x, mdl, n_samples, c1, c2, lb, ub
     )
 
-    # if mc_iters is 0, solve the problem deterministically
-    if mc_iters == 0:
+    # if no mc_iters, solve the problem deterministically
+    if mc_iters <= 0:
         np_random = np.random.default_rng(seed)
         nonmyopic_cost = _compute_nonmyopic_cost(
             x,

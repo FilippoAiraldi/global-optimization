@@ -1,41 +1,52 @@
-# TODO: rewrite tests
+import pickle
+from itertools import product
+import unittest
 
-# import pickle
-# import unittest
+import numpy as np
+from parameterized import parameterized
 
-# import numpy as np
-# from joblib import Parallel
-# from pymoo.optimize import minimize
+from globopt.core.regression import Idw, Rbf, fit, predict
+from globopt.nonmyopic.acquisition import acquisition
 
-# from globopt.core.problems import Simple1DProblem
-# from globopt.core.regression import Idw, Rbf, fit, predict
-# from globopt.nonmyopic.acquisition import acquisition
-# from globopt.nonmyopic.algorithm import NonMyopicGO
-
-# with open(r"tests/data_test_non_myopic.pkl", "rb") as f:
-#     RESULTS = pickle.load(f)
+with open(r"tests/data_test_non_myopic.pkl", "rb") as f:
+    RESULTS = pickle.load(f)
 
 
-# class TestAcquisition(unittest.TestCase):
-#     def test__returns_correct_values(self):
-#         seed = 1909
-#         np.random.seed(seed)
-#         n_var = 3
-#         n_samples = 10
-#         X = np.random.randn(n_samples, n_var)
-#         y = np.random.randn(n_samples)
-#         mdl = fit(Idw(), X, y)
+class TestAcquisition(unittest.TestCase):
+    @parameterized.expand(product((0, 2**3), (False, True)))
+    def test__returns_correct_values(self, mc_iters: int, rollout: bool):
+        np_random = np.random.default_rng(1909)
+        n_samples = 7
+        horizon = 5
+        dim = 3
+        X = np_random.standard_normal((1, n_samples, dim))
+        y = np_random.standard_normal((1, n_samples, 1))
+        mdl = fit(Idw(), X, y)
+        discount = np_random.random()
+        c1 = np_random.random() * 2 + 1
+        c2 = np_random.random() * 2 + 1
+        x = np_random.standard_normal(
+            (n_samples * 2, 1, dim) if rollout else (n_samples * 2, horizon, dim)
+        )
 
-#         h = 5
-#         discount = np.random.rand()
-#         c1 = np.random.rand() * 2 + 1
-#         c2 = np.random.rand() * 2 + 1
-#         x = np.random.randn(n_samples * 2, n_var)
+        a = acquisition(
+            x=x,
+            mdl=mdl,
+            horizon=horizon,
+            discount=discount,
+            c1=c1,
+            c2=c2,
+            rollout=rollout,
+            lb=X.min(1).squeeze() - 0.1,
+            ub=X.max(1).squeeze() + 0.1,
+            mc_iters=mc_iters,
+            seed=np_random,
+            parallel={"n_jobs": -1, "verbose": 0},
+            return_iters=True,
+        )
 
-#         with Parallel(n_jobs=1, batch_size=8, verbose=0) as parallel:
-#             a = acquisition(x, mdl, h, discount, c1, c2, None, -3, +3, parallel, seed)
-
-#         np.testing.assert_allclose(a, RESULTS["acquisition"], atol=1e-3, rtol=1e-3)
+        expected = RESULTS[(mc_iters, rollout)]
+        np.testing.assert_allclose(a, expected, atol=1e-6, rtol=1e-6)
 
 
 # class TestAlgorithm(unittest.TestCase):
@@ -92,5 +103,5 @@
 #                 np.testing.assert_allclose(actual, expected, atol=1e-3, rtol=1e-3)
 
 
-# if __name__ == "__main__":
-#     unittest.main()
+if __name__ == "__main__":
+    unittest.main()
