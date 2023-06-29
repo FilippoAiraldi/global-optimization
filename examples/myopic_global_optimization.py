@@ -28,7 +28,7 @@ f = Simple1dProblem.f
 lb = Simple1dProblem.lb
 ub = Simple1dProblem.ub
 x0 = [-2.62, -1.2, 0.14, 1.1, 2.82]
-c1 = 1
+c1 = 1.0
 c2 = 0.5
 
 # helper quantities and method

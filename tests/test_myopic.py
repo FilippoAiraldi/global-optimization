@@ -58,13 +58,12 @@ class TestAlgorithm(unittest.TestCase):
         ITERS = 6
 
         def save_history(_: Literal["go", "nmgo"], locals: dict[str, Any]) -> None:
-            if locals.get("iteration", 0) == 0:
-                return
-            x_ = x.reshape(1, -1, 1)
-            mdl = locals["mdl"]
-            y_hat = predict(mdl, x_)
-            a = acquisition(x_, mdl, c1, c2, y_hat, None)
-            history.append((y_hat, mdl.Xm_, mdl.ym_, a, locals["x_new"]))
+            if locals.get("iteration", 0) > 0:
+                x_ = x.reshape(1, -1, 1)
+                mdl = locals["mdl"]
+                y_hat = predict(mdl, x_)
+                a = acquisition(x_, mdl, c1, c2, y_hat, None)
+                history.append((y_hat, mdl.Xm_, mdl.ym_, a, locals["x_new"]))
 
         # run the optimization
         go(

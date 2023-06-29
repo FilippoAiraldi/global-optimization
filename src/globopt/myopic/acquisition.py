@@ -108,9 +108,9 @@ def _compute_acquisition(
 @nb.njit(
     [
         nb.float64[:, :, :](
-            nb.float64[:, :, :], types[0], nb.float64, nb.float64, types[1], types[2]
+            nb.float64[:, :, :], mdl_type, nb.float64, nb.float64, y_hat_type, dym_type
         )
-        for types in product(
+        for mdl_type, y_hat_type, dym_type in product(
             (nb_Rbf, nb_Idw),
             (nb.float64[:, :, :], nb.types.none),
             (nb.float64[:, :, :], nb.types.none),
