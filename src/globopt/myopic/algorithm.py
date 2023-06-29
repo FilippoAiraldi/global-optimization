@@ -11,44 +11,120 @@ References
 
 from typing import Any, Callable, Literal, Optional, Union
 
+import numba as nb
 import numpy as np
 from numpy.typing import ArrayLike
 from scipy.stats.qmc import LatinHypercube
 from vpso import vpso
 from vpso.typing import Array1d, Array2d
 
-from globopt.core.regression import Idw, Rbf, fit, partial_fit, predict
-from globopt.myopic.acquisition import _compute_acquisition as acquisition
+from globopt.core.regression import Idw, Rbf, fit, nb_Idw, nb_Rbf, partial_fit
+from globopt.myopic.acquisition import acquisition
 
 
-def _fit_mdl_to_init_points(
+def _initialize(
     mdl: Union[Idw, Rbf],
     func: Callable[[Array2d], ArrayLike],
-    dim: int,
     lb: Array1d,
     ub: Array1d,
     X0: Union[int, Array2d],
-    lhs_sampler: LatinHypercube,
-) -> Union[Idw, Rbf]:
-    """Samples, if necessary, the initial points, evaluate them and fits the regression
-    model to them."""
+    seed: Union[None, int, np.random.Generator],
+    pso_kwargs: Optional[dict[str, Any]],
+) -> tuple[
+    Union[Idw, Rbf],
+    Array2d,
+    Array2d,
+    Array1d,
+    float,
+    float,
+    float,
+    dict[str, Any],
+    np.random.Generator,
+]:
+    """Initializes the Global Optimization algorithm."""
+    # samples, if necessary, the initial points, evaluate them and fits the regression
+    dim = lb.size
+    np_random = np.random.default_rng(seed)
+    lhs_sampler = LatinHypercube(d=dim, seed=np_random)
     if isinstance(X0, int):
         X0 = (lb + (ub - lb) * lhs_sampler.random(X0))[np.newaxis]
     else:
         X0 = np.reshape(X0, (1, -1, dim))
     y0 = np.reshape(func(X0), (1, X0.shape[1], 1))
-    return fit(mdl, X0, y0)
+    mdl_fitted = fit(mdl, X0, y0)
+
+    # pick the best point found so far, and minimum and maximum of the observations
+    k = mdl_fitted.ym_.argmin()
+    x_best = mdl_fitted.Xm_[0, k]
+    y_best = mdl_fitted.ym_[0, k].item()
+    y_min = y_best
+    y_max = mdl_fitted.ym_.max().item()
+    return (
+        mdl_fitted,
+        lb[np.newaxis],
+        ub[np.newaxis],
+        x_best,
+        y_best,
+        y_min,
+        y_max,
+        pso_kwargs or {},
+        np_random,
+    )
 
 
-def _setup_vpso(
-    lb: Array1d, ub: Array1d, pso_kwargs: Optional[dict[str, Any]]
-) -> tuple[Array2d, Array2d, dict[str, Any]]:
-    """Sets up the bounds and kwargs for the VPSO algorithm."""
-    lb = lb[np.newaxis]
-    ub = ub[np.newaxis]
-    if pso_kwargs is None:
-        pso_kwargs = {}
-    return lb, ub, pso_kwargs
+def _next_query_point(
+    mdl: Union[Idw, Rbf],
+    lb: Array2d,
+    ub: Array2d,
+    c1: float,
+    c2: float,
+    y_min: float,
+    y_max: float,
+    np_random: np.random.Generator,
+    pso_kwargs: Optional[dict[str, Any]],
+) -> tuple[Array1d, float]:
+    """Computes the next point to query by minimizing the acquisition function."""
+    dym = np.full((1, 1, 1), y_max - y_min)
+    vpso_func = lambda x: acquisition(x, mdl, c1, c2, None, dym)[:, :, 0]
+    x_new, acq_opt, _ = vpso(vpso_func, lb, ub, seed=np_random, **pso_kwargs)
+    return x_new[0], acq_opt.item()
+
+
+@nb.njit(
+    [
+        nb.types.Tuple((mdl_type, nb.float64[:], nb.float64, nb.float64, nb.float64))(
+            mdl_type,
+            nb.float64[:],
+            nb.float64,
+            nb.float64[:],
+            nb.float64,
+            nb.float64,
+            nb.float64,
+        )
+        for mdl_type in (nb_Rbf, nb_Idw)
+    ],
+    cache=True,
+    nogil=True,
+)
+def _advance(
+    mdl: Union[Idw, Rbf],
+    x_new: Array1d,
+    y_new: float,
+    x_best: Array1d,
+    y_best: float,
+    y_min: float,
+    y_max: float,
+) -> tuple[Union[Idw, Rbf], Array1d, float, float, float]:
+    """Advances the algorithm, given the new observation."""
+    if y_new < y_best:
+        x_best = x_new
+        y_best = y_new
+    mdl_fitted = partial_fit(
+        mdl, x_new[np.newaxis, np.newaxis], np.full((1, 1, 1), y_new)
+    )
+    y_min = min(y_min, y_new)
+    y_max = max(y_max, y_new)
+    return mdl_fitted, x_best, y_best, y_min, y_max
 
 
 def go(
@@ -111,45 +187,20 @@ def go(
     [1] A. Bemporad. Global optimization via inverse distance weighting and radial basis
         functions. Computational Optimization and Applications, 77(2):571–595, 2020
     """
-
-    # add initial points to regression model
-    dim = lb.size
-    np_random = (
-        seed if isinstance(seed, np.random.Generator) else np.random.default_rng(seed)
+    mdl, lb, ub, x_best, y_best, y_min, y_max, pso_kwargs, np_random = _initialize(
+        mdl, func, lb, ub, init_points, seed, pso_kwargs
     )
-    lhs_sampler = LatinHypercube(d=dim, seed=np_random)
-    mdl = _fit_mdl_to_init_points(mdl, func, dim, ub, lb, init_points, lhs_sampler)
-
-    # setup some quantities
-    lb_, ub_, pso_kwargs = _setup_vpso(lb, ub, pso_kwargs)
-    k = mdl.ym_.argmin()
-    x_best = mdl.Xm_[0, k]
-    y_best = mdl.ym_[0, k].item()
     if callback is not None:
         callback("go", locals())
 
-    # main loop
-    # sourcery skip: for-index-underscore
     for iteration in range(1, maxiter + 1):
-        # choose next point to sample by minimizing the myopic acquisition function
-        dym = mdl.ym_.ptp(1, keepdims=True)
-        vpso_func = lambda x: acquisition(
-            x, mdl.Xm_, mdl.ym_, c1, c2, mdl.exp_weighting, predict(mdl, x), dym
-        )[:, :, 0]
-        x_new, acq_opt, _ = vpso(vpso_func, lb_, ub_, seed=np_random, **pso_kwargs)
-        x_new = x_new[0]
-        acq_opt = acq_opt.item()
-
-        # evaluate next point and update the best point found so far
-        y_new = np.reshape(func(x_new[np.newaxis]), ())
-        if y_new < y_best:
-            x_best = x_new[0]
-            y_best = y_new.item()
-
-        # partially fit the regression model to the new point
-        mdl_new = partial_fit(mdl, x_new.reshape(1, 1, -1), y_new.reshape(1, 1, 1))
-
-        # call callback at the end of the iteration and update model
+        x_new, acq_opt = _next_query_point(
+            mdl, lb, ub, c1, c2, y_min, y_max, np_random, pso_kwargs
+        )
+        y_new = float(func(x_new[np.newaxis]))
+        mdl_new, x_best, y_best, y_min, y_max = _advance(
+            mdl, x_new, y_new, x_best, y_best, y_min, y_max
+        )
         if callback is not None:
             callback("go", locals())
         mdl = mdl_new
