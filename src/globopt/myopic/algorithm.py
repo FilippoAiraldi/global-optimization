@@ -34,6 +34,7 @@ def _initialize(
     Union[Idw, Rbf],
     Array2d,
     Array2d,
+    int,
     Array1d,
     float,
     float,
@@ -63,6 +64,7 @@ def _initialize(
         mdl_fitted,
         lb[np.newaxis],
         ub[np.newaxis],
+        dim,
         x_best,
         y_best,
         y_min,
@@ -187,7 +189,7 @@ def go(
     [1] A. Bemporad. Global optimization via inverse distance weighting and radial basis
         functions. Computational Optimization and Applications, 77(2):571–595, 2020
     """
-    mdl, lb, ub, x_best, y_best, y_min, y_max, pso_kwargs, np_random = _initialize(
+    mdl, lb, ub, _, x_best, y_best, y_min, y_max, pso_kwargs, np_random = _initialize(
         mdl, func, lb, ub, init_points, seed, pso_kwargs
     )
     if callback is not None:

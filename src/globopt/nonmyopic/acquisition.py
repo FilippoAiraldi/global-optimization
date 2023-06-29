@@ -154,14 +154,15 @@ def _next_query_point(
 
 def _terminal_cost(
     mdl: RegressorType,
-    lb: Array1d,
-    ub: Array1d,
+    lb: Array2d,
+    ub: Array2d,
     pso_kwargs: dict[str, Any],
     np_random: np.random.Generator,
 ) -> Array1d:
     """Computes the terminal cost of the sample trajectory as the greedy minimum of the
     predicted function, with no exploration."""
-    return vpso(lambda x: predict(mdl, x), lb, ub, **pso_kwargs, seed=np_random)[1]
+    vpso_func = lambda x: predict(mdl, x)[:, :, 0]
+    return vpso(vpso_func, lb, ub, **pso_kwargs, seed=np_random)[1]
 
 
 def _compute_nonmyopic_cost(
@@ -174,8 +175,8 @@ def _compute_nonmyopic_cost(
     y_max: Array3d,
     c1: float,
     c2: float,
-    lb: Array1d,
-    ub: Array1d,
+    lb: Array2d,
+    ub: Array2d,
     rollout: bool,
     pso_kwargs: dict[str, Any],
     prediction_rng: Optional[Array2d],
@@ -266,7 +267,7 @@ def acquisition(
         of target points for which to compute the acquisition, and `dim` is the number
         of features/variables of each point. In case of `rollout = False`, `horizon` is
         the length of the prediced trajectory of sampled points; while in case of
-        `rollout == True"`, this dimension has to be 1, since only the first sample
+        `rollout == True`, this dimension has to be 1, since only the first sample
         point is optimized over.
     mdl : Idw or Rbf
         Fitted model to use for computing the acquisition function.
