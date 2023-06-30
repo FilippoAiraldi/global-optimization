@@ -165,6 +165,6 @@ for history, ylbl, axs in zip(
         ylim = (0.1, 2.4)
         ax.set_ylim(ylim[0] - np.diff(ylim) * 0.1, ylim[1])
         ax.set_title(f"iter = {i + 1}, best cost = {y_best:.4f}", fontsize=9)
-    for j in range(i + 1, len(axs)):
+    for j in range(i + 1, axs.size):
         axs[j].set_axis_off()
 plt.show()

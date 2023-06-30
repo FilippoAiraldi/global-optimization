@@ -1,121 +1,174 @@
-# TODO: rewrite example
-
-# """
-# Another example comparing the myopic and non-myopic GO algorithms.
-# """
+"""
+Another example comparing the myopic and non-myopic GO algorithms.
+"""
 
 
-# import matplotlib.pyplot as plt
-# import numpy as np
-# from joblib import Parallel
-# from pymoo.optimize import minimize
+from typing import Any, Literal
 
-# from globopt.core.problems import AnotherSimple1DProblem
-# from globopt.core.regression import Idw, predict
-# from globopt.myopic.acquisition import acquisition as myopic_acquisition
-# from globopt.myopic.algorithm import GO
-# from globopt.nonmyopic.acquisition import acquisition as nonmyopic_acquisition
-# from globopt.nonmyopic.algorithm import NonMyopicGO
+import matplotlib.pyplot as plt
+import numpy as np
+from vpso.typing import Array1d
 
-# plt.style.use("bmh")
+from globopt.core.problems import AnotherSimple1dProblem
+from globopt.core.regression import Idw, predict
+from globopt.myopic.acquisition import acquisition as myopic_acquisition
+from globopt.myopic.algorithm import go
+from globopt.nonmyopic.acquisition import acquisition as nonmyopic_acquisition
+from globopt.nonmyopic.algorithm import nmgo
+
+plt.style.use("bmh")
 
 
-# # instantiate problem and create starting training data
-# problem = AnotherSimple1DProblem()
-# x0 = [0.08, 0.19, 0.92]
+# instantiate problem and create starting training data
+f = AnotherSimple1dProblem.f
+lb = AnotherSimple1dProblem.lb
+ub = AnotherSimple1dProblem.ub
+x0 = [0.08, 0.17, 0.92]
+c1 = 1.0
+c2 = 0.5
 
-# # instantiate myopic and non-myopic algorithms and then run them on the problem
-# kwargs = {
-#     "regression": Idw(),
-#     "init_points": x0,
-#     "c1": 1.5078,
-#     "c2": 1.4246,
-# }
-# algorithms = (
-#     GO(**kwargs),  # type: ignore[arg-type]
-#     NonMyopicGO(**kwargs, horizon=2, discount=1.0),  # type: ignore[arg-type]
-# )
-# ITERS = 4
-# results = (
-#     minimize(
-#         problem,
-#         algorithm,
-#         termination=("n_iter", ITERS),
-#         verbose=True,
-#         seed=1,
-#         save_history=True,
-#         copy_algorithm=False,
-#     )
-#     for algorithm in algorithms
-# )
+# helper quantities and method
+history: list[
+    tuple[Array1d, Array1d, float, float, Array1d, Array1d, Array1d, Array1d]
+] = []
+x = np.linspace(lb, ub, 300)
 
-# # plot myopic and non-myopic results results
-# with Parallel(n_jobs=-1, batch_size=8, verbose=0) as parallel:
-#     x = np.linspace(*problem.bounds(), 300).reshape(-1, 1)  # type: ignore
-#     y = problem.evaluate(x).reshape(-1)
-#     n_cols = min(ITERS, 4)
-#     n_rows = int(np.ceil(ITERS / n_cols)) * 2
-#     _, all_axs = plt.subplots(
-#         n_rows, n_cols, constrained_layout=True, figsize=(2.5 * n_cols, 2 * n_rows)
-#     )
-#     for result, ylbl, axs in zip(
-#         results, ("Myopic", "Non-myopic"), np.split(all_axs, 2)
-#     ):
-#         axs = axs.flatten()
-#         axs[0].set_ylabel(ylbl, fontsize=9)
-#         for i, (ax, algo) in enumerate(zip(axs, result.history)):
-#             # plot true function and current sampled points
-#             c = ax.plot(x.reshape(-1), y, label="$f(x)$")[0].get_color()
-#             Xm, ym = algo.pop.get("X", "F")
-#             ax.plot(Xm.reshape(-1), ym.reshape(-1), "o", color=c, markersize=8)
 
-#             # plot current regression model's prediction
-#             mdl = algo.regression
-#             y_hat = predict(mdl, x)
-#             ax.plot(x.reshape(-1), y_hat, label=r"$\hat{f}(x)$")
+def save_history(algorithm: Literal["go", "nmgo"], locals: dict[str, Any]) -> None:
+    iteration = locals.get("iteration", 0)
+    print(f"{algorithm} - iteration {iteration}")
+    if iteration > 0:
+        x_ = x.reshape(1, -1, 1)
+        mdl = locals["mdl"]
+        y_hat = predict(mdl, x_)
+        if algorithm == "go":
+            acq = myopic_acquisition(x_, mdl, c1, c2, y_hat, None).squeeze()
+        elif locals["rollout"]:
+            acq = nonmyopic_acquisition(
+                x_.transpose(1, 0, 2),
+                mdl,
+                locals["horizon"],
+                locals["discount"],
+                lb,
+                ub,
+                c1,
+                c2,
+                locals["rollout"],
+                locals["mc_iters"],
+                locals["quasi_mc"],
+                locals["common_random_numbers"],
+                locals["antithetic_variates"],
+                locals["pso_kwargs"],
+                False,
+                0,
+                {"n_jobs": -1, "backend": "loky"},
+            )
+        else:
+            acq = np.full(x.size, np.nan)
+        history.append(
+            (
+                locals["x_new"],
+                locals["y_new"],
+                locals["y_best"],
+                acq,
+                locals["acq_opt"],
+                y_hat.squeeze(),
+                mdl.Xm_.squeeze(),
+                mdl.ym_.squeeze(),
+            )
+        )
 
-#             # plot the optimal acquisition function and its minimum, or the best point
-#             # found if the algorithm has terminated (to do this, we have to access the
-#             # next iteration of the algorithm)
-#             if i + 1 < len(result.history):
-#                 next_algo = result.history[i + 1]
-#                 if isinstance(next_algo, NonMyopicGO):
-#                     a = nonmyopic_acquisition(
-#                         x,
-#                         mdl,
-#                         next_algo.horizon,
-#                         next_algo.discount,
-#                         next_algo.c1,
-#                         next_algo.c2,
-#                         None,
-#                         problem.xl,
-#                         problem.xu,
-#                         parallel,
-#                     )
-#                 else:
-#                     a = myopic_acquisition(
-#                         x, mdl, y_hat, None, next_algo.c1, next_algo.c2
-#                     )
 
-#                 acq_min = next_algo.acquisition_min_res
-#                 p = acq_min.X[: problem.n_var], acq_min.F[: problem.n_var]
+# run the myopic optimization
+ITERS = 4
+pso_kwargs = {
+    "swarmsize": 10,
+    "xtol": -1,
+    "ftol": 1e-4,
+    "maxiter": 300,
+    "patience": 1,
+}
+x_best, y_best = go(
+    func=f,
+    lb=lb,
+    ub=ub,
+    mdl=Idw(),
+    init_points=x0,
+    c1=c1,
+    c2=c2,
+    maxiter=ITERS,
+    seed=1909,
+    callback=save_history,
+    pso_kwargs=pso_kwargs,
+)
+myopic_history = history.copy()
+history.clear()
 
-#                 ax_ = ax.twinx()
-#                 c = ax_.plot(x[:, 0], a, "--", label="$a(x)$", color="C2")[
-#                     0
-#                 ].get_color()
-#                 ax_.plot(*p, "*", markersize=13, color=c)
-#                 ax_.set_axis_off()
-#                 ylim = ax_.get_ylim()
-#                 ax_.set_ylim(ylim[0] - 0.1, ylim[1] + np.diff(ylim) * 0.7)
-#             else:
-#                 ax.plot(*algo.opt.get("X", "F"), "*", markersize=17, color="C4")
+# run the non-myopic optimization
+x_best, y_best = nmgo(
+    func=f,
+    lb=lb,
+    ub=ub,
+    mdl=Idw(),
+    horizon=2,
+    discount=1.0,
+    init_points=x0,
+    c1=c1,
+    c2=c2,
+    rollout=True,
+    mc_iters=2**10,
+    parallel={"n_jobs": -1, "backend": "loky", "verbose": 1},
+    maxiter=ITERS,
+    seed=1909,
+    callback=save_history,
+    pso_kwargs=pso_kwargs,
+)
+nonmyopic_history = history.copy()
+history.clear()
 
-#             # set axis limits and title
-#             ax.set_xlim(0.001, 0.999)
-#             ylim = (-0.9, 2.2)
-#             ax.set_ylim(ylim[0] - np.diff(ylim) * 0.1, ylim[1])
-#             ax.set_title(f"iteration {i + 1}, best cost = {ym.min():.4f}", fontsize=9)
-#         for j in range(i + 1, axs.size):
-#             axs[j].set_axis_off()
-# plt.show()
+
+# plot the results
+x = x.flatten()
+y = f(x)
+n_cols = min(ITERS, 4)
+n_rows = int(np.ceil(ITERS / n_cols)) * 2
+_, all_axs = plt.subplots(
+    n_rows,
+    n_cols,
+    constrained_layout=True,
+    figsize=(2.5 * n_cols, 2 * n_rows),
+    sharex=True,
+    sharey=True,
+)
+for history, ylbl, axs in zip(
+    (myopic_history, nonmyopic_history), ("Myopic", "Non-myopic"), np.split(all_axs, 2)
+):
+    axs = axs.flatten()
+    axs[0].set_ylabel(ylbl, fontsize=9)
+    for i, (ax, history_item) in enumerate(zip(axs, history)):
+        x_new, y_new, y_best, acq, acq_opt, y_hat, Xm, ym = history_item
+
+        # plot true function, current sampled points, and regression prediction
+        ax.plot(x, y, label="$f(x)$", color="C0")
+        ax.plot(Xm, ym, "o", color="C0", markersize=8)
+        ax.plot(x, y_hat, label=r"$\hat{f}(x)$", color="C1")
+
+        # plot acquisition function and its minimum
+        ax_ = ax.twinx()
+        ax_.plot(x.reshape(-1), acq, "--", lw=2.5, label="$a(x)$", color="C2")
+        ax_.plot(x_new, acq_opt, "*", markersize=13, color="C2")
+        ax_.set_axis_off()
+        ylim = ax_.get_ylim()
+        ax_.set_ylim(ylim[0] - 0.1, ylim[1] + np.diff(ylim) * 0.7)
+
+        # plot next point
+        ax.plot(x_new, y_new, "o", markersize=8, color="C4")
+
+        # set axis limits and title
+        ax.set_xlim(0.001, 0.999)
+        ylim = (-0.9, 2.2)
+        ax.set_ylim(ylim[0] - np.diff(ylim) * 0.1, ylim[1])
+        ax.set_title(f"iter = {i + 1}, best cost = {y_best:.4f}", fontsize=9)
+    for j in range(i + 1, axs.size):
+        axs[j].set_axis_off()
+plt.show()
