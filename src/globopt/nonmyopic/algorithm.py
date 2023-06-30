@@ -188,33 +188,34 @@ def nmgo(
     elif isinstance(parallel, dict):
         parallel = Parallel(**parallel)
 
-    for iteration in range(1, maxiter + 1):
-        x_new, acq_opt = _next_query_point(
-            mdl,
-            lb,
-            ub,
-            dim,
-            horizon,
-            discount,
-            c1,
-            c2,
-            rollout,
-            mc_iters,
-            quasi_mc,
-            common_random_numbers,
-            antithetic_variates,
-            parallel,
-            iteration,
-            np_random,
-            pso_kwargs,
-        )
-        y_new = float(func(x_new[np.newaxis]))
-        mdl_new, x_best, y_best, y_min, y_max = _advance(
-            mdl, x_new, y_new, x_best, y_best, y_min, y_max
-        )
-        if callback is not None:
-            callback("nmgo", locals())
-        mdl = mdl_new
-        horizon = min(horizon, maxiter - iteration)
+    with parallel as p:
+        for iteration in range(1, maxiter + 1):
+            x_new, acq_opt = _next_query_point(
+                mdl,
+                lb,
+                ub,
+                dim,
+                horizon,
+                discount,
+                c1,
+                c2,
+                rollout,
+                mc_iters,
+                quasi_mc,
+                common_random_numbers,
+                antithetic_variates,
+                p,
+                iteration,
+                np_random,
+                pso_kwargs,
+            )
+            y_new = float(func(x_new[np.newaxis]))
+            mdl_new, x_best, y_best, y_min, y_max = _advance(
+                mdl, x_new, y_new, x_best, y_best, y_min, y_max
+            )
+            if callback is not None:
+                callback("nmgo", locals())
+            mdl = mdl_new
+            horizon = min(horizon, maxiter - iteration)
 
     return x_best, y_best
