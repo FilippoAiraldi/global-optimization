@@ -1,11 +1,14 @@
 import unittest
+from typing import Literal
 
 import numpy as np
+from parameterized import parameterized
 from pymoo.util.normalization import ZeroToOneNormalization
 
 from globopt.core.problems import Adjiman, Simple1dProblem
 from globopt.core.regression import Kernel, Rbf
 from globopt.myopic.algorithm import go
+from globopt.nonmyopic.algorithm import nmgo
 from globopt.util.callback import BestSoFarCallback, DpStageCostCallback
 from globopt.util.normalization import backward, forward, normalize_problem
 
@@ -69,33 +72,49 @@ class TestCallback(unittest.TestCase):
             rtol=1e-4,
         )
 
-    def test__dp_stage_cost_callback(self):
-        # TODO: test with both go and nmgo
+    @parameterized.expand([("go",), ("nmgo",)])
+    def test__dp_stage_cost_callback(self, algorithm: Literal["go", "nmgo"]):
         callback = DpStageCostCallback()
-        go(
-            func=Simple1dProblem.f,
-            lb=Simple1dProblem.lb,
-            ub=Simple1dProblem.ub,
-            mdl=Rbf(Kernel.ThinPlateSpline, 0.01, svd_tol=0.0),
-            init_points=[-2.62, -1.2, 0.14, 1.1, 2.82],
-            c1=1,
-            c2=0.5,
-            maxiter=5,
-            seed=1909,
-            callback=callback,
-        )
-        np.testing.assert_allclose(
-            callback,
-            [
-                0.1715646882008188,
-                0.2011653428286008,
-                0.24427501622036624,
-                0.21051260043554526,
-                0.19794195758066008,
-            ],
-            atol=1e-5,
-            rtol=1e-5,
-        )
+        kwargs = {
+            "func": Simple1dProblem.f,
+            "lb": Simple1dProblem.lb,
+            "ub": Simple1dProblem.ub,
+            "mdl": Rbf(Kernel.ThinPlateSpline, 0.01, svd_tol=0.0),
+            "init_points": [-2.62, -1.2, 0.14, 1.1, 2.82],
+            "c1": 1,
+            "c2": 0.5,
+            "maxiter": 5,
+            "seed": 1909,
+        }
+        if algorithm == "go":
+            expected = (
+                [
+                    0.1715646882008188,
+                    0.2011653428286008,
+                    0.24427501622036624,
+                    0.21051260043554526,
+                    0.19794195758066008,
+                ],
+            )
+            func = go
+            go(**kwargs)
+        else:
+            expected = [
+                0.17156476954630534,
+                0.20123173223310498,
+                0.24415728404033094,
+                0.251462332868397,
+                0.0719124302371252,
+            ]
+            func = nmgo
+            kwargs.update(
+                {"horizon": 2, "discount": 0.9, "rollout": True, "mc_iters": 0}
+            )
+            nmgo(**kwargs, horizon=2, discount=0.9, rollout=True, mc_iters=0)
+
+        func(**kwargs, callback=callback)
+
+        np.testing.assert_allclose(callback, expected, atol=1e-5, rtol=1e-5)
 
 
 if __name__ == "__main__":
