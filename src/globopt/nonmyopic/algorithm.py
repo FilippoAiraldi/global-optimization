@@ -36,6 +36,7 @@ def _next_query_point(
     quasi_mc: bool,
     common_random_numbers: bool,
     antithetic_variates: bool,
+    terminal_cost: bool,
     parallel: Parallel,
     iteration: int,
     np_random: np.random.Generator,
@@ -67,6 +68,7 @@ def _next_query_point(
         quasi_mc,
         common_random_numbers,
         antithetic_variates,
+        terminal_cost,
         pso_kwargs,
         check_acquisition,
         np_random,
@@ -93,6 +95,7 @@ def nmgo(
     quasi_mc: bool = True,
     common_random_numbers: bool = True,
     antithetic_variates: bool = True,
+    terminal_cost: bool = True,
     parallel: Union[None, Parallel, dict[str, Any]] = None,
     #
     maxiter: int = 50,
@@ -147,6 +150,9 @@ def nmgo(
         if passed at all, is discarded.
     antithetic_variates : bool, optional
         Whether to use antithetic variates, by default `True`.
+    terminal_cost : bool, optional
+        Whether to include a terminal cost component in the non-myopic acquisition
+        function, by default `True`.
     parallel : Parallel or dict, optional
         Parallelization of MC iterations. If an instance of `Parallel` is passed, it is
         used to parallelize the loop. If a dictionary is passed, it is used as kwargs to
@@ -181,7 +187,7 @@ def nmgo(
         callback("nmgo", locals())
 
     if not rollout:
-        lb = np.tile(lb, (1, horizon))
+        lb = np.tile(lb, (1, horizon))  # due to increased dimension of search space
         ub = np.tile(ub, (1, horizon))
     if parallel is None:
         parallel = Parallel(n_jobs=1, verbose=0)
@@ -204,6 +210,7 @@ def nmgo(
                 quasi_mc,
                 common_random_numbers,
                 antithetic_variates,
+                terminal_cost,
                 p,
                 iteration,
                 np_random,

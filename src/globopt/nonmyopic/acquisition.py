@@ -178,6 +178,7 @@ def _compute_nonmyopic_cost(
     lb: Array2d,
     ub: Array2d,
     rollout: bool,
+    terminal_cost: bool,
     pso_kwargs: dict[str, Any],
     prediction_rng: Optional[Array2d],
     seed: Union[None, int, np.random.Generator],
@@ -199,7 +200,8 @@ def _compute_nonmyopic_cost(
             x_trajectory, mdl, h, c1, c2, dym, lb, ub, rollout, pso_kwargs, np_random
         )
         cost += (discount**h) * current_cost  # accumulate in-place
-    cost += _terminal_cost(mdl, lb, ub, pso_kwargs, np_random)
+    if terminal_cost:
+        cost += _terminal_cost(mdl, lb, ub, pso_kwargs, np_random)
     return cost
 
 
@@ -250,6 +252,7 @@ def acquisition(
     quasi_mc: bool = True,
     common_random_numbers: bool = True,
     antithetic_variates: bool = True,
+    terminal_cost: bool = True,
     #
     pso_kwargs: Optional[dict[str, Any]] = None,
     check: bool = True,
@@ -300,6 +303,9 @@ def acquisition(
         if passed at all, is discarded.
     antithetic_variates : bool, optional
         Whether to use antithetic variates, by default `True`.
+    terminal_cost : bool, optional
+        Whether to include a terminal cost component in the non-myopic acquisition
+        function, by default `True`.
     pso_kwargs : dict, optional
         Options to be passed to the `vpso` solver. Cannot include `"seed"` key.
     check : bool, optional
@@ -355,6 +361,7 @@ def acquisition(
             lb,
             ub,
             rollout,
+            terminal_cost,
             pso_kwargs,
             None,
             np_random,
@@ -393,6 +400,7 @@ def acquisition(
             lb,
             ub,
             rollout,
+            terminal_cost,
             pso_kwargs,
             prediction_random_numbers[i],
             seeds[i],
