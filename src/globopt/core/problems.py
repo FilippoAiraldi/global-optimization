@@ -135,9 +135,9 @@ def _hartmann(A: Array2d, P: Array2d, C: Array2d, x: Array2d) -> Array1d:
 
 
 _hartmann3 = partial(_hartmann, _A3, _P3, _C)
-_hartmann3.__name__ = "_hartmann3"  # type: ignore[attr-defined]
+_hartmann3.__name__ = "_hartmann3"
 _hartmann6 = partial(_hartmann, _A6, _P6, _C)
-_hartmann6.__name__ = "_hartmann6"  # type: ignore[attr-defined]
+_hartmann6.__name__ = "_hartmann6"
 
 
 def _himmelblau(x: Array2d) -> Array1d:
@@ -214,7 +214,7 @@ StyblinskiTang5 = Problem(  # f_opt: -39.16599 * 5
 
 
 TESTS: dict[str, tuple[Problem, int, Literal["rbf", "idw"]]] = {
-    problem.f.__name__: (problem, max_evals, regressor_type)  # type: ignore[misc]
+    problem.f.__name__[1:]: (problem, max_evals, regressor_type)  # type: ignore[misc]
     for problem, max_evals, regressor_type in [
         (Ackley, 50, "rbf"),
         (Adjiman, 10, "rbf"),
@@ -230,6 +230,7 @@ TESTS: dict[str, tuple[Problem, int, Literal["rbf", "idw"]]] = {
         (AnotherSimple1dProblem, 20, "idw"),
     ]
 }
+assert len(TESTS) == 12
 
 
 def get_available_benchmark_problems() -> list[str]:
@@ -251,7 +252,7 @@ def get_available_simple_problems() -> list[str]:
     list of str
         Names of all the available simpler tests.
     """
-    return [Simple1dProblem.f.__name__, AnotherSimple1dProblem.f.__name__]
+    return [Simple1dProblem.f.__name__[1:], AnotherSimple1dProblem.f.__name__[1:]]
 
 
 def get_benchmark_problem(
