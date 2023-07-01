@@ -1,5 +1,6 @@
 import unittest
 from typing import Literal
+from unittest.mock import Mock
 
 import numpy as np
 from parameterized import parameterized
@@ -9,7 +10,11 @@ from globopt.core.problems import Adjiman, Simple1dProblem
 from globopt.core.regression import Kernel, Rbf
 from globopt.myopic.algorithm import go
 from globopt.nonmyopic.algorithm import nmgo
-from globopt.util.callback import BestSoFarCallback, DpStageCostCallback
+from globopt.util.callback import (
+    BestSoFarCallback,
+    CallbackCollection,
+    DpStageCostCallback,
+)
 from globopt.util.normalization import backward, forward, normalize_problem
 
 
@@ -95,7 +100,6 @@ class TestCallback(unittest.TestCase):
                 0.19794195758066008,
             ]
             func = go
-            go(**kwargs)
         else:
             expected = [
                 0.17156476954630534,
@@ -108,11 +112,21 @@ class TestCallback(unittest.TestCase):
             kwargs.update(
                 {"horizon": 2, "discount": 0.9, "rollout": True, "mc_iters": 0}
             )
-            nmgo(**kwargs, horizon=2, discount=0.9, rollout=True, mc_iters=0)
 
         func(**kwargs, callback=callback)
 
         np.testing.assert_allclose(callback, expected, atol=1e-5, rtol=1e-5)
+
+    def test_callback_collection(self):
+        callbacks = [Mock() for _ in range(10)]
+        collection = CallbackCollection(*callbacks)
+        algorithm = object()
+        locals = object()
+
+        collection(algorithm, locals)
+
+        for callback in callbacks:
+            callback.assert_called_once_with(algorithm, locals)
 
 
 if __name__ == "__main__":

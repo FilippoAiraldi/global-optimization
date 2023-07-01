@@ -1,7 +1,7 @@
 """Callbacks compliant to pymoo API to collect data from algorithm runs."""
 
 
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 import numpy as np
 
@@ -36,3 +36,18 @@ class DpStageCostCallback(list[float]):
                 c1 = locals["c1"]
                 c2 = locals["c2"]
                 self.append(acquisition(x_new, mdl, c1, c2, None, None).item())
+
+
+class CallbackCollection:
+    """Collection of callbacks."""
+
+    def __init__(
+        self, *callbacks: Callable[[Literal["go", "nmgo"], dict[str, Any]], None]
+    ) -> None:
+        self.callbacks = callbacks
+
+    def __call__(
+        self, algorithm: Literal["go", "nmgo"], locals: dict[str, Any]
+    ) -> None:
+        for callback in self.callbacks:
+            callback(algorithm, locals)
