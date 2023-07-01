@@ -80,19 +80,19 @@ class TestRegression(unittest.TestCase):
 
 
 EXPECTED_F_OPT: dict[str, float] = {
-    AnotherSimple1dProblem.f.__name__: -0.669169468,
-    Simple1dProblem.f.__name__: 0.279504,
+    AnotherSimple1dProblem.f.__name__[1:]: -0.669169468,
+    Simple1dProblem.f.__name__[1:]: 0.279504,
     #
-    Ackley.f.__name__: 0,
-    Adjiman.f.__name__: -2.02181,
-    Branin.f.__name__: 0.3978873,
-    CamelSixHumps.f.__name__: -1.031628453489877,
-    Hartmann3.f.__name__: -3.86278214782076,
-    Hartmann6.f.__name__: -3.32236801141551,
-    Himmelblau.f.__name__: 0,
-    Rosenbrock8.f.__name__: 0,
-    Step2Function5.f.__name__: 0,
-    StyblinskiTang5.f.__name__: -39.16599 * 5,
+    Ackley.f.__name__[1:]: 0,
+    Adjiman.f.__name__[1:]: -2.02181,
+    Branin.f.__name__[1:]: 0.3978873,
+    CamelSixHumps.f.__name__[1:]: -1.031628453489877,
+    Hartmann3.f.__name__[1:]: -3.86278214782076,
+    Hartmann6.f.__name__[1:]: -3.32236801141551,
+    Himmelblau.f.__name__[1:]: 0,
+    Rosenbrock8.f.__name__[1:]: 0,
+    Step2Function5.f.__name__[1:]: 0,
+    StyblinskiTang5.f.__name__[1:]: -39.16599 * 5,
 }
 
 
@@ -105,7 +105,7 @@ class TestProblems(unittest.TestCase):
     )
     def test__f_opt(self, testname: str, normalized: bool):
         problem, _, _ = get_benchmark_problem(testname, normalize=normalized)
-        expected = EXPECTED_F_OPT[problem.f.__name__]
+        expected = EXPECTED_F_OPT[testname]
         actual = problem.f_opt
         np.testing.assert_allclose(actual, expected, rtol=1e-5, atol=1e-6)
 
