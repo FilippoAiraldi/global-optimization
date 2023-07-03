@@ -3,8 +3,6 @@
 
 from typing import Any, Callable, Literal
 
-import numpy as np
-
 from globopt.myopic.acquisition import acquisition
 
 
@@ -25,12 +23,12 @@ class DpStageCostCallback(list[float]):
         self, algorithm: Literal["go", "nmgo"], locals: dict[str, Any]
     ) -> None:
         if algorithm == "go":
-            acq_opt = locals.get("acq_opt", np.nan)
-            if not np.isnan(acq_opt):
+            acq_opt = locals.get("acq_opt")
+            if acq_opt is not None:
                 self.append(acq_opt)
         else:
-            x_new = locals.get("x_new", np.nan)
-            if not np.isnan(x_new):
+            x_new = locals.get("x_new")
+            if x_new is not None:
                 x_new = x_new.reshape(1, 1, -1)
                 mdl = locals["mdl"]
                 c1 = locals["c1"]

@@ -194,7 +194,7 @@ def nmgo(
     elif isinstance(parallel, dict):
         parallel = Parallel(**parallel)
 
-    with parallel as p:
+    with parallel as parallel_:
         for iteration in range(1, maxiter + 1):
             x_new, acq_opt = _next_query_point(
                 mdl,
@@ -211,7 +211,7 @@ def nmgo(
                 common_random_numbers,
                 antithetic_variates,
                 terminal_cost,
-                p,
+                parallel_,
                 iteration,
                 np_random,
                 pso_kwargs,
