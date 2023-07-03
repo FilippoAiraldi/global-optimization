@@ -1,4 +1,4 @@
-"""Callbacks compliant to pymoo API to collect data from algorithm runs."""
+"""Callbacks to collect data from algorithm runs."""
 
 
 from typing import Any, Callable, Literal
