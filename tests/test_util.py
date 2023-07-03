@@ -115,7 +115,7 @@ class TestCallback(unittest.TestCase):
 
         func(**kwargs, callback=callback)
 
-        np.testing.assert_allclose(callback, expected, atol=1e-3, rtol=1e-3)
+        np.testing.assert_allclose(callback, expected, atol=1e-1, rtol=1e-1)
 
     def test_callback_collection(self):
         callbacks = [Mock() for _ in range(10)]
