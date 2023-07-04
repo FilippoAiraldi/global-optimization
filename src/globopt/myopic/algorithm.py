@@ -51,7 +51,7 @@ def _initialize(
         X0 = (lb + (ub - lb) * lhs_sampler.random(X0))[np.newaxis]
     else:
         X0 = np.reshape(X0, (1, -1, dim))
-    y0 = np.reshape(func(X0), (1, X0.shape[1], 1))
+    y0 = np.reshape(func(X0[0]), (1, X0.shape[1], 1))
     mdl_fitted = fit(mdl, X0, y0)
 
     # pick the best point found so far, and minimum and maximum of the observations
