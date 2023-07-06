@@ -44,16 +44,16 @@ def run_benchmark(problem_name: str, h: int, seed: int) -> tuple[list[float], fl
         "lb": problem.lb,
         "ub": problem.ub,
         "mdl": Rbf(eps=eps / problem.dim) if regression_type == "rbf" else Idw(),
-        "init_points": 2 * problem.dim,
+        "init_points": problem.dim,
         "c1": c1 / problem.dim,
         "c2": c2 / problem.dim,
         "maxiter": maxiter,
         "seed": seed,
         "callback": callbacks,
         "pso_kwargs": {
-            "swarmsize": 10,
+            "swarmsize": 5 * problem.dim * h,
             "xtol": 1e-9,
-            "ftol": 1e-4,
+            "ftol": 1e-9,
             "maxiter": 300,
             "patience": 10,
         },
@@ -64,9 +64,9 @@ def run_benchmark(problem_name: str, h: int, seed: int) -> tuple[list[float], fl
         _ = nmgo(
             horizon=h,
             discount=0.9,
-            rollout=True,
+            rollout=False,
             mc_iters=0,
-            parallel=Parallel(n_jobs=-1, verbose=0, backend="loky"),
+            parallel=Parallel(n_jobs=1, verbose=0, backend="loky"),
             **kwargs,
         )
     return bsf_callback, sum(dp_callback)
