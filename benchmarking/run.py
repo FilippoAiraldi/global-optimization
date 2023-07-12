@@ -39,6 +39,7 @@ def run_benchmark(problem_name: str, h: int, seed: int) -> tuple[list[float], fl
     dp_callback = DpStageCostCallback()
     callbacks = CallbackCollection(bsf_callback, dp_callback)
     c1, c2, eps = 1.5078, 1.4246, 1.0775
+    rollout = True
     kwargs = {
         "func": problem.f,
         "lb": problem.lb,
@@ -51,7 +52,7 @@ def run_benchmark(problem_name: str, h: int, seed: int) -> tuple[list[float], fl
         "seed": seed,
         "callback": callbacks,
         "pso_kwargs": {
-            "swarmsize": 5 * problem.dim * h,
+            "swarmsize": 5 * problem.dim * (rollout or h),
             "xtol": 1e-9,
             "ftol": 1e-9,
             "maxiter": 300,
@@ -64,7 +65,7 @@ def run_benchmark(problem_name: str, h: int, seed: int) -> tuple[list[float], fl
         _ = nmgo(
             horizon=h,
             discount=0.9,
-            rollout=False,
+            rollout=rollout,
             mc_iters=0,
             parallel=Parallel(n_jobs=1, verbose=0, backend="loky"),
             **kwargs,
@@ -92,6 +93,7 @@ def run_benchmarks(
         bsf.append(J)
         return f"{name}_h{h}", bsf
 
+    # TODO: split this loop in two separate loops (seems to help)
     data = Parallel(n_jobs=-1, verbose=100, backend="loky")(
         delayed(_run)(name, h, trial)
         for name, h, trial in product(problems, horizons, range(trials))
