@@ -6,7 +6,7 @@ problems.
 
 import argparse
 from datetime import datetime
-from itertools import groupby, product
+from itertools import chain, groupby, product
 
 import numpy as np
 from joblib import Parallel, delayed
@@ -81,22 +81,25 @@ def run_benchmarks(
     if problems == ["all"]:
         problems = BENCHMARK_PROBLEMS
 
-    # seeds are independent of the horizons
+    # create seeds (are independent of the horizons)
     N = len(problems)
-    seed = np.random.SeedSequence(seed)
-    seeds = dict(zip(problems, np.split(seed.generate_state(N * trials), N)))
+    seeds = iter(np.random.SeedSequence(seed).generate_state(N * trials))
 
-    def _run(name: str, h: int, trial: int) -> tuple[str, list[float]]:
-        seed_ = seeds[name][trial]
-        print(f"{name.upper()}: h={h}, iter={trial + 1} | seed={seed_}")
-        bsf, J = run_benchmark(name, h, seed_)
+    def _run(name: str, h: int, seed: int) -> tuple[str, list[float]]:
+        bsf, J = run_benchmark(name, h, seed)
         bsf.append(J)
         return f"{name}_h{h}", bsf
 
-    # TODO: split this loop in two separate loops (seems to help)
-    data = Parallel(n_jobs=-1, verbose=100, backend="loky")(
-        delayed(_run)(name, h, trial)
-        for name, h, trial in product(problems, horizons, range(trials))
+    # split the main loop in batches (seems to speed up computations)
+    batches = 2
+    assert trials % batches == 0, f"number of trials not divisible by {batches} batches"
+    trials_per_batch = trials // batches
+    data = chain.from_iterable(
+        Parallel(n_jobs=-1, verbose=100, backend="loky")(
+            delayed(_run)(name, h, next(seeds))
+            for name, h, _ in product(problems, horizons, range(trials_per_batch))
+        )
+        for _ in range(batches)
     )
     results: dict[str, Array2d] = {
         k: np.asarray([e[1] for e in g]) for k, g in groupby(data, key=lambda o: o[0])
