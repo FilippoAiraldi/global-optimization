@@ -14,9 +14,9 @@ from matplotlib.ticker import MaxNLocator
 from prettytable import PrettyTable
 from scipy.io import loadmat
 from typing_extensions import TypeAlias
+from vpso.typing import Array1d, Array2d
 
 from globopt.core.problems import get_benchmark_problem
-from vpso.typing import Array1d, Array2d
 
 plt.style.use("bmh")
 
@@ -28,7 +28,7 @@ def load_data(filename: str) -> DataT:
     data = loadmat(filename)
     for k in ("__header__", "__version__", "__globals__"):
         data.pop(k, None)
-    out = {}
+    out: DataT = {}
     for k, v in data.items():
         name, h_name = k.split("_")
         h = int(h_name[1:])
