@@ -1,4 +1,4 @@
 debug: 0
 debuginfo: 0
 debug_cache: 0
-disable_jit: 0
+disable_jit: 1
