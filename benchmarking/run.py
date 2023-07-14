@@ -29,6 +29,7 @@ from globopt.util.callback import (
 
 BENCHMARK_PROBLEMS = get_available_benchmark_problems()
 SIMPLE_PROBLEMS = get_available_simple_problems()
+BATCHES = 2
 
 
 def run_benchmark(problem_name: str, h: int, seed: int) -> tuple[list[float], float]:
@@ -81,25 +82,31 @@ def run_benchmarks(
     if problems == ["all"]:
         problems = BENCHMARK_PROBLEMS
 
-    # create seeds (are independent of the horizons)
-    N = len(problems)
-    seeds = iter(np.random.SeedSequence(seed).generate_state(N * trials))
+    # split the main loop in batches (seems to speed up computations)
+    assert trials % BATCHES == 0, f"number of trials not divisible by {BATCHES} batches"
+    trials_per_batch = trials // BATCHES
 
-    def _run(name: str, h: int, seed: int) -> tuple[str, list[float]]:
-        bsf, J = run_benchmark(name, h, seed)
+    # create seeds (are independent of the horizons)
+    seeds = dict(
+        zip(
+            problems,
+            np.random.SeedSequence(seed)
+            .generate_state(len(problems) * trials)
+            .reshape(-1, BATCHES, trials_per_batch),
+        )
+    )
+
+    def _run(name: str, h: int, batch: int, trial: int) -> tuple[str, list[float]]:
+        bsf, J = run_benchmark(name, h, seeds[name][batch, trial])
         bsf.append(J)
         return f"{name}_h{h}", bsf
 
-    # split the main loop in batches (seems to speed up computations)
-    batches = 2
-    assert trials % batches == 0, f"number of trials not divisible by {batches} batches"
-    trials_per_batch = trials // batches
     data = chain.from_iterable(
-        Parallel(n_jobs=-1, verbose=100, backend="loky")(
-            delayed(_run)(name, h, next(seeds))
-            for name, h, _ in product(problems, horizons, range(trials_per_batch))
+        Parallel(n_jobs=1, verbose=100, backend="loky")(
+            delayed(_run)(n, h, b, t)
+            for n, h, t in product(problems, horizons, range(trials_per_batch))
         )
-        for _ in range(batches)
+        for b in range(BATCHES)
     )
     results: dict[str, Array2d] = {
         k: np.asarray([e[1] for e in g]) for k, g in groupby(data, key=lambda o: o[0])
