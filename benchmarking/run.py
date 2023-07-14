@@ -29,7 +29,6 @@ from globopt.util.callback import (
 
 BENCHMARK_PROBLEMS = get_available_benchmark_problems()
 SIMPLE_PROBLEMS = get_available_simple_problems()
-BATCHES = 2
 
 
 def run_benchmark(problem_name: str, h: int, seed: int) -> tuple[list[float], float]:
@@ -75,7 +74,7 @@ def run_benchmark(problem_name: str, h: int, seed: int) -> tuple[list[float], fl
 
 
 def run_benchmarks(
-    problems: list[str], horizons: list[int], trials: int, seed: int
+    problems: list[str], horizons: list[int], trials: int, batches: int, seed: int
 ) -> dict[str, Array2d]:
     """Run the benchmarks for the given problems and horizons, repeated per the number
     of trials."""
@@ -83,8 +82,7 @@ def run_benchmarks(
         problems = BENCHMARK_PROBLEMS
 
     # split the main loop in batches (seems to speed up computations)
-    assert trials % BATCHES == 0, f"number of trials not divisible by {BATCHES} batches"
-    trials_per_batch = trials // BATCHES
+    trials_per_batch = trials // batches
 
     # create seeds (are independent of the horizons)
     seeds = dict(
@@ -92,7 +90,7 @@ def run_benchmarks(
             problems,
             np.random.SeedSequence(seed)
             .generate_state(len(problems) * trials)
-            .reshape(-1, BATCHES, trials_per_batch),
+            .reshape(-1, batches, trials_per_batch),
         )
     )
 
@@ -106,7 +104,7 @@ def run_benchmarks(
             delayed(_run)(n, h, b, t)
             for n, h, t in product(problems, horizons, range(trials_per_batch))
         )
-        for b in range(BATCHES)
+        for b in range(batches)
     )
     results: dict[str, Array2d] = {
         k: np.asarray([e[1] for e in g]) for k, g in groupby(data, key=lambda o: o[0])
@@ -140,8 +138,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--n-trials", type=int, default=30, help="Number of trials to run per problem."
     )
+    parser.add_argument("--batches", type=int, default=2, help="Processing batches.")
     parser.add_argument("--seed", type=int, default=1909, help="RNG seed.")
     args = parser.parse_args()
+    trials = args.n_trials
+    batches = args.batches
+    assert trials % batches == 0, "number of trials not divisible by batches"
 
     # run the benchmarks
-    results = run_benchmarks(args.problems, args.horizons, args.n_trials, args.seed)
+    results = run_benchmarks(args.problems, args.horizons, trials, batches, args.seed)
