@@ -6,7 +6,7 @@ problems.
 
 import argparse
 from datetime import datetime
-from itertools import chain, groupby, product
+from itertools import groupby, product
 
 import numpy as np
 from joblib import Parallel, delayed
@@ -74,37 +74,28 @@ def run_benchmark(problem_name: str, h: int, seed: int) -> tuple[list[float], fl
 
 
 def run_benchmarks(
-    problems: list[str], horizons: list[int], trials: int, batches: int, seed: int
+    problems: list[str], horizons: list[int], trials: int, seed: int
 ) -> dict[str, Array2d]:
     """Run the benchmarks for the given problems and horizons, repeated per the number
     of trials."""
     if problems == ["all"]:
         problems = BENCHMARK_PROBLEMS
 
-    # split the main loop in batches (seems to speed up computations)
-    trials_per_batch = trials // batches
+    # seeds are independent of the horizons
+    N = len(problems)
+    seedseq = np.random.SeedSequence(seed)
+    seeds = dict(zip(problems, np.split(seedseq.generate_state(N * trials), N)))
 
-    # create seeds (are independent of the horizons)
-    seeds = dict(
-        zip(
-            problems,
-            np.random.SeedSequence(seed)
-            .generate_state(len(problems) * trials)
-            .reshape(-1, batches, trials_per_batch),
-        )
-    )
-
-    def _run(name: str, h: int, batch: int, trial: int) -> tuple[str, list[float]]:
-        bsf, J = run_benchmark(name, h, seeds[name][batch, trial])
+    def _run(name: str, h: int, trial: int) -> tuple[str, list[float]]:
+        seed_ = seeds[name][trial]
+        print(f"{name.upper()}: h={h}, iter={trial + 1} | seed={seed_}")
+        bsf, J = run_benchmark(name, h, seed_)
         bsf.append(J)
         return f"{name}_h{h}", bsf
 
-    data = chain.from_iterable(
-        Parallel(n_jobs=1, verbose=100, backend="loky")(
-            delayed(_run)(n, h, b, t)
-            for n, h, t in product(problems, horizons, range(trials_per_batch))
-        )
-        for b in range(batches)
+    data = Parallel(n_jobs=-1, verbose=100, backend="loky")(
+        delayed(_run)(name, h, trial)
+        for name, h, trial in product(problems, horizons, range(trials))
     )
     results: dict[str, Array2d] = {
         k: np.asarray([e[1] for e in g]) for k, g in groupby(data, key=lambda o: o[0])
@@ -138,12 +129,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--n-trials", type=int, default=30, help="Number of trials to run per problem."
     )
-    parser.add_argument("--batches", type=int, default=2, help="Processing batches.")
     parser.add_argument("--seed", type=int, default=1909, help="RNG seed.")
     args = parser.parse_args()
-    trials = args.n_trials
-    batches = args.batches
-    assert trials % batches == 0, "number of trials not divisible by batches"
 
     # run the benchmarks
-    results = run_benchmarks(args.problems, args.horizons, trials, batches, args.seed)
+    results = run_benchmarks(args.problems, args.horizons, args.n_trials, args.seed)
