@@ -100,7 +100,7 @@ def run_benchmarks(
         return f"{name}_h{h}", bsf
 
     data = chain.from_iterable(
-        Parallel(n_jobs=1, verbose=100, backend="loky")(
+        Parallel(n_jobs=-1, verbose=100, backend="loky")(
             delayed(_run)(n, h, b, t)
             for n, h, t in product(problems, horizons, range(trials_per_batch))
         )
