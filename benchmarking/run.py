@@ -87,9 +87,7 @@ def run_benchmarks(
     seeds = dict(zip(problems, np.split(seedseq.generate_state(N * trials), N)))
 
     def _run(name: str, h: int, trial: int) -> tuple[str, list[float]]:
-        seed_ = seeds[name][trial]
-        print(f"{name.upper()}: h={h}, iter={trial + 1} | seed={seed_}")
-        bsf, J = run_benchmark(name, h, seed_)
+        bsf, J = run_benchmark(name, h, seeds[name][trial])
         bsf.append(J)
         return f"{name}_h{h}", bsf
 
