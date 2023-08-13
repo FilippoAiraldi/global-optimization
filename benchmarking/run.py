@@ -112,7 +112,7 @@ def run_benchmarks(
     with Pool(processes=n_jobs, initializer=init_pool, initargs=(lock,)) as pool:
         pool.starmap(
             run_benchmarks_iteration,
-            [(problems, h, s, csv_fname) for h, s in product(horizons, seeds)],
+            [(problems, h, s, csv_fname) for s, h in product(seeds, horizons)],
         )
 
 
