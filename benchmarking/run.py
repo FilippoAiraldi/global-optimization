@@ -4,6 +4,13 @@ problems.
 """
 
 
+import sys
+
+if sys.platform.startswith("linux"):
+    import os
+
+    os.environ["NUMBA_THREADING_LAYER"] = "forksafe"
+
 import argparse
 from datetime import datetime
 from itertools import product
