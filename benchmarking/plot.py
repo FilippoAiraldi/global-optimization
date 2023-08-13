@@ -12,7 +12,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.ticker import MaxNLocator
 from prettytable import PrettyTable
-from scipy.io import loadmat
 from typing_extensions import TypeAlias
 from vpso.typing import Array1d, Array2d
 
@@ -25,18 +24,28 @@ DataT: TypeAlias = dict[str, dict[int, tuple[Array2d, Array1d]]]
 
 def load_data(filename: str) -> DataT:
     """Loads the data from the given file."""
-    data = loadmat(filename)
-    for k in ("__header__", "__version__", "__globals__"):
-        data.pop(k, None)
-    out: DataT = {}
-    for k, v in data.items():
-        name, h_name = k.split("_")
-        h = int(h_name[1:])
+    with open(filename, "r") as f:
+        lines = f.readlines()  # better to read all at once
+
+    out: dict[str, dict[int, tuple[list[list[str]], list[str]]]] = {}
+    for line in lines:
+        elements = line.split(",")
+        name = elements[0]
+        horizon = int(elements[1])
+        cost = elements[2]
+        bests = elements[3:]
+
         if name not in out:
             out[name] = {}
+        if horizon not in out[name]:
+            out[name][horizon] = ([], [])
+        bin = out[name][horizon]
+        bin[0].append(bests)
+        bin[1].append(cost)
 
-        # NOTE: here we split best-so-far data from performance (last column)
-        out[name][h] = (v[:, :-1], v[:, -1])
+    for problem_data in out.values():
+        for horizon, str_data in problem_data.items():
+            problem_data[horizon] = tuple(np.asarray(o, dtype=float) for o in str_data)
     return out
 
 
