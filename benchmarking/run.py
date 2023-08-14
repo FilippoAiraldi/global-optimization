@@ -4,6 +4,10 @@ problems.
 """
 
 
+import os
+
+os.environ["NUMBA_NUM_THREADS"] = "1"
+
 import argparse
 from contextlib import contextmanager
 from datetime import datetime
