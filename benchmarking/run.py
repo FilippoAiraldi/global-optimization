@@ -4,19 +4,15 @@ problems.
 """
 
 
-import sys
-
-if sys.platform.startswith("linux"):
-    import os
-
-    os.environ["NUMBA_THREADING_LAYER"] = "forksafe"
-
 import argparse
+from contextlib import contextmanager
 from datetime import datetime
 from itertools import product
-from multiprocessing import Lock, Pool
+from multiprocessing import shared_memory
+from time import sleep
 
 import numpy as np
+from joblib import Parallel, delayed
 
 from globopt.core.problems import (
     get_available_benchmark_problems,
@@ -36,13 +32,28 @@ BENCHMARK_PROBLEMS = get_available_benchmark_problems()
 SIMPLE_PROBLEMS = get_available_simple_problems()
 
 
-def init_pool(this_lock: Lock) -> None:
-    """Initialize each process with a global variable lock."""
-    global lock
-    lock = this_lock
+@contextmanager
+def shm_lock(
+    shm_name: str, sleep_interval: float = 1.0, max_wait_intervals: int = 100
+) -> None:
+    """Emulates a lock using a shared memory object."""
+    shm = shared_memory.SharedMemory(name=shm_name)
+    for _ in range(max_wait_intervals):
+        if shm.buf[0] == 0:
+            break
+        sleep(sleep_interval)
+    else:
+        raise RuntimeError("Timeout waiting for shared memory lock.")
+    shm.buf[0] = 1
+    try:
+        yield
+    finally:
+        shm.buf[0] = 0
 
 
-def run_problem(problem: str, horizon: int, seed: int, output_csv: str) -> None:
+def run_problem(
+    problem_name: str, horizon: int, seed: int, output_csv: str, shm_name: str
+) -> None:
     """Solves the given problem with the given algorithm (based on the specified
     horizon), and saves as result the performance of the run in terms of best-so-far
     and total cost."""
@@ -84,7 +95,7 @@ def run_problem(problem: str, horizon: int, seed: int, output_csv: str) -> None:
         )
     cost = sum(dp_callback)
     bests = ",".join(map(str, bsf_callback))
-    with lock, open(output_csv, "a") as f:
+    with shm_lock(shm_name), open(output_csv, "a") as f:
         f.write(f"{problem_name},{horizon},{cost},{bests}\n")
 
 
@@ -101,23 +112,21 @@ def run_benchmarks(
     seedseq = np.random.SeedSequence(seed)
     seeds = dict(zip(problems, np.split(seedseq.generate_state(N * trials), N)))
 
-    # create name of csv that will be filled with the results of each iteration and its
-    # lock to avoid writing to the file at the same time
+    # create name of csv that will be filled with the results of each iteration
     nowstr = datetime.now().strftime("%Y%m%d_%H%M%S")
     csv = f"results_{nowstr}.csv"
-    lock = Lock()
 
-    # launch each benchmarking iteration in parallel
-    print(f"Started at {nowstr}")
-    with Pool(processes=n_jobs, initializer=init_pool, initargs=(lock,)) as pool:
-        pool.starmap(
-            run_problem,
-            [
-                (p, h, seeds[p][t], csv)
-                for t, p, h in product(range(trials), problems, horizons)
-            ],
+    # create shared mem lock and launch each benchmarking iteration in parallel
+    shm = shared_memory.SharedMemory(create=True, size=1)
+    shm.buf[0] = 0  # set to unlocked
+    try:
+        Parallel(n_jobs=n_jobs, verbose=100, backend="loky")(
+            delayed(run_problem)(p, h, seeds[p][t], csv, shm.name)
+            for t, p, h in product(range(trials), problems, horizons)
         )
-    print(f"Completed at {datetime.now().strftime('%Y%m%d_%H%M%S')}")
+    finally:
+        shm.close()
+        shm.unlink()
 
 
 if __name__ == "__main__":
