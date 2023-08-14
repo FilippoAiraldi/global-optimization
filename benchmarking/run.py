@@ -51,20 +51,20 @@ def run_problem(problem: str, horizon: int, seed: int, output_csv: str) -> None:
     bsf_callback = BestSoFarCallback()
     dp_callback = DpStageCostCallback()
     callbacks = CallbackCollection(bsf_callback, dp_callback)
-    p, maxiter, regression_type = get_benchmark_problem(problem)
+    problem, maxiter, regression_type = get_benchmark_problem(problem_name)
     kwargs = {
-        "func": p.f,
-        "lb": p.lb,
-        "ub": p.ub,
-        "mdl": Rbf(eps=eps / p.dim) if regression_type == "rbf" else Idw(),
-        "init_points": p.dim,
-        "c1": c1 / p.dim,
-        "c2": c2 / p.dim,
+        "func": problem.f,
+        "lb": problem.lb,
+        "ub": problem.ub,
+        "mdl": Rbf(eps=eps / problem.dim) if regression_type == "rbf" else Idw(),
+        "init_points": problem.dim,
+        "c1": c1 / problem.dim,
+        "c2": c2 / problem.dim,
         "maxiter": maxiter,
         "seed": seed,
         "callback": callbacks,
         "pso_kwargs": {
-            "swarmsize": 5 * p.dim * (rollout or horizon),
+            "swarmsize": 5 * problem.dim * (rollout or horizon),
             "xtol": 1e-9,
             "ftol": 1e-9,
             "maxiter": 300,
@@ -85,7 +85,7 @@ def run_problem(problem: str, horizon: int, seed: int, output_csv: str) -> None:
     cost = sum(dp_callback)
     bests = ",".join(map(str, bsf_callback))
     with lock, open(output_csv, "a") as f:
-        f.write(f"{problem},{horizon},{cost},{bests}\n")
+        f.write(f"{problem_name},{horizon},{cost},{bests}\n")
 
 
 def run_benchmarks(
