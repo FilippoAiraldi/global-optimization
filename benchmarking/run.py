@@ -124,10 +124,10 @@ def run_benchmarks(
     # create shared mem lock and launch each benchmarking iteration in parallel
     shm = shared_memory.SharedMemory(create=True, size=1)
     shm.buf[0] = 0  # set to unlocked
+    tasks = product(range(trials), problems, horizons)
     try:
         Parallel(n_jobs=n_jobs, verbose=100, backend="loky")(
-            delayed(run_problem)(p, h, seeds[p][t], csv, shm.name)
-            for t, p, h in product(range(trials), problems, horizons)
+            delayed(run_problem)(p, h, seeds[p][t], csv, shm.name) for t, p, h in tasks
         )
     finally:
         shm.close()
