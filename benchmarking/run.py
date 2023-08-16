@@ -53,6 +53,7 @@ def shm_lock(
         yield
     finally:
         shm.buf[0] = 0
+        shm.close()
 
 
 def run_problem(
@@ -87,9 +88,9 @@ def run_problem(
         },
     }
     if horizon == 1:
-        _ = go(**kwargs)
+        go(**kwargs)
     else:
-        _ = nmgo(
+        nmgo(
             horizon=horizon,
             discount=0.9,
             rollout=rollout,
