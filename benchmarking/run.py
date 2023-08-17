@@ -10,7 +10,6 @@ os.environ["NUMBA_NUM_THREADS"] = "1"
 
 import argparse
 from contextlib import contextmanager
-from datetime import datetime
 from itertools import product
 from multiprocessing import shared_memory
 from time import sleep
@@ -121,14 +120,11 @@ def run_benchmarks(
     # nowstr = datetime.now().strftime("%Y%m%d_%H%M%S")
     # csv = f"results_{nowstr}.csv"
 
-    csv = "results_20230814_112634.csv"
+    csv = "benchmarking/sbm_rollout.csv"
 
     def filter_problems(iterable):
         for trial, problem, horizon in iterable:
-            if trial == 4 and (
-                (problem == "hartmann6" and horizon == 6)
-                or (problem in ("step2function", "rosenbrock") and horizon in (4, 6))
-            ):
+            if trial > 4:
                 yield trial, problem, horizon
 
     # create shared mem lock and launch each benchmarking iteration in parallel
