@@ -10,6 +10,7 @@ from prettytable import PrettyTable
 from globopt.core.problems import (
     get_available_benchmark_problems,
     get_available_simple_problems,
+    get_benchmark_problem,
 )
 
 PROBLEMS = get_available_benchmark_problems() + get_available_simple_problems()
@@ -21,10 +22,18 @@ def load_data(filename: str) -> dict[str, dict[int, int]]:
         lines = f.readlines()  # better to read all at once
 
     out: dict[str, dict[int, int]] = {}
+    maxiters = {n: get_benchmark_problem(n)[1] for n in PROBLEMS}
     for line in lines:
         elements = line.split(",")
         name = elements[0]
         horizon = int(elements[1])
+
+        iters = len(elements[3:])
+        expected_iters = maxiters[name] + 1
+        assert iters == expected_iters, (
+            f"Incorrect number of iterations for {name}; expected {expected_iters}, got"
+            f" {iters} instead."
+        )
 
         if name not in out:
             out[name] = {}
