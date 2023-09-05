@@ -85,7 +85,7 @@ def nmgo(
     ub: Array1d,
     mdl: Union[Idw, Rbf],
     horizon: int,
-    discount: float,
+    discount: float = 1.0,
     init_points: Union[int, Array2d] = 5,
     c1: float = 1.5078,
     c2: float = 1.4246,

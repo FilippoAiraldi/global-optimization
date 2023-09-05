@@ -10,6 +10,7 @@ os.environ["NUMBA_NUM_THREADS"] = "1"
 
 import argparse
 from contextlib import contextmanager
+from datetime import datetime
 from itertools import product
 from multiprocessing import shared_memory
 from time import sleep
@@ -117,20 +118,21 @@ def run_benchmarks(
     seeds = dict(zip(problems, np.split(seedseq.generate_state(N * trials), N)))
 
     # create name of csv that will be filled with the results of each iteration
-    # nowstr = datetime.now().strftime("%Y%m%d_%H%M%S")
-    # csv = f"results_{nowstr}.csv"
+    nowstr = datetime.now().strftime("%Y%m%d_%H%M%S")
+    csv = f"results_{nowstr}.csv"
 
-    csv = "benchmarking/sbm_rollout.csv"
+    # csv = "benchmarking/sbm_rollout.csv"
 
-    def filter_problems(iterable):
-        for trial, problem, horizon in iterable:
-            if trial > 4:
-                yield trial, problem, horizon
+    # def filter_problems(iterable):
+    #     for trial, problem, horizon in iterable:
+    #         if trial > 4:
+    #             yield trial, problem, horizon
 
     # create shared mem lock and launch each benchmarking iteration in parallel
     shm = shared_memory.SharedMemory(create=True, size=1)
     shm.buf[0] = 0  # set to unlocked
-    tasks = filter_problems(product(range(trials), problems, horizons))
+    # tasks = filter_problems(product(range(trials), problems, horizons))
+    tasks = product(range(trials), problems, horizons)
     try:
         Parallel(n_jobs=n_jobs, verbose=100, backend="loky")(
             delayed(run_problem)(p, h, seeds[p][t], csv, shm.name) for t, p, h in tasks
