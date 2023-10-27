@@ -32,7 +32,8 @@ keywords = [
     "derivative-free-optimization",
     "rollout",
     "radial-basis-function",
-    "inverse-distance-weighting", ]
+    "inverse-distance-weighting",
+]
 dynamic = ["version"]
 
 [project.urls]
