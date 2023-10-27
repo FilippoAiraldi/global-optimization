@@ -63,7 +63,7 @@ def run_problem(
     horizon), and saves as result the performance of the run in terms of best-so-far
     and total cost."""
     rollout = True
-    c1, c2, eps = 1.5078, 1.4246, 1.0775
+    c1, c2, eps = 1.0, 0.5, 1.0
     bsf_callback = BestSoFarCallback()
     dp_callback = DpStageCostCallback()
     callbacks = CallbackCollection(bsf_callback, dp_callback)
@@ -92,7 +92,7 @@ def run_problem(
     else:
         nmgo(
             horizon=horizon,
-            discount=0.9,
+            discount=1.0,
             rollout=rollout,
             mc_iters=0,
             parallel=None,
@@ -120,8 +120,6 @@ def run_benchmarks(
     # create name of csv that will be filled with the results of each iteration
     nowstr = datetime.now().strftime("%Y%m%d_%H%M%S")
     csv = f"results_{nowstr}.csv"
-
-    # csv = "benchmarking/sbm_rollout.csv"
 
     # def filter_problems(iterable):
     #     for trial, problem, horizon in iterable:
@@ -173,3 +171,5 @@ if __name__ == "__main__":
 
     # run the benchmarks
     run_benchmarks(args.problems, args.horizons, args.n_trials, args.seed, args.n_jobs)
+
+# python benchmarking/run.py --problems=all --horizons 1 2 4 6 --n-trials=30 --n-jobs=6 --seed=0
