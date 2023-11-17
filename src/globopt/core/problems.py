@@ -241,7 +241,7 @@ def get_available_benchmark_problems() -> list[str]:
     list of str
         Names of all the available benchmark tests.
     """
-    return list(TESTS.keys() - get_available_simple_problems())
+    return sorted(TESTS.keys() - get_available_simple_problems())
 
 
 def get_available_simple_problems() -> list[str]:
