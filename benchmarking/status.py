@@ -2,6 +2,7 @@
 
 
 import argparse
+from datetime import datetime
 from typing import Optional
 
 import matplotlib.pyplot as plt
@@ -18,7 +19,7 @@ PROBLEMS = get_available_benchmark_problems() + get_available_simple_problems()
 
 def load_data(filename: str) -> dict[str, dict[int, int]]:
     """Loads the count data from the given file."""
-    with open(filename, "r") as f:
+    with open(filename) as f:
         lines = f.readlines()  # better to read all at once
 
     out: dict[str, dict[int, int]] = {}
@@ -84,7 +85,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # load each result and plot
-    include_title = len(args.filenames) > 1
     for filename in args.filenames:
-        print_status(load_data(filename), filename if include_title else None)
+        print_status(load_data(filename), f"{filename} @ {datetime.now()}")
     plt.show()
