@@ -32,10 +32,14 @@ def get_status(filename_for_status: str) -> dict[str, dict[int, int]]:
         Returns the status of the run, i.e., the number of iterations for each problem
         and for each horizon that has already been computed.
     """
-    with open(filename_for_status) as f:
-        lines = f.readlines()  # better to read all at once
-
     out: dict[str, dict[int, int]] = {}
+
+    try:
+        with open(filename_for_status) as f:
+            lines = f.readlines()  # better to read all at once
+    except FileNotFoundError:
+        return out
+
     maxiters = {n: get_benchmark_problem(n)[1] + 1 for n in PROBLEMS}
     for line in lines:
         elements = line.split(",")
