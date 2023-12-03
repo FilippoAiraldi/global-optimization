@@ -117,10 +117,9 @@ def run_benchmarks(
     if problems == ["all"]:
         problems = BENCHMARK_PROBLEMS
 
-    # seeds are independent of the horizons
-    N = len(problems)
-    seedseq = np.random.SeedSequence(seed)
-    seeds = dict(zip(problems, np.split(seedseq.generate_state(N * trials), N)))
+    # create seeds that are independent of the horizons
+    child_seeds = np.random.SeedSequence(seed).spawn(len(problems))
+    seeds = {p: child_seeds[i].generate_state(trials) for i, p in enumerate(problems)}
 
     # create name of csv that will be filled with the results of each iteration
     nowstr = datetime.now().strftime("%Y%m%d_%H%M%S")
