@@ -2,6 +2,7 @@
 
 
 import argparse
+from collections.abc import Iterable, Iterator
 from datetime import datetime
 from typing import Optional
 
@@ -17,22 +18,33 @@ from globopt.core.problems import (
 PROBLEMS = get_available_benchmark_problems() + get_available_simple_problems()
 
 
-def load_data(filename: str) -> dict[str, dict[int, int]]:
-    """Loads the count data from the given file."""
-    with open(filename) as f:
+def get_status(filename_for_status: str) -> dict[str, dict[int, int]]:
+    """Computes the status of the run.
+
+    Parameters
+    ----------
+    filename : str
+        filename of the results whose status needs to be retrieved.
+
+    Returns
+    -------
+    dict[str, dict[int, int]]
+        Returns the status of the run, i.e., the number of iterations for each problem
+        and for each horizon that has already been computed.
+    """
+    with open(filename_for_status) as f:
         lines = f.readlines()  # better to read all at once
 
     out: dict[str, dict[int, int]] = {}
-    maxiters = {n: get_benchmark_problem(n)[1] for n in PROBLEMS}
+    maxiters = {n: get_benchmark_problem(n)[1] + 1 for n in PROBLEMS}
     for line in lines:
         elements = line.split(",")
         name = elements[0]
         horizon = int(elements[1])
 
         iters = len(elements[3:])
-        expected_iters = maxiters[name] + 1
-        assert iters == expected_iters, (
-            f"Incorrect number of iterations for {name}; expected {expected_iters}, got"
+        assert iters == maxiters[name], (
+            f"Incorrect number of iterations for {name}; expected {maxiters[name]}, got"
             f" {iters} instead."
         )
 
@@ -42,6 +54,33 @@ def load_data(filename: str) -> dict[str, dict[int, int]]:
             out[name][horizon] = 0
         out[name][horizon] += 1
     return out
+
+
+def filter_tasks_by_status(
+    tasks: Iterator[tuple[int, str, int]], filename_for_status: str
+) -> Iterable[tuple[int, str, int]]:
+    """Filters the given tasks by the status of the given run.
+
+    Parameters
+    ----------
+    tasks : Iterator of (int, str, int)
+        Iterator of tasks to be filtered, i.e., (trial, problem name, horizon) tuples.
+    filename : str
+        The filename of the results whose status needs to be retrieved.
+
+    Yields
+    ------
+    Iterable of (int, str, int)
+        Filtered tasks that have not been completed yet.
+    """
+    status = get_status(filename_for_status)
+    for trial, name, horizon in tasks:
+        if (
+            (name not in status)
+            or (horizon not in status[name])
+            or (trial >= status[name][horizon])  # trail is 0-based, status is a counter
+        ):
+            yield trial, name, horizon
 
 
 def print_status(data: dict[str, dict[int, int]], tabletitle: Optional[str]) -> None:
@@ -86,5 +125,5 @@ if __name__ == "__main__":
 
     # load each result and plot
     for filename in args.filenames:
-        print_status(load_data(filename), f"{filename} @ {datetime.now()}")
+        print_status(get_status(filename), f"{filename} @ {datetime.now()}")
     plt.show()

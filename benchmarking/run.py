@@ -9,6 +9,7 @@ import os
 os.environ["NUMBA_NUM_THREADS"] = "1"
 
 import argparse
+import sys
 from contextlib import contextmanager
 from datetime import datetime
 from itertools import product
@@ -31,6 +32,10 @@ from globopt.util.callback import (
     CallbackCollection,
     DpStageCostCallback,
 )
+
+sys.path.append(os.getcwd())
+
+from benchmarking.status import filter_tasks_by_status
 
 BENCHMARK_PROBLEMS = get_available_benchmark_problems()
 SIMPLE_PROBLEMS = get_available_simple_problems()
@@ -121,16 +126,10 @@ def run_benchmarks(
     nowstr = datetime.now().strftime("%Y%m%d_%H%M%S")
     csv = f"results_{nowstr}.csv"
 
-    # def filter_problems(iterable):
-    #     for trial, problem, horizon in iterable:
-    #         if trial > 4:
-    #             yield trial, problem, horizon
-
     # create shared mem lock and launch each benchmarking iteration in parallel
     shm = shared_memory.SharedMemory(create=True, size=1)
     shm.buf[0] = 0  # set to unlocked
-    # tasks = filter_problems(product(range(trials), problems, horizons))
-    tasks = product(range(trials), problems, horizons)
+    tasks = filter_tasks_by_status(product(range(trials), problems, horizons), csv)
     try:
         Parallel(n_jobs=n_jobs, verbose=100, backend="loky")(
             delayed(run_problem)(p, h, seeds[p][t], csv, shm.name) for t, p, h in tasks
