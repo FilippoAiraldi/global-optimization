@@ -1,6 +1,5 @@
 import pickle
 import unittest
-from itertools import product
 
 import numpy as np
 from parameterized import parameterized
@@ -13,8 +12,8 @@ with open(r"tests/data_test_non_myopic.pkl", "rb") as f:
 
 
 class TestAcquisition(unittest.TestCase):
-    @parameterized.expand(product((0, 2**3), (False, True)))
-    def test__returns_correct_values(self, mc_iters: int, rollout: bool):
+    @parameterized.expand([(0,), (2**3,)])
+    def test__returns_correct_values(self, mc_iters: int):
         np_random = np.random.default_rng(1909)
         n_samples = 7
         horizon = 5
@@ -25,9 +24,7 @@ class TestAcquisition(unittest.TestCase):
         discount = np_random.random()
         c1 = np_random.random() * 2 + 1
         c2 = np_random.random() * 2 + 1
-        x = np_random.standard_normal(
-            (n_samples * 2, 1, dim) if rollout else (n_samples * 2, horizon, dim)
-        )
+        x = np_random.standard_normal(size=(n_samples * 2, 1, dim))
 
         a = acquisition(
             x=x,
@@ -36,7 +33,6 @@ class TestAcquisition(unittest.TestCase):
             discount=discount,
             c1=c1,
             c2=c2,
-            rollout=rollout,
             lb=X.min(1).squeeze() - 0.1,
             ub=X.max(1).squeeze() + 0.1,
             mc_iters=mc_iters,
@@ -46,7 +42,7 @@ class TestAcquisition(unittest.TestCase):
             pso_kwargs={"maxiter": 2000, "ftol": 1e-12, "xtol": 1e-12},
         )
 
-        expected = RESULTS[(mc_iters, rollout)]
+        expected = RESULTS[(mc_iters, True)]
         np.testing.assert_allclose(a, expected, atol=1e0, rtol=1e-1)
 
 

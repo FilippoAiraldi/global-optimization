@@ -125,25 +125,17 @@ def _advance(
 
 
 def _next_query_point(
-    x: Array3d,
     mdl: RegressorType,
-    current_step: int,  # > 0
     c1: float,
     c2: float,
     dym: Array3d,
     lb: Array2d,
     ub: Array2d,
-    rollout: bool,
     pso_kwargs: dict[str, Any],
     np_random: np.random.Generator,
 ) -> tuple[Array3d, Array1d]:
-    """Computes the next point to query and its associated cost. If the strategy is
-    `"mpc"`, then the next point is just the next point in the trajectory. If the
-    strategy is `"rollout"`, then the next point is the minimizer of the myopic
-    acquisition function, i.e., base policy."""
-    if not rollout:
-        x_next = x[:, current_step, np.newaxis, :]  # ∈ (n_samples, 1, dim)
-        return x_next, myopic_acquisition(x_next, mdl, c1, c2, None, dym)[:, 0, 0]
+    """Computes the next point to query and its associated cost, i.e., the next point is
+    the minimizer of the myopic acquisition function, a.k.a., the base policy."""
 
     def func(q: Array3d) -> Array2d:
         return myopic_acquisition(q, mdl, c1, c2, None, dym)[:, :, 0]
@@ -177,7 +169,6 @@ def _compute_nonmyopic_cost(
     c2: float,
     lb: Array2d,
     ub: Array2d,
-    rollout: bool,
     terminal_cost: bool,
     pso_kwargs: dict[str, Any],
     prediction_rng: Optional[Array2d],
@@ -197,7 +188,7 @@ def _compute_nonmyopic_cost(
         if h >= horizon:
             break
         x_next, current_cost = _next_query_point(
-            x_trajectory, mdl, h, c1, c2, dym, lb, ub, rollout, pso_kwargs, np_random
+            mdl, c1, c2, dym, lb, ub, pso_kwargs, np_random
         )
         cost += (discount**h) * current_cost  # accumulate in-place
     if terminal_cost:
@@ -246,7 +237,6 @@ def acquisition(
     ub: Array1d,
     c1: float = 1.5078,
     c2: float = 1.4246,
-    rollout: bool = True,
     #
     mc_iters: int = 1024,
     quasi_mc: bool = True,
@@ -265,13 +255,10 @@ def acquisition(
 
     Parameters
     ----------
-    x : array of shape (n_samples, horizon, dim) or (n_samples, 1, dim)
+    x : array of shape (n_samples, 1, dim)
         Array of points for which to compute the acquisition. `n_samples` is the number
         of target points for which to compute the acquisition, and `dim` is the number
-        of features/variables of each point. In case of `rollout = False`, `horizon` is
-        the length of the prediced trajectory of sampled points; while in case of
-        `rollout == True`, this dimension has to be 1, since only the first sample
-        point is optimized over.
+        of features/variables of each point.
     mdl : Idw or Rbf
         Fitted model to use for computing the acquisition function.
     horizon : int
@@ -286,12 +273,6 @@ def acquisition(
         Weight of the contribution of the variance function, by default `1.5078`.
     c2 : float, optional
         Weight of the contribution of the distance function, by default `1.4246`.
-    rollout : bool, optional
-        The strategy to be used for approximately solving the optimal control problem.
-        If `True`, rollout is used where only the first sample point is optimized and
-        then the remaining samples in the horizon are computed via the myopic
-        acquisition base policy. If `False`, the whole horizon trajectory is optimized
-        in an MPC fashion.
     mc_iters : int, optional
         Number of Monte Carlo iterations, by default `1024`. For better sampling, the
         iterations should be a power of 2. If `0`, the acquisition is computed
@@ -327,20 +308,15 @@ def acquisition(
         The non-myopic acquisition function for each target point (per MC iteration,
         if `return_as_list == True`)
     """
-    n_samples, h_, _ = x.shape
     if check:
         assert mdl.Xm_.shape[0] == 1, "regression model must be non-batched"
-        if rollout:
-            assert h_ == 1, "x must have only one time step for rollout"
-        else:
-            assert (
-                h_ == horizon
-            ), "x must have the same number of time steps as the horizon"
+        assert x.shape[1] == 1, "x must have only one time step"
     if pso_kwargs is None:
         pso_kwargs = {}
 
     # compute the first (myopic) iteration of the acquisition function - this is in
     # common across all MC iterations
+    n_samples = x.shape[0]
     myopic_cost, mdl, lb, ub, y_min, y_max = _compute_myopic_cost(
         x, mdl, n_samples, c1, c2, lb, ub
     )
@@ -360,7 +336,6 @@ def acquisition(
             c2,
             lb,
             ub,
-            rollout,
             terminal_cost,
             pso_kwargs,
             None,
@@ -399,7 +374,6 @@ def acquisition(
             c2,
             lb,
             ub,
-            rollout,
             terminal_cost,
             pso_kwargs,
             prediction_random_numbers[i],

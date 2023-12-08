@@ -38,7 +38,6 @@ kwargs = {
     "discount": discount,
     "c1": c1,
     "c2": c2,
-    "rollout": True,
     "lb": lb,
     "ub": ub,
 }

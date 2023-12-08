@@ -67,7 +67,6 @@ def run_problem(
     """Solves the given problem with the given algorithm (based on the specified
     horizon), and saves as result the performance of the run in terms of best-so-far
     and total cost."""
-    rollout = True
     c1, c2, eps = 1.0, 0.5, 1.0
     bsf_callback = BestSoFarCallback()
     dp_callback = DpStageCostCallback()
@@ -85,7 +84,7 @@ def run_problem(
         "seed": seed,
         "callback": callbacks,
         "pso_kwargs": {
-            "swarmsize": 5 * problem.dim * (rollout or horizon),
+            "swarmsize": 5 * problem.dim,
             "xtol": 1e-9,
             "ftol": 1e-9,
             "maxiter": 300,
@@ -95,14 +94,7 @@ def run_problem(
     if horizon == 1:
         go(**kwargs)
     else:
-        nmgo(
-            horizon=horizon,
-            discount=1.0,
-            rollout=rollout,
-            mc_iters=0,
-            parallel=None,
-            **kwargs,
-        )
+        nmgo(horizon=horizon, discount=1.0, mc_iters=0, parallel=None, **kwargs)
     cost = sum(dp_callback)
     bests = ",".join(map(str, bsf_callback))
     with shm_lock(shm_name), open(output_csv, "a") as f:

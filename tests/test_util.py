@@ -109,9 +109,7 @@ class TestCallback(unittest.TestCase):
                 0.0719124302371252,
             ]
             func = nmgo
-            kwargs.update(
-                {"horizon": 2, "discount": 0.9, "rollout": True, "mc_iters": 0}
-            )
+            kwargs.update({"horizon": 2, "discount": 0.9, "mc_iters": 0})
 
         func(**kwargs, callback=callback)
 

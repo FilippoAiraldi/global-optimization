@@ -31,7 +31,6 @@ def _next_query_point(
     discount: float,
     c1: float,
     c2: float,
-    rollout: bool,
     mc_iters: int,
     quasi_mc: bool,
     common_random_numbers: bool,
@@ -43,19 +42,11 @@ def _next_query_point(
     pso_kwargs: Optional[dict[str, Any]],
 ) -> tuple[Array1d, float]:
     """Computes the next point to query by minimizing the acquisition function."""
-    if rollout:
-        h_ = 1
-        lb_acquisition = lb[0]
-        ub_acquisition = ub[0]
-    else:
-        h_ = horizon
-        lb = lb[:, : h_ * dim]  # due to shrinking horizon
-        ub = ub[:, : h_ * dim]
-        lb_acquisition = lb[0, :dim]
-        ub_acquisition = ub[0, :dim]
+    lb_acquisition = lb[0]
+    ub_acquisition = ub[0]
     check_acquisition = iteration == 1
     vpso_func = lambda x: acquisition(
-        x.reshape(-1, h_, dim),
+        x.reshape(-1, 1, dim),
         mdl,
         horizon,
         discount,
@@ -63,7 +54,6 @@ def _next_query_point(
         ub_acquisition,
         c1,
         c2,
-        rollout,
         mc_iters,
         quasi_mc,
         common_random_numbers,
@@ -90,7 +80,6 @@ def nmgo(
     c1: float = 1.5078,
     c2: float = 1.4246,
     #
-    rollout: bool = True,
     mc_iters: int = 1024,
     quasi_mc: bool = True,
     common_random_numbers: bool = True,
@@ -133,12 +122,6 @@ def nmgo(
     c2 : float, optional
         Weight of the contribution of the distance function in the algorithm's
         acquisition function, by default `1.4246`.
-    rollout : bool, optional
-        The strategy to be used for approximately solving the optimal control problem.
-        If `True`, rollout is used where only the first sample point is optimized and
-        then the remaining samples in the horizon are computed via the myopic
-        acquisition base policy. If `False`, the whole horizon trajectory is optimized
-        in an MPC fashion.
     mc_iters : int, optional
         Number of Monte Carlo iterations, by default `1024`. For better sampling, the
         iterations should be a power of 2. If `0`, the acquisition is computed
@@ -186,9 +169,6 @@ def nmgo(
     if callback is not None:
         callback("nmgo", locals())
 
-    if not rollout:
-        lb = np.tile(lb, (1, horizon))  # due to increased dimension of search space
-        ub = np.tile(ub, (1, horizon))
     if parallel is None:
         parallel = Parallel(n_jobs=1, verbose=0)
     elif isinstance(parallel, dict):
@@ -205,7 +185,6 @@ def nmgo(
                 discount,
                 c1,
                 c2,
-                rollout,
                 mc_iters,
                 quasi_mc,
                 common_random_numbers,

@@ -43,7 +43,7 @@ def save_history(algorithm: Literal["go", "nmgo"], locals: dict[str, Any]) -> No
         y_hat = predict(mdl, x_)
         if algorithm == "go":
             acq = myopic_acquisition(x_, mdl, c1, c2, y_hat, None).squeeze()
-        elif locals["rollout"]:
+        else:
             acq = nonmyopic_acquisition(
                 x_.transpose(1, 0, 2),
                 mdl,
@@ -53,7 +53,6 @@ def save_history(algorithm: Literal["go", "nmgo"], locals: dict[str, Any]) -> No
                 ub,
                 c1,
                 c2,
-                locals["rollout"],
                 locals["mc_iters"],
                 locals["quasi_mc"],
                 locals["common_random_numbers"],
@@ -63,8 +62,6 @@ def save_history(algorithm: Literal["go", "nmgo"], locals: dict[str, Any]) -> No
                 0,
                 {"n_jobs": -1, "backend": "loky"},
             )
-        else:
-            acq = np.full(x.size, np.nan)
         history.append(
             (
                 locals["x_new"],
@@ -115,7 +112,6 @@ x_best, y_best = nmgo(
     init_points=x0,
     c1=c1,
     c2=c2,
-    rollout=True,
     mc_iters=2**10,
     parallel={"n_jobs": -1, "backend": "loky", "verbose": 1},
     maxiter=ITERS,

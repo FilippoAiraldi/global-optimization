@@ -39,7 +39,6 @@ kwargs = {
     "ub": ub,
     "c1": c1,
     "c2": c2,
-    "rollout": True,
     "seed": 0,
 }
 nonmyopic_deterministic_a = nonmyopic_acquisition(**kwargs, mc_iters=0)
