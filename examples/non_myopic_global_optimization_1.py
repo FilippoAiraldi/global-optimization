@@ -61,7 +61,6 @@ def save_history(algorithm: Literal["go", "nmgo"], locals: dict[str, Any]) -> No
                 c2,
                 locals["mc_iters"],
                 locals["quasi_mc"],
-                locals["common_random_numbers"],
                 locals["antithetic_variates"],
                 locals["pso_kwargs"],
                 False,

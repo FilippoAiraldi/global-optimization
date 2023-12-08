@@ -71,7 +71,6 @@ except FileNotFoundError:
                     parallel={"n_jobs": -1, "backend": "loky", "verbose": 1},
                     return_iters=True,
                     seed=seed + i,
-                    common_random_numbers=False,  # CRN have no influece here
                     quasi_mc=False,
                     antithetic_variates=False,
                 )
@@ -88,7 +87,6 @@ except FileNotFoundError:
                     parallel={"n_jobs": -1, "backend": "loky", "verbose": 1},
                     return_iters=True,
                     seed=seed + i,
-                    common_random_numbers=False,
                     quasi_mc=True,
                     antithetic_variates=False,
                 )
@@ -104,7 +102,6 @@ except FileNotFoundError:
                     parallel={"n_jobs": -1, "backend": "loky", "verbose": 1},
                     return_iters=True,
                     seed=seed + i,
-                    common_random_numbers=False,
                     quasi_mc=True,
                     antithetic_variates=True,
                 )

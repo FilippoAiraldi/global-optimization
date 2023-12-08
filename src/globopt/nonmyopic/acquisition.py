@@ -30,9 +30,6 @@ from globopt.core.regression import (
 from globopt.myopic.acquisition import _idw_variance, _idw_weighting
 from globopt.myopic.acquisition import acquisition as myopic_acquisition
 
-"""Seed that is used for COMMON random numbers generation."""
-FIXED_SEED = 1909
-
 
 @nb.njit(
     [
@@ -201,15 +198,11 @@ def _draw_standard_normal_sample(
     horizon: int,
     n_samples: int,
     quasi_mc: bool,
-    common_random_numbers: bool,
     antithetic_variates: bool,
     seed: Union[None, int, np.random.Generator],
 ) -> tuple[Array3d, np.random.Generator]:
     """Draws a (quasi) random sample from the standard normal distribution, optionally
     with Quasi-MC, CRN, and antithetic variates."""
-    if common_random_numbers:
-        seed = FIXED_SEED  # overwrite seed
-        n_samples = 1  # draw same numbers for all samples
     np_random = np.random.default_rng(seed)
 
     n = mc_iters // 2 if antithetic_variates else mc_iters
@@ -240,7 +233,6 @@ def acquisition(
     #
     mc_iters: int = 1024,
     quasi_mc: bool = True,
-    common_random_numbers: bool = True,
     antithetic_variates: bool = True,
     terminal_cost: bool = True,
     #
@@ -279,9 +271,6 @@ def acquisition(
         deterministically.
     quasi_mc : bool, optional
         Whether to use quasi Monte Carlo sampling, by default `True`.
-    common_random_numbers : bool, optional
-        Whether to use common random numbers, by default `True`. In this case, `seed`,
-        if passed at all, is discarded.
     antithetic_variates : bool, optional
         Whether to use antithetic variates, by default `True`.
     terminal_cost : bool, optional
@@ -293,7 +282,6 @@ def acquisition(
         Whether to perform checks on the inputs, by default `True`.
     seed : int or np.random.Generator, optional
         Seed for the random number generator or a generator itself, by default `None`.
-        Only used when `common_random_numbers == False`.
     parallel : Parallel or dict, optional
         Parallelization of MC iterations. If an instance of `Parallel` is passed, it is
         used to parallelize the loop. If a dictionary is passed, it is used as kwargs to
@@ -350,7 +338,6 @@ def acquisition(
         horizon,
         n_samples,
         quasi_mc,
-        common_random_numbers,
         antithetic_variates,
         seed,
     )

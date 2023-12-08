@@ -33,7 +33,6 @@ def _next_query_point(
     c2: float,
     mc_iters: int,
     quasi_mc: bool,
-    common_random_numbers: bool,
     antithetic_variates: bool,
     terminal_cost: bool,
     parallel: Parallel,
@@ -56,7 +55,6 @@ def _next_query_point(
         c2,
         mc_iters,
         quasi_mc,
-        common_random_numbers,
         antithetic_variates,
         terminal_cost,
         pso_kwargs,
@@ -82,7 +80,6 @@ def nmgo(
     #
     mc_iters: int = 1024,
     quasi_mc: bool = True,
-    common_random_numbers: bool = True,
     antithetic_variates: bool = True,
     terminal_cost: bool = True,
     parallel: Union[None, Parallel, dict[str, Any]] = None,
@@ -128,9 +125,6 @@ def nmgo(
         deterministically.
     quasi_mc : bool, optional
         Whether to use quasi Monte Carlo sampling, by default `True`.
-    common_random_numbers : bool, optional
-        Whether to use common random numbers, by default `True`. In this case, `seed`,
-        if passed at all, is discarded.
     antithetic_variates : bool, optional
         Whether to use antithetic variates, by default `True`.
     terminal_cost : bool, optional
@@ -187,7 +181,6 @@ def nmgo(
                 c2,
                 mc_iters,
                 quasi_mc,
-                common_random_numbers,
                 antithetic_variates,
                 terminal_cost,
                 parallel_,
