@@ -44,25 +44,28 @@ def _next_query_point(
     lb_acquisition = lb[0]
     ub_acquisition = ub[0]
     check_acquisition = iteration == 1
-    vpso_func = lambda x: acquisition(
-        x.reshape(-1, 1, dim),
-        mdl,
-        horizon,
-        discount,
-        lb_acquisition,
-        ub_acquisition,
-        c1,
-        c2,
-        mc_iters,
-        quasi_mc,
-        antithetic_variates,
-        terminal_cost,
-        pso_kwargs,
-        check_acquisition,
-        np_random,
-        parallel,
-        False,
-    )
+
+    def vpso_func(x):
+        return acquisition(
+            x.transpose(1, 0, 2),
+            mdl,
+            horizon,
+            discount,
+            lb_acquisition,
+            ub_acquisition,
+            c1,
+            c2,
+            mc_iters,
+            quasi_mc,
+            antithetic_variates,
+            terminal_cost,
+            pso_kwargs,
+            check_acquisition,
+            np_random,
+            parallel,
+            False,
+        )
+
     x_new, acq_opt, _ = vpso(vpso_func, lb, ub, seed=np_random, **pso_kwargs)
     return x_new[0, :dim], acq_opt.item()
 

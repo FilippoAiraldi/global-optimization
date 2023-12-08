@@ -57,7 +57,7 @@ from globopt.myopic.acquisition import acquisition as myopic_acquisition
     nogil=True,
 )
 def _compute_myopic_cost(
-    x_trajectory: Array3d,
+    x: Array3d,
     mdl: RegressorType,
     n_samples: int,
     c1: float,
@@ -71,8 +71,7 @@ def _compute_myopic_cost(
     y_min = mdl.ym_.min()  # ym_ ∈ (1, n_samples, 1)
     y_max = mdl.ym_.max()
     dym = np.full((1, 1, 1), y_max - y_min)
-    x_next = x_trajectory[np.newaxis, :, 0, :]  # take first element in the horizon
-    cost = myopic_acquisition(x_next, mdl, c1, c2, None, dym)[0, :, 0]  # ∈ (n_samples,)
+    cost = myopic_acquisition(x.transpose(1, 0, 2), mdl, c1, c2, None, dym)[0, :, 0]
 
     mdl_ = repeat(mdl, n_samples)
     lb_ = repeat_along_first_axis(np.expand_dims(lb, 0), n_samples)
@@ -155,7 +154,7 @@ def _terminal_cost(
 
 
 def _compute_nonmyopic_cost(
-    x_trajectory: Array3d,
+    x: Array3d,
     mdl: RegressorType,
     n_samples: int,
     horizon: int,
@@ -176,15 +175,14 @@ def _compute_nonmyopic_cost(
     dynamics with such predictions."""
     np_random = np.random.default_rng(seed)
     cost = np.zeros(n_samples)
-    x_next = x_trajectory[:, 0, np.newaxis, :]  # ∈ (n_samples, 1, n_features)
     h = 0
     while True:
         rng = prediction_rng[h] if prediction_rng is not None else None
-        mdl, y_min, y_max, dym = _advance(x_next, mdl, y_min, y_max, rng)
+        mdl, y_min, y_max, dym = _advance(x, mdl, y_min, y_max, rng)
         h += 1
         if h >= horizon:
             break
-        x_next, current_cost = _next_query_point(
+        x, current_cost = _next_query_point(
             mdl, c1, c2, dym, lb, ub, pso_kwargs, np_random
         )
         cost += (discount**h) * current_cost  # accumulate in-place
