@@ -96,11 +96,11 @@ def nmgo(
 
     Parameters
     ----------
-    func : callable with 2d array adn returns array_like
+    func : callable with 2d array and returns array_like
         The (possibly, unknown) function to be minimized via GO. It must take as input
-        a 2d array of shape `(n_points, dim)` and return a 1d array_like of shape. The
-        input represents the points at which the function must be evaluated, while the
-        output is the value of the function at those points.
+        a 2d array of shape `(n_points, dim)` and return a 1d array_like of shape
+        `(n_points,)`. Given the points at which the function must be
+        evaluated, the callable outputs the value of the function at those points.
     lb, ub : 1d array
         Lower and upper bounds of the search space. The dimensionality of the search
         space is inferred from the size of `lb` and `ub`.
