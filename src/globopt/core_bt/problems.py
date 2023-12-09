@@ -11,7 +11,7 @@ References
     http://www.sfu.ca.tudelft.idm.oclc.org/~ssurjano.
 """
 
-from typing import Optional
+from typing import Literal, Optional
 
 import torch
 from botorch.test_functions.synthetic import SyntheticTestFunction
@@ -42,3 +42,55 @@ class SimpleProblem(SyntheticTestFunction):
             + X2 / 12
             + X / 10
         )
+
+
+TESTS: dict[str, tuple[SyntheticTestFunction, int, Literal["rbf", "idw"]]] = {
+    problem.__class__.__name__.lower(): (problem, max_evals, regressor_type)
+    for problem, max_evals, regressor_type in [(SimpleProblem(), 20, "rbf")]
+}
+
+
+def get_available_benchmark_problems() -> list[str]:
+    """Gets the names of all the available benchmark test problems.
+
+    Returns
+    -------
+    list of str
+        Names of all the available benchmark tests.
+    """
+    return sorted(TESTS.keys() - get_available_simple_problems())
+
+
+def get_available_simple_problems() -> list[str]:
+    """Gets the names of all the simple test problems.
+
+    Returns
+    -------
+    list of str
+        Names of all the available simpler tests.
+    """
+    return [SimpleProblem.__name__.lower()]
+
+
+def get_benchmark_problem(
+    name: str,
+) -> tuple[SyntheticTestFunction, int, Literal["rbf", "idw"]]:
+    """Gets an instance of a benchmark synthetic problem.
+
+    Parameters
+    ----------
+    name : str
+        Name of the benchmark test.
+
+    Returns
+    -------
+    tuple of (SyntheticTestFunction, int, str)
+        The problem, the maximum number of evaluations and the regression type suggested
+        for its optimization.
+
+    Raises
+    ------
+    KeyError
+        Raised if the name of the benchmark test is not found.
+    """
+    return TESTS[name.lower()]
