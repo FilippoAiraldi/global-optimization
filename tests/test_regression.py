@@ -25,7 +25,7 @@ class TestRegression(unittest.TestCase):
             else:
                 mdls[i] = Rbf(X, Y, mdl.eps, mdl.svd_tol, (mdl.Minv, mdl.coeffs))
         x_hat = torch.linspace(-3, 3, 100).reshape(1, -1, 1)
-        y_hat = torch.cat([mdl(x_hat).mean for mdl in mdls]).squeeze(-1)
+        y_hat = torch.cat([mdl(x_hat)[0] for mdl in mdls]).squeeze(-1)
         torch.testing.assert_close(
             y_hat, torch.as_tensor(RESULTS["y_hat"][:2], dtype=y_hat.dtype)
         )

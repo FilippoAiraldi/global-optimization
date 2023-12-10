@@ -48,14 +48,14 @@ for i in range(len(mdls)):
 
 # predict values over all domain via the fitted models
 X = torch.linspace(-3, 3, 1000).reshape(1, -1, 1)
-Y_hat = [mdl(X).mean for mdl in mdls]
+Y_hat = [mdl(X)[0] for mdl in mdls]
 
 # plot model predictions
 _, ax = plt.subplots(constrained_layout=True, figsize=(7, 3))
 ax.plot(train_X.squeeze(), train_Y.squeeze(), "o", markersize=9, color="C0")
 ax.plot(X.squeeze(), problem(X).squeeze(), "--", label="f(x)", lw=3)
 for mdl, Y_hat_ in zip(mdls, Y_hat):
-    ax.plot(X.squeeze(), Y_hat_.squeeze(), label=str(mdl))
+    ax.plot(X.squeeze(), Y_hat_.squeeze(), label=mdl.__class__.__name__)
 ax.set_xlabel("x")
 ax.set_xlim(*problem._bounds[0])
 ax.set_ylim(0, 2.5)

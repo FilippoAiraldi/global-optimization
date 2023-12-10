@@ -14,7 +14,6 @@ import torch
 from botorch.acquisition.analytic import AnalyticAcquisitionFunction
 from botorch.utils import t_batch_mode_transform
 from torch import Tensor
-from torch.distributions import Normal
 
 from globopt.regression import Idw, Rbf
 
@@ -25,7 +24,9 @@ def _idw_distance(W_sum_recipr: Tensor) -> Tensor:
     Parameters
     ----------
     W_sum_recipr : Tensor
-        `b x q x 1` reciprocal of the sum of the IDW weights, i.e., 1/sum(W).
+        `b x q x 1` reciprocal of the sum of the IDW weights, i.e., 1/sum(W). `q` is the
+        number of candidate points whose reciprocal of the sum of weights is passed, and
+        `b` is the batched regressor size.
 
     Returns
     -------
@@ -48,11 +49,12 @@ def acquisition_function(
     Parameters
     ----------
     Y_hat : Tensor
-        `b x q x 1` estimates of the function values at the candidate points.
+        `b x q x 1` estimates of the function values at the candidate points. `q` is the
+        number of candidate points, and `b` is the batched regressor size.
     Y_std : Tensor
         `b x q x 1` standard deviation of the estimates.
     Y : Tensor
-        `b x m x 1` training data points.
+        `b x m x 1` training data points. `m` is the number of training points.
     W_sum_recipr : Tensor
         `b x q x 1` reciprocal of the sum of the IDW weights, i.e., 1/sum(W).
     c1 : Tensor
@@ -83,9 +85,9 @@ trace_acquisition_function = torch.jit.trace(
 )
 
 
-class GoMyopicAcquisitionFunction(AnalyticAcquisitionFunction):
+class MyopicAcquisitionFunction(AnalyticAcquisitionFunction):
     """Myopic acquisition function for Global Optimization based on RBF/IDW
-    regression. In this form, must be maximized."""
+    regression."""
 
     def __init__(
         self,
@@ -123,12 +125,11 @@ class GoMyopicAcquisitionFunction(AnalyticAcquisitionFunction):
             A `b`-dim tensor of myopic acquisition values at the given
             design points `X`.
         """
-        normal: Normal = self.model(X)
+        # NOTE: while botorch uses the `b x 1 x d` convention, regression models use
+        # `n x b x d` convention, where `n` is the number of parallel regression models.
+        # Since the myopic acquisition function does not look ahead, there's no need to
+        # parallelize to `n` models, so that's why we transpose X.
+        mean, scale, W_sum_recipr = self.model(X.transpose(0, 1))
         return trace_acquisition_function(
-            normal.loc,
-            normal.scale,
-            self.model.train_Y,
-            self.model.W_sum_recipr,
-            self.c1,
-            self.c2,
-        )[:, 0, 0]
+            mean, scale, self.model.train_Y, W_sum_recipr, self.c1, self.c2
+        )[0, :, 0]

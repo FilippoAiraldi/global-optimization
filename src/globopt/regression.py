@@ -13,7 +13,7 @@ from typing import Any, Optional, Union
 
 import torch
 from botorch.models.model import Model
-from botorch.posteriors import Posterior, TorchPosterior
+from botorch.posteriors import TorchPosterior
 from linear_operator import LinearOperator, to_linear_operator
 from linear_operator.operators import KernelLinearOperator
 from torch import Tensor
@@ -40,8 +40,8 @@ def _idw_scale(Y: Tensor, train_Y: Tensor, V: Tensor) -> Tensor:
     Tensor
         The standard deviation of shape `b x q x 1`.
     """
-    sqdiff = (train_Y - Y.transpose(2, 1)).square()
-    return V.bmm(sqdiff).diagonal(dim1=1, dim2=2).sqrt().unsqueeze(-1)
+    scaled_diff = V.sqrt().mul(train_Y.transpose(2, 1) - Y)
+    return torch.linalg.vector_norm(scaled_diff, dim=2, keepdim=True)
 
 
 trace_idw_scale = torch.jit.trace(
@@ -67,7 +67,20 @@ trace_idw_regression_mean_and_std = torch.jit.trace(
 )
 
 
-class Idw(Model):
+class BaseRegression(Model):
+    """Base class for a regression model."""
+
+    @property
+    def num_outputs(self) -> int:
+        return 1  # only one output is supported
+
+    def posterior(self, X: Tensor, **_: Any) -> TorchPosterior:
+        self.eval()
+        mean, scale, _ = self.forward(X)
+        return TorchPosterior(Normal(mean, scale))
+
+
+class Idw(BaseRegression):
     """Inverse Distance Weighting regression model in Global Optimization."""
 
     def __init__(self, train_X: Tensor, train_Y: Tensor) -> None:
@@ -84,31 +97,25 @@ class Idw(Model):
         self.train_X = train_X
         self.train_Y = train_Y
 
-    @property
-    def num_outputs(self) -> int:
-        return 1  # only one output is supported
-
-    def forward(self, X: Tensor) -> Normal:
+    def forward(self, X: Tensor) -> tuple[Tensor, Tensor, Tensor]:
         """Computes the IDW regression model.
 
         Parameters
         ----------
         X : Tensor
-            A `b x q x d`-dim batched tensor of `d`-dim design points.
+            A `b x q x d`-dim batched tensor of `d`-dim design points, where `q` is the
+            number of candidate points to estimate, and `b` is the batched regressor
+            size.
 
         Returns
         -------
-        Normal
-            The normal
+        tuple of 3 Tensors
+            Returns
+                - the mean estimate
+                - the idw standard deviation of the estimate
+                - the reciprocal of the sum of the IDW weights
         """
-        mean, std, self.W_sum_recipr = trace_idw_regression_mean_and_std(
-            self.train_X, self.train_Y, X
-        )
-        return Normal(mean, std)
-
-    def posterior(self, X: Tensor, **_: Any) -> Posterior:
-        self.eval()
-        return TorchPosterior(self.forward(X))
+        return trace_idw_regression_mean_and_std(self.train_X, self.train_Y, X)
 
 
 def _inverse_quadratic_kernel(X: Tensor, Y: Tensor, eps: Tensor) -> Tensor:
@@ -176,10 +183,10 @@ def _rbf_regression_mean_and_std(
     dist = torch.cdist(X, train_X)
     scaled_dist = eps[..., None, None] * dist
     M = torch.scalar_tensor(1.0).addcmul(scaled_dist, scaled_dist).reciprocal()
+    mean = M.matmul(coeffs)
     W = torch.maximum(dist.square(), DELTA).reciprocal()
     W_sum_recipr = W.sum(2, keepdim=True).reciprocal()
     V = W.mul(W_sum_recipr)
-    mean = M.matmul(coeffs)
     std = trace_idw_scale(mean, train_Y, V)
     return mean, std, W_sum_recipr
 
@@ -196,7 +203,7 @@ trace_rbf_regression_mean_and_std = torch.jit.trace(
 )
 
 
-class Rbf(Model):
+class Rbf(BaseRegression):
     """Radial Basis Function regression model in Global Optimization."""
 
     def __init__(
@@ -239,28 +246,21 @@ class Rbf(Model):
         self.register_buffer("coeffs", coeffs)
         self.to(train_X)  # make sure we're on the right device/dtype
 
-    @property
-    def num_outputs(self) -> int:
-        return 1  # only one output is supported
-
     def forward(self, X: Tensor) -> Normal:
-        """Computes the IDW regression model.
+        """Computes the RBF regression model.
 
         Parameters
         ----------
         X : Tensor
-            A `b x q x d`-dim batched tensor of `d`-dim design points.
+            A `b x q x d`-dim batched tensor of `d`-dim design points, where `q` is the
+            number of candidate points to estimate, and `b` is the batched regressor
+            size.
 
         Returns
         -------
         Normal
             The normal
         """
-        mean, std, self.W_sum_recipr = trace_rbf_regression_mean_and_std(
+        return trace_rbf_regression_mean_and_std(
             self.train_X, self.train_Y, self.eps, self.coeffs, X
         )
-        return Normal(mean, std)
-
-    def posterior(self, X: Tensor, **_: Any) -> Posterior:
-        self.eval()
-        return TorchPosterior(self.forward(X))

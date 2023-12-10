@@ -17,7 +17,7 @@ import torch
 from botorch.optim import optimize_acqf
 
 from globopt.myopic_acquisitions import (
-    GoMyopicAcquisitionFunction,
+    MyopicAcquisitionFunction,
     _idw_distance,
     acquisition_function,
 )
@@ -40,58 +40,51 @@ mdl = Rbf(train_X, train_Y, 0.5)
 
 # predict the (normal) posterior over all domain via fitted model
 X = torch.linspace(lb, ub, 1000).reshape(1, -1, 1)
-posterior = mdl(X)
-y_hat = posterior.mean
+y_hat, s, W_sum_recipr = mdl(X)
 
 # compute acquisition function by components
-s = posterior.scale  # a.k.a., idw scale
-z = _idw_distance(mdl.W_sum_recipr)
+z = _idw_distance(W_sum_recipr)
 
 # compute the overall acquisition function
-a = acquisition_function(y_hat, s, train_Y, mdl.W_sum_recipr, 1.0, 0.5).squeeze()
+c1 = 1.0
+c2 = 0.5
+a = acquisition_function(y_hat, s, train_Y, W_sum_recipr, c1, c2).squeeze()
 
-# compute minimizer of acquisition function
+# compute minimizer of analytic myopic acquisition function
 x_opt, a_opt = optimize_acqf(
-    acq_function=GoMyopicAcquisitionFunction(mdl, 1.0, 0.5),
-    bounds=torch.as_tensor([[lb], [ub]]).reshape(2, -1),
+    acq_function=MyopicAcquisitionFunction(mdl, c1, c2),
+    bounds=torch.as_tensor([[lb], [ub]]),
     q=1,
-    num_restarts=20,
-    raw_samples=100,
+    num_restarts=10,
+    raw_samples=20,
+    options={"seed": 0},
 )
 
-# plot the function, the observations and the prediction in both axes
-_, axs = plt.subplots(2, 1, constrained_layout=True, figsize=(6, 5))
+# plot
+_, ax = plt.subplots(1, 1, constrained_layout=True, figsize=(6, 2.5))
 X = X.squeeze()
-for ax in axs:
-    c = ax.plot(X, problem(X), label="$f(x)$")[0].get_color()
-    ax.plot(train_X.squeeze(), train_Y.squeeze(), "o", label=None, color=c)
-    c = ax.plot(X, y_hat.squeeze(), label=None)[0].get_color()
-
-# plot acquisition function components
-axs[0].fill_between(
+ax.plot(X, problem(X), label="$f(x)$", color="C0")
+ax.plot(train_X.squeeze(), train_Y.squeeze(), "o", label=None, color="C0")
+ax.plot(X, y_hat.squeeze(), label=None, color="C1")
+ax.fill_between(
     X,
     (y_hat - s).squeeze(),
     (y_hat + s).squeeze(),
     label=r"$\hat{f}(x) \pm s(x)$",
-    color=c,
+    color="C1",
     alpha=0.2,
 )
-axs[0].plot(X, z.squeeze(), label="$z(x)$")
-
-# plot acquisition function and its minimizer
-c = axs[1].plot(X, a - a.min(), "--", lw=2.5, label="$a(x)$")[0].get_color()
-axs[1].plot(
+ax.plot(X, z.squeeze(), label="$z(x)$", color="C2")
+ax.plot(X, a - a.min(), "--", lw=2.5, label="$a(x)$", color="C3")
+ax.plot(
     x_opt.squeeze(),
     a_opt - a.min(),
     "*",
-    label=r"arg max $a(x)$",
+    label=None,  # r"$\arg \max a(x)$",
     markersize=17,
-    color=c,
+    color="C3",
 )
-
-# make plots look nice
-for ax in axs:
-    ax.set_xlim(lb, ub)
-    ax.set_ylim(0, 2.5)
-    ax.legend()
+ax.set_xlim(lb, ub)
+ax.set_ylim(0, 2.5)
+ax.legend()
 plt.show()
