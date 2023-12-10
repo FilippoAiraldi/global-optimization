@@ -15,8 +15,8 @@ import matplotlib.pyplot as plt
 import torch
 from botorch.models.model import Model
 
-from globopt.core_bt.problems import SimpleProblem
-from globopt.core_bt.regression import Idw, Rbf
+from globopt.problems import SimpleProblem
+from globopt.regression import Idw, Rbf
 
 plt.style.use("bmh")
 

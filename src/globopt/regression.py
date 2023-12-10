@@ -51,13 +51,14 @@ trace_idw_scale = torch.jit.trace(
 
 def _idw_regression_mean_and_std(
     train_X: Tensor, train_Y: Tensor, X: Tensor
-) -> tuple[Tensor, Tensor]:
+) -> tuple[Tensor, Tensor, Tensor]:
     """Mean and scale for IDW regression."""
     W = torch.maximum(torch.cdist(X, train_X).square(), DELTA).reciprocal()
-    V = W.div(W.sum(2, keepdim=True))
+    W_sum_recipr = W.sum(2, keepdim=True).reciprocal()
+    V = W.mul(W_sum_recipr)
     mean = V.bmm(train_Y)
     std = trace_idw_scale(mean, train_Y, V)
-    return mean, std
+    return mean, std, W_sum_recipr
 
 
 trace_idw_regression_mean_and_std = torch.jit.trace(
@@ -100,7 +101,9 @@ class Idw(Model):
         Normal
             The normal
         """
-        mean, std = trace_idw_regression_mean_and_std(self.train_X, self.train_Y, X)
+        mean, std, self.W_sum_recipr = trace_idw_regression_mean_and_std(
+            self.train_X, self.train_Y, X
+        )
         return Normal(mean, std)
 
     def posterior(self, X: Tensor, **_: Any) -> Posterior:
@@ -165,7 +168,7 @@ def _rbf_partial_fit(
 
 def _rbf_regression_mean_and_std(
     train_X: Tensor, train_Y: Tensor, eps: Tensor, coeffs: Tensor, X: Tensor
-) -> tuple[Tensor, Tensor]:
+) -> tuple[Tensor, Tensor, Tensor]:
     """Mean and scale for RBF regression."""
     # NOTE: here, we do not use `KernelLinearOperator` so as to avoid computing
     # distance of `X` to `train_X` twice, one in the linear operator and one in the
@@ -174,10 +177,11 @@ def _rbf_regression_mean_and_std(
     scaled_dist = eps[..., None, None] * dist
     M = torch.scalar_tensor(1.0).addcmul(scaled_dist, scaled_dist).reciprocal()
     W = torch.maximum(dist.square(), DELTA).reciprocal()
-    V = W.div(W.sum(2, keepdim=True))
+    W_sum_recipr = W.sum(2, keepdim=True).reciprocal()
+    V = W.mul(W_sum_recipr)
     mean = M.matmul(coeffs)
     std = trace_idw_scale(mean, train_Y, V)
-    return mean, std
+    return mean, std, W_sum_recipr
 
 
 trace_rbf_regression_mean_and_std = torch.jit.trace(
@@ -252,7 +256,7 @@ class Rbf(Model):
         Normal
             The normal
         """
-        mean, std = trace_rbf_regression_mean_and_std(
+        mean, std, self.W_sum_recipr = trace_rbf_regression_mean_and_std(
             self.train_X, self.train_Y, self.eps, self.coeffs, X
         )
         return Normal(mean, std)
