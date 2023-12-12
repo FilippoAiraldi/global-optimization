@@ -23,6 +23,19 @@ from torch.distributions import Normal
 DELTA = torch.scalar_tensor(1e-8)
 
 
+class BaseRegression(Model):
+    """Base class for a regression model."""
+
+    @property
+    def num_outputs(self) -> int:
+        return 1  # only one output is supported
+
+    def posterior(self, X: Tensor, **_: Any) -> TorchPosterior:
+        self.eval()
+        mean, scale, _ = self.forward(X)
+        return TorchPosterior(Normal(mean, scale))
+
+
 def _idw_scale(Y: Tensor, train_Y: Tensor, V: Tensor) -> Tensor:
     """Computes the IDW standard deviation function.
 
@@ -53,7 +66,7 @@ def _idw_regression_mean_and_std(
     train_X: Tensor, train_Y: Tensor, X: Tensor
 ) -> tuple[Tensor, Tensor, Tensor]:
     """Mean and scale for IDW regression."""
-    W = torch.maximum(torch.cdist(X, train_X).square(), DELTA).reciprocal()
+    W = torch.cdist(X, train_X).square().clamp_min(DELTA).reciprocal()
     W_sum_recipr = W.sum(2, keepdim=True).reciprocal()
     V = W.mul(W_sum_recipr)
     mean = V.bmm(train_Y)
@@ -67,19 +80,6 @@ trace_idw_regression_mean_and_std = torch.jit.trace(
 )
 
 
-class BaseRegression(Model):
-    """Base class for a regression model."""
-
-    @property
-    def num_outputs(self) -> int:
-        return 1  # only one output is supported
-
-    def posterior(self, X: Tensor, **_: Any) -> TorchPosterior:
-        self.eval()
-        mean, scale, _ = self.forward(X)
-        return TorchPosterior(Normal(mean, scale))
-
-
 class Idw(BaseRegression):
     """Inverse Distance Weighting regression model in Global Optimization."""
 
@@ -89,11 +89,18 @@ class Idw(BaseRegression):
         Parameters
         ----------
         train_X : Tensor
-            A `b x m x d`-dim batched tensor of `m` training points with dimension `d`.
+            Either a `m x d` or `b x m x d`, where `m` is the number of training points,
+            `d` is the dimension of each point, and optionally `b` is the size of
+            batched/parallel regressors to train. If two-dimensional, `b` is set to 1.
         train_Y : Tensor
-            A `b x m x 1`-dim batched tensor of `m` training observations.
+            Either a `m x d` or `b x m x d` tensor of evaluation corresponding to the
+            `train_X` points.
         """
         super().__init__()
+        if train_X.ndim == 2:
+            train_X = train_X.unsqueeze(0)
+        if train_Y.ndim == 2:
+            train_Y = train_Y.unsqueeze(0)
         self.train_X = train_X
         self.train_Y = train_Y
 
@@ -184,7 +191,7 @@ def _rbf_regression_mean_and_std(
     scaled_dist = eps[..., None, None] * dist
     M = torch.scalar_tensor(1.0).addcmul(scaled_dist, scaled_dist).reciprocal()
     mean = M.matmul(coeffs)
-    W = torch.maximum(dist.square(), DELTA).reciprocal()
+    W = dist.square().clamp_min(DELTA).reciprocal()
     W_sum_recipr = W.sum(2, keepdim=True).reciprocal()
     V = W.mul(W_sum_recipr)
     std = trace_idw_scale(mean, train_Y, V)
@@ -219,9 +226,12 @@ class Rbf(BaseRegression):
         Parameters
         ----------
         train_X : Tensor
-            A `b x m x d`-dim batched tensor of `m` training points with dimension `d`.
+            Either a `m x d` or `b x m x d`, where `m` is the number of training points,
+            `d` is the dimension of each point, and optionally `b` is the size of
+            batched/parallel regressors to train. If two-dimensional, `b` is set to 1.
         train_Y : Tensor
-            A `b x m x 1`-dim batched tensor of `m` training observations.
+            Either a `m x d` or `b x m x d` tensor of evaluation corresponding to the
+            `train_X` points.
         eps : float, optional
             Distance-scaling parameter for the RBF kernel, by default `1.0`.
         svd_tol : float, optional
@@ -234,6 +244,10 @@ class Rbf(BaseRegression):
         super().__init__()
         eps = torch.scalar_tensor(eps)
         svd_tol = torch.scalar_tensor(svd_tol)
+        if train_X.ndim == 2:
+            train_X = train_X.unsqueeze(0)
+        if train_Y.ndim == 2:
+            train_Y = train_Y.unsqueeze(0)
         if Minv_and_coeffs is None:
             Minv, coeffs = _rbf_fit(train_X, train_Y, eps, svd_tol)
         else:

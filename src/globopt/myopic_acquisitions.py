@@ -87,7 +87,26 @@ trace_acquisition_function = torch.jit.trace(
 
 class MyopicAcquisitionFunction(AnalyticAcquisitionFunction):
     """Myopic acquisition function for Global Optimization based on RBF/IDW
-    regression."""
+    regression.
+
+    Computes the myopic acquisition function according to [1] as a function of the
+    estimate of the function value at the candidate points, the distance between the
+    observed points, and an approximate IDW standard deviation. This acquisition
+    does not exploit this deviation to approximate the estimate variance, so it only
+    supports `q=1`. For versions that do so, see `qAnalyticalMyopicAcquisitionFunction`
+    and `qMcMyopicAcquisitionFunction`.
+
+    Example
+    -------
+    >>> model = Idw(train_X, train_Y)
+    >>> MAF = MyopicAcquisitionFunction(model)
+    >>> af = MAF(test_X)
+
+    References
+    ----------
+    [1] A. Bemporad. Global optimization via inverse distance weighting and radial basis
+        functions. Computational Optimization and Applications, 77(2):571–595, 2020
+    """
 
     def __init__(
         self,
@@ -132,4 +151,4 @@ class MyopicAcquisitionFunction(AnalyticAcquisitionFunction):
         mean, scale, W_sum_recipr = self.model(X.transpose(0, 1))
         return trace_acquisition_function(
             mean, scale, self.model.train_Y, W_sum_recipr, self.c1, self.c2
-        )[0, :, 0]
+        ).squeeze()

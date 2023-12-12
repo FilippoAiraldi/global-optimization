@@ -42,7 +42,7 @@ class TestProblems(unittest.TestCase):
         torch.testing.assert_close(actual, expected, rtol=1e-5, atol=1e-6)
         for x_opt in problem._optimizers:
             f_computed = problem(torch.as_tensor(x_opt))
-            expected_ = torch.as_tensor(expected).reshape_as(f_computed)
+            expected_ = torch.as_tensor(expected).view_as(f_computed)
             torch.testing.assert_close(f_computed, expected_, rtol=1e-5, atol=1e-6)
 
 

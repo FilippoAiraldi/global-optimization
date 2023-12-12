@@ -24,9 +24,7 @@ plt.style.use("bmh")
 # create data points - X has shape (batch, n_samples, dim). Since we only have one
 # batch of data, its dimension is 1
 problem = SimpleProblem()
-train_X = torch.as_tensor([-2.61, -1.92, -0.63, 0.38, 2], device="cpu").reshape(
-    1, -1, 1
-)
+train_X = torch.as_tensor([-2.61, -1.92, -0.63, 0.38, 2], device="cpu").view(1, -1, 1)
 train_Y = problem(train_X)
 
 # fit regression models - only first n points for now
@@ -47,7 +45,7 @@ for i in range(len(mdls)):
         mdls[i] = Rbf(train_X, train_Y, mdl.eps, mdl.svd_tol, (mdl.Minv, mdl.coeffs))
 
 # predict values over all domain via the fitted models
-X = torch.linspace(-3, 3, 1000).reshape(1, -1, 1)
+X = torch.linspace(-3, 3, 1000).view(1, -1, 1)
 Y_hat = [mdl(X)[0] for mdl in mdls]
 
 # plot model predictions

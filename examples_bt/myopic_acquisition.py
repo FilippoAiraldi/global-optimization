@@ -32,14 +32,14 @@ lb, ub = problem._bounds[0]
 
 # create data points - X has shape (batch, n_samples, dim)
 dv = "cpu"
-train_X = torch.as_tensor([-2.61, -1.92, -0.63, 0.38, 2], device=dv).reshape(1, -1, 1)
+train_X = torch.as_tensor([-2.61, -1.92, -0.63, 0.38, 2], device=dv).view(1, -1, 1)
 train_Y = problem(train_X)
 
 # create regressor and fit it
 mdl = Rbf(train_X, train_Y, 0.5)
 
 # predict the (normal) posterior over all domain via fitted model
-X = torch.linspace(lb, ub, 1000).reshape(1, -1, 1)
+X = torch.linspace(lb, ub, 1000).view(1, -1, 1)
 y_hat, s, W_sum_recipr = mdl(X)
 
 # compute acquisition function by components
@@ -51,7 +51,7 @@ c2 = 0.5
 a = acquisition_function(y_hat, s, train_Y, W_sum_recipr, c1, c2).squeeze()
 
 # compute minimizer of analytic myopic acquisition function
-x_opt, a_opt = optimize_acqf(
+myopic_analytic_optimizer, myopic_analitic_opt = optimize_acqf(
     acq_function=MyopicAcquisitionFunction(mdl, c1, c2),
     bounds=torch.as_tensor([[lb], [ub]]),
     q=1,
@@ -75,10 +75,10 @@ ax.fill_between(
     alpha=0.2,
 )
 ax.plot(X, z.squeeze(), label="$z(x)$", color="C2")
-ax.plot(X, a - a.min(), "--", lw=2.5, label="$a(x)$", color="C3")
+ax.plot(X, a - a.min(), "--", lw=2.5, label="Analitycal $a(x)$", color="C3")
 ax.plot(
-    x_opt.squeeze(),
-    a_opt - a.min(),
+    myopic_analytic_optimizer.squeeze(),
+    myopic_analitic_opt - a.min(),
     "*",
     label=None,  # r"$\arg \max a(x)$",
     markersize=17,
