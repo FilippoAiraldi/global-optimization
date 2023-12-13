@@ -24,15 +24,15 @@ plt.style.use("bmh")
 # create data points - X has shape (batch, n_samples, dim). Since we only have one
 # batch of data, its dimension is 1
 problem = SimpleProblem()
-train_X = torch.as_tensor([-2.61, -1.92, -0.63, 0.38, 2], device="cpu").view(1, -1, 1)
+train_X = torch.as_tensor([-2.61, -1.92, -0.63, 0.38, 2], device="cpu").unsqueeze(-1)
 train_Y = problem(train_X)
 
 # fit regression models - only first n points for now
 n = 3
 mdls: list[Model] = [
-    Idw(train_X[:, :n], train_Y[:, :n]),
-    Rbf(train_X[:, :n], train_Y[:, :n], eps=0.5),
-    Rbf(train_X[:, :n], train_Y[:, :n], eps=2.0),
+    Idw(train_X[:n], train_Y[:n]),
+    Rbf(train_X[:n], train_Y[:n], eps=0.5),
+    Rbf(train_X[:n], train_Y[:n], eps=2.0),
 ]
 
 # to partially fit new data, pass new dataset, and only the newest data will be used
@@ -45,8 +45,8 @@ for i in range(len(mdls)):
         mdls[i] = Rbf(train_X, train_Y, mdl.eps, mdl.svd_tol, (mdl.Minv, mdl.coeffs))
 
 # predict values over all domain via the fitted models
-X = torch.linspace(-3, 3, 1000).view(1, -1, 1)
-Y_hat = [mdl(X)[0] for mdl in mdls]
+X = torch.linspace(-3, 3, 1000).view(-1, 1, 1)
+Y_hat = [mdl.posterior(X).mean for mdl in mdls]
 
 # plot model predictions
 _, ax = plt.subplots(constrained_layout=True, figsize=(7, 3))

@@ -26,14 +26,60 @@ DELTA = torch.scalar_tensor(1e-8)
 class BaseRegression(Model):
     """Base class for a regression model."""
 
+    def __init__(self, train_X: Tensor, train_Y: Tensor) -> None:
+        """Instantiates a regression model for Global Optimization.
+
+        Parameters
+        ----------
+        train_X : Tensor
+            A `(b0 x b1 x ...) x m x d`, where `m` is the number of training points,
+            `d` is the dimension of each point, and `b`s are the size of
+            batched/parallel regressors to train.
+        train_Y : Tensor
+            A `(b0 x b1 x ...) x m x 1` tensor of evaluation corresponding to the
+            `train_X` points.
+        """
+        super().__init__()
+        self.train_X = train_X
+        self.train_Y = train_Y
+        self.to(train_X)  # make sure we're on the right device/dtype
+
     @property
     def num_outputs(self) -> int:
         return 1  # only one output is supported
 
     def posterior(self, X: Tensor, **_: Any) -> TorchPosterior:
         self.eval()
-        mean, scale, _ = self.forward(X)
-        return TorchPosterior(Normal(mean, scale))
+        # NOTE: This function takes care of interfacing the regression model with
+        # botorch. botorch uses the `b x q x d` convention, where
+        #   - `b` is the number of candidate points to estimate, i.e., parallel points
+        #   - `q` is the number of MC iterations
+        #   - `d` is the dimension of the design space
+        # Instead, the implementation of the regression models uses `p x m x d`, where
+        #   - `p` is the number of parallel regression models (this is only useful in
+        #     the non-myopic, where we need to progress many different models in
+        #     parallel. This is akin to the `b` dimension in botorch)
+        #   - `m` is the number of training points.
+
+        b, q, _ = X.shape
+        p, (m, d) = self.train_X.shape[:-2], self.train_X.shape[-2:]
+        if q == 1:
+            # In the myopic case, i.e., `q = 1`, the regressor model can only be one,
+            # so either `train_X` has 2 dimensions or its parallel dimensions are 1s
+            assert not p or all(p_ == 1 for p_ in p)
+            X_ = X.squeeze(1)  # from `b x 1 x d` to `b x d`
+            mean_, scale_, W_sum_recipr_ = self.forward(X_)  # `b x 1` or `1 x b x 1`
+            mean = mean_.view(b, 1, 1)
+            scale = scale_.view(b, 1, 1)
+            W_sum_recipr = W_sum_recipr_.view(b, 1, 1)
+        else:
+            raise NotImplementedError
+
+        #  NOTE: a bit sketchy, but `W_sum_recipr` is needed by the acquisition
+        # functions, and it is computed here. So we manually attach it to the posterior.
+        posterior = TorchPosterior(Normal(mean, scale))
+        posterior.W_sum_recipr = W_sum_recipr
+        return posterior
 
 
 def _idw_scale(Y: Tensor, train_Y: Tensor, V: Tensor) -> Tensor:
@@ -42,67 +88,35 @@ def _idw_scale(Y: Tensor, train_Y: Tensor, V: Tensor) -> Tensor:
     Parameters
     ----------
     Y : Tensor
-        `b x q x 1` estimates of the function values at the candidate points.
+        `(b0 x b1 x ...) x n x 1` estimates of function values at the candidate points.
     train_Y : Tensor
-        `b x m x 1` training data points.
+        `(b0 x b1 x ...) x m x 1` training data points.
     V : Tensor
-        `b x q x m` normalized IDW weights.
+        `(b0 x b1 x ...) x n x m` normalized IDW weights.
 
     Returns
     -------
     Tensor
-        The standard deviation of shape `b x q x 1`.
+        The standard deviation of shape `(b0 x b1 x ...) x n x 1`.
     """
-    scaled_diff = V.sqrt().mul(train_Y.transpose(2, 1) - Y)
-    return torch.linalg.vector_norm(scaled_diff, dim=2, keepdim=True)
+    scaled_diff = V.sqrt().mul(train_Y.transpose(-1, -2) - Y)
+    return torch.linalg.vector_norm(scaled_diff, dim=-1, keepdim=True)
 
 
-trace_idw_scale = torch.jit.trace(
-    _idw_scale, (torch.rand(7, 5, 1), torch.rand(7, 4, 1), torch.rand(7, 5, 4))
-)
-
-
-def _idw_regression_mean_and_std(
+def _idw_regression_predict(
     train_X: Tensor, train_Y: Tensor, X: Tensor
 ) -> tuple[Tensor, Tensor, Tensor]:
     """Mean and scale for IDW regression."""
     W = torch.cdist(X, train_X).square().clamp_min(DELTA).reciprocal()
-    W_sum_recipr = W.sum(2, keepdim=True).reciprocal()
+    W_sum_recipr = W.sum(-1, keepdim=True).reciprocal()
     V = W.mul(W_sum_recipr)
-    mean = V.bmm(train_Y)
-    std = trace_idw_scale(mean, train_Y, V)
+    mean = V.matmul(train_Y)
+    std = _idw_scale(mean, train_Y, V)
     return mean, std, W_sum_recipr
-
-
-trace_idw_regression_mean_and_std = torch.jit.trace(
-    _idw_regression_mean_and_std,
-    (torch.rand(10, 5, 2), torch.rand(10, 5, 1), torch.rand(10, 2, 2)),
-)
 
 
 class Idw(BaseRegression):
     """Inverse Distance Weighting regression model in Global Optimization."""
-
-    def __init__(self, train_X: Tensor, train_Y: Tensor) -> None:
-        """Instantiates an IDW regression model in Global Optimization.
-
-        Parameters
-        ----------
-        train_X : Tensor
-            Either a `m x d` or `b x m x d`, where `m` is the number of training points,
-            `d` is the dimension of each point, and optionally `b` is the size of
-            batched/parallel regressors to train. If two-dimensional, `b` is set to 1.
-        train_Y : Tensor
-            Either a `m x d` or `b x m x d` tensor of evaluation corresponding to the
-            `train_X` points.
-        """
-        super().__init__()
-        if train_X.ndim == 2:
-            train_X = train_X.unsqueeze(0)
-        if train_Y.ndim == 2:
-            train_Y = train_Y.unsqueeze(0)
-        self.train_X = train_X
-        self.train_Y = train_Y
 
     def forward(self, X: Tensor) -> tuple[Tensor, Tensor, Tensor]:
         """Computes the IDW regression model.
@@ -110,9 +124,9 @@ class Idw(BaseRegression):
         Parameters
         ----------
         X : Tensor
-            A `b x q x d`-dim batched tensor of `d`-dim design points, where `q` is the
-            number of candidate points to estimate, and `b` is the batched regressor
-            size.
+            A `(b0 x b1 x ...) x n x 1` tensor of `d`-dim design points, where `n` is
+            the number of candidate points to estimate, and `b`s are the batched
+            regressor sizes.
 
         Returns
         -------
@@ -122,33 +136,34 @@ class Idw(BaseRegression):
                 - the idw standard deviation of the estimate
                 - the reciprocal of the sum of the IDW weights
         """
-        return trace_idw_regression_mean_and_std(self.train_X, self.train_Y, X)
+        return _idw_regression_predict(self.train_X, self.train_Y, X)
+
+
+def _cdist_and_inverse_quadratic_kernel(
+    X: Tensor, Y: Tensor, eps: Tensor
+) -> tuple[Tensor, Tensor]:
+    """RBF inverse quadratic kernel function."""
+    cdist = torch.cdist(X, Y)
+    scaled_cdist = eps[..., None, None] * cdist
+    kernel = torch.scalar_tensor(1.0).addcmul(scaled_cdist, scaled_cdist).reciprocal()
+    return cdist, kernel
 
 
 def _inverse_quadratic_kernel(X: Tensor, Y: Tensor, eps: Tensor) -> Tensor:
     """RBF inverse quadratic kernel function."""
-    scaled_dist = eps[..., None, None] * torch.cdist(X, Y)
-    return torch.scalar_tensor(1.0).addcmul(scaled_dist, scaled_dist).reciprocal()
-
-
-trace_invquad_kernel = torch.jit.trace(
-    _inverse_quadratic_kernel,
-    (torch.rand(10, 5, 2), torch.rand(10, 7, 2), torch.rand(10)),
-)
+    return _cdist_and_inverse_quadratic_kernel(X, Y, eps)[1]
 
 
 def _rbf_fit(
     X: Tensor, Y: Tensor, eps: Tensor, svd_tol: Tensor
 ) -> tuple[LinearOperator, Tensor]:
     """Fits the RBF regression model to the training data."""
-    # NOTE: here, we do not use jit because of `KernelLinearOperator`, but it seems
-    # better than standard svd.
     M = KernelLinearOperator(
-        X, X, trace_invquad_kernel, eps=eps, num_nonbatch_dimensions={"eps": 0}
+        X, X, _inverse_quadratic_kernel, eps=eps, num_nonbatch_dimensions={"eps": 0}
     )
     U, S, VT = torch.linalg.svd(M)
     S = S.where(S > svd_tol, torch.inf)
-    Minv = VT.transpose(1, 2).div(S.unsqueeze(1)).matmul(U.transpose(1, 2))
+    Minv = VT.transpose(-2, -1).div(S.unsqueeze(-2)).matmul(U.transpose(-2, -1))
     coeffs = Minv.matmul(Y)
     return Minv, coeffs
 
@@ -161,53 +176,41 @@ def _rbf_partial_fit(
     coeffs: Tensor,
 ) -> tuple[LinearOperator, Tensor]:
     """Fits the given RBF regression to the new training data."""
-    n = coeffs.size(1)  # index of the first new data point onwards
-    X_new = X[:, n:]
+    n = coeffs.size(-2)  # index of the first new data point onwards
+    X_new = X[..., n:, :]
     Phi_and_phi = KernelLinearOperator(
-        X_new, X, trace_invquad_kernel, eps=eps, num_nonbatch_dimensions={"eps": 0}
+        X_new, X, _inverse_quadratic_kernel, eps=eps, num_nonbatch_dimensions={"eps": 0}
     )
-    PhiT = Phi_and_phi[:, :, :n]
-    phi = Phi_and_phi[:, :, n:]
-    L = Minv.matmul(PhiT.transpose(1, 2))
+    PhiT = Phi_and_phi[..., :n]
+    phi = Phi_and_phi[..., n:]
+    L = Minv.matmul(PhiT.transpose(-2, -1))
     c = (phi - PhiT.matmul(L)).to_dense()  # TODO: force invertibility
     c_inv = torch.linalg.inv(c)
     B = -L.matmul(c_inv)
-    A = (Minv - B.matmul(L.transpose(1, 2))).to_dense()
+    A = (Minv - B.matmul(L.transpose(-2, -1))).to_dense()
     Minv_new = to_linear_operator(
-        torch.cat((torch.cat((A, B), 2), torch.cat((B.transpose(1, 2), c_inv), 2)), 1)
+        torch.cat(
+            (torch.cat((A, B), -1), torch.cat((B.transpose(-2, -1), c_inv), -1)), -2
+        )
     )
     coeffs_new = Minv_new.matmul(Y)
     return Minv_new, coeffs_new
 
 
-def _rbf_regression_mean_and_std(
+def _rbf_predict(
     train_X: Tensor, train_Y: Tensor, eps: Tensor, coeffs: Tensor, X: Tensor
 ) -> tuple[Tensor, Tensor, Tensor]:
-    """Mean and scale for RBF regression."""
-    # NOTE: here, we do not use `KernelLinearOperator` so as to avoid computing
-    # distance of `X` to `train_X` twice, one in the linear operator and one in the
-    # `idw_weighting` function. Moreover, the linear operator would not be jitted.
-    dist = torch.cdist(X, train_X)
-    scaled_dist = eps[..., None, None] * dist
-    M = torch.scalar_tensor(1.0).addcmul(scaled_dist, scaled_dist).reciprocal()
+    """Predicts mean and scale for RBF regression."""
+    # NOTE: here, we do not use `KernelLinearOperator` so as to avoid computing the
+    # distance from `X` to `train_X` twice, one in the linear operator and one in the
+    # `idw_weighting` function.
+    dist, M = _cdist_and_inverse_quadratic_kernel(X, train_X, eps)
     mean = M.matmul(coeffs)
     W = dist.square().clamp_min(DELTA).reciprocal()
-    W_sum_recipr = W.sum(2, keepdim=True).reciprocal()
+    W_sum_recipr = W.sum(-1, keepdim=True).reciprocal()
     V = W.mul(W_sum_recipr)
-    std = trace_idw_scale(mean, train_Y, V)
+    std = _idw_scale(mean, train_Y, V)
     return mean, std, W_sum_recipr
-
-
-trace_rbf_regression_mean_and_std = torch.jit.trace(
-    _rbf_regression_mean_and_std,
-    (
-        torch.rand(7, 5, 2),
-        torch.rand(7, 5, 1),
-        torch.rand(()),
-        torch.rand((7, 5, 1)),
-        torch.rand((7, 8, 2)),
-    ),
-)
 
 
 class Rbf(BaseRegression):
@@ -221,16 +224,16 @@ class Rbf(BaseRegression):
         svd_tol: Union[float, Tensor] = 1e-8,
         Minv_and_coeffs: Optional[tuple[Tensor, Tensor]] = None,
     ) -> None:
-        """Instantiates an RBF regression model in Global Optimization.
+        """Instantiates an RBF regression model for Global Optimization.
 
         Parameters
         ----------
         train_X : Tensor
-            Either a `m x d` or `b x m x d`, where `m` is the number of training points,
-            `d` is the dimension of each point, and optionally `b` is the size of
-            batched/parallel regressors to train. If two-dimensional, `b` is set to 1.
+            A `(b0 x b1 x ...) x m x d`, where `m` is the number of training points,
+            `d` is the dimension of each point, and `b`s are the size of
+            batched/parallel regressors to train.
         train_Y : Tensor
-            Either a `m x d` or `b x m x d` tensor of evaluation corresponding to the
+            A `(b0 x b1 x ...) x m x 1` tensor of evaluation corresponding to the
             `train_X` points.
         eps : float, optional
             Distance-scaling parameter for the RBF kernel, by default `1.0`.
@@ -241,24 +244,17 @@ class Rbf(BaseRegression):
             `None`, in which case the model is fit anew to the training data. If
             provided, the model is only partially fit to the new data.
         """
-        super().__init__()
         eps = torch.scalar_tensor(eps)
         svd_tol = torch.scalar_tensor(svd_tol)
-        if train_X.ndim == 2:
-            train_X = train_X.unsqueeze(0)
-        if train_Y.ndim == 2:
-            train_Y = train_Y.unsqueeze(0)
         if Minv_and_coeffs is None:
             Minv, coeffs = _rbf_fit(train_X, train_Y, eps, svd_tol)
         else:
             Minv, coeffs = _rbf_partial_fit(train_X, train_Y, eps, *Minv_and_coeffs)
-        self.train_X = train_X
-        self.train_Y = train_Y
+        super().__init__(train_X, train_Y)
         self.register_buffer("eps", eps)
         self.register_buffer("svd_tol", svd_tol)
         self.Minv = Minv  # cannot do `self.register_buffer("Minv", Minv)`
         self.register_buffer("coeffs", coeffs)
-        self.to(train_X)  # make sure we're on the right device/dtype
 
     def forward(self, X: Tensor) -> Normal:
         """Computes the RBF regression model.
@@ -266,15 +262,13 @@ class Rbf(BaseRegression):
         Parameters
         ----------
         X : Tensor
-            A `b x q x d`-dim batched tensor of `d`-dim design points, where `q` is the
-            number of candidate points to estimate, and `b` is the batched regressor
-            size.
+            A `(b0 x b1 x ...) x n x 1` tensor of `d`-dim design points, where `n` is
+            the number of candidate points to estimate, and `b`s are the batched
+            regressor sizes.
 
         Returns
         -------
         Normal
             The normal
         """
-        return trace_rbf_regression_mean_and_std(
-            self.train_X, self.train_Y, self.eps, self.coeffs, X
-        )
+        return _rbf_predict(self.train_X, self.train_Y, self.eps, self.coeffs, X)
