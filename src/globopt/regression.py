@@ -68,10 +68,9 @@ class BaseRegression(Model):
             # so either `train_X` has 2 dimensions or its parallel dimensions are 1s
             assert not p or all(p_ == 1 for p_ in p)
             X_ = X.squeeze(1)  # from `b x 1 x d` to `b x d`
-            mean_, scale_, W_sum_recipr_ = self.forward(X_)  # `b x 1` or `1 x b x 1`
-            mean = mean_.view(b, 1, 1)
+            mean_, scale_, W_sum_recipr = self.forward(X_)  # `b x 1` or `1 x b x 1`
+            mean = mean_.view(b, 1, 1)  # for compatibility with botorch, add these 1s
             scale = scale_.view(b, 1, 1)
-            W_sum_recipr = W_sum_recipr_.view(b, 1, 1)
         else:
             raise NotImplementedError
 

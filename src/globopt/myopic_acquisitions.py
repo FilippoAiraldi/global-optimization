@@ -24,14 +24,14 @@ def _idw_distance(W_sum_recipr: Tensor) -> Tensor:
     Parameters
     ----------
     W_sum_recipr : Tensor
-        `b x q x 1` reciprocal of the sum of the IDW weights, i.e., 1/sum(W). `q` is the
-        number of candidate points whose reciprocal of the sum of weights is passed, and
-        `b` is the batched regressor size.
+        `(b0 x b1 x ...) x n x 1` reciprocal of the sum of the IDW weights, i.e.,
+        `1/sum(W)`. `n` is the number of candidate points whose reciprocal of the sum of
+        weights is passed, and `b`s are the batched regressor sizes.
 
     Returns
     -------
     Tensor
-        The standard deviation of shape `b x q x 1`.
+        The standard deviation of shape `(b0 x b1 x ...) x n x 1`.
     """
     return W_sum_recipr.arctan().mul(2 / torch.pi)
 
@@ -39,24 +39,27 @@ def _idw_distance(W_sum_recipr: Tensor) -> Tensor:
 def acquisition_function(
     Y_hat: Tensor,
     Y_std: Tensor,
-    Y: Tensor,
+    Y_span: Tensor,
     W_sum_recipr: Tensor,
     c1: Tensor,
     c2: Tensor,
 ) -> Tensor:
-    """Computes the IDW myopic acquisition function.
+    """Computes the Global Optimization myopic acquisition function.
 
     Parameters
     ----------
     Y_hat : Tensor
-        `b x q x 1` estimates of the function values at the candidate points. `q` is the
-        number of candidate points, and `b` is the batched regressor size.
+        `(b0 x b1 x ...) x n x 1` estimates of the function values at the candidate
+        points. `q` is the number of candidate points, and `b`s are the batched
+        regressor sizes.
     Y_std : Tensor
-        `b x q x 1` standard deviation of the estimates.
-    Y : Tensor
-        `b x m x 1` training data points. `m` is the number of training points.
+        `(b0 x b1 x ...) x n x 1` standard deviation of the estimates.
+    Y_span : Tensor
+        `(b0 x b1 x ...) x 1 x 1` span of the training data points, i.e., the difference
+        between the maximum and minimum values of these.
     W_sum_recipr : Tensor
-        `b x q x 1` reciprocal of the sum of the IDW weights, i.e., 1/sum(W).
+        `(b0 x b1 x ...) x n x 1` reciprocal of the sum of the IDW weights, i.e.,
+        `1/sum(W)`.
     c1 : Tensor
         Weight of the contribution of the variance function.
     c2 : Tensor
@@ -65,24 +68,10 @@ def acquisition_function(
     Returns
     -------
     Tensor
-        Acquisition function of shape `b x q x 1`.
+        Acquisition function of shape `(b0 x b1 x ...) x n x 1`.
     """
     distance = _idw_distance(W_sum_recipr)
-    span = Y.max(1, keepdim=True).values - Y.min(1, keepdim=True).values
-    return Y_hat.sub(Y_std, alpha=c1).sub(span.mul(distance), alpha=c2).neg()
-
-
-trace_acquisition_function = torch.jit.trace(
-    acquisition_function,
-    (
-        torch.rand(7, 6, 1),
-        torch.rand(7, 6, 1),
-        torch.rand(7, 5, 1),
-        torch.rand(7, 6, 1),
-        torch.rand(()),
-        torch.rand(()),
-    ),
-)
+    return Y_hat.sub(Y_std, alpha=c1).sub(Y_span.mul(distance), alpha=c2).neg()
 
 
 class MyopicAcquisitionFunction(AnalyticAcquisitionFunction):
@@ -108,6 +97,8 @@ class MyopicAcquisitionFunction(AnalyticAcquisitionFunction):
         functions. Computational Optimization and Applications, 77(2):571–595, 2020
     """
 
+    model: Union[Idw, Rbf]
+
     def __init__(
         self,
         model: Union[Idw, Rbf],
@@ -128,6 +119,10 @@ class MyopicAcquisitionFunction(AnalyticAcquisitionFunction):
         super().__init__(model)
         self.register_buffer("c1", torch.scalar_tensor(c1))
         self.register_buffer("c2", torch.scalar_tensor(c2))
+        # pre-compute span of training data points
+        Y = model.train_Y  # `1 x m x 1` (myopic only supports no parallel models)
+        span_Y = Y.max(-2, keepdim=True).values - Y.min(-2, keepdim=True).values
+        self.register_buffer("span_Y", span_Y)
 
     @t_batch_mode_transform(expected_q=1)
     def forward(self, X: Tensor) -> Tensor:
@@ -136,19 +131,21 @@ class MyopicAcquisitionFunction(AnalyticAcquisitionFunction):
         Parameters
         ----------
         X : Tensor
-            A `b x 1 x d`-dim batched tensor of `d`-dim design points.
+            A `n x 1 x d`-dim batched tensor of `n` design points in `d` space.
 
         Returns
         -------
         Tensor
-            A `b`-dim tensor of myopic acquisition values at the given
+            A `n`-dim tensor of myopic acquisition values at the given
             design points `X`.
         """
-        # NOTE: while botorch uses the `b x 1 x d` convention, regression models use
-        # `n x b x d` convention, where `n` is the number of parallel regression models.
-        # Since the myopic acquisition function does not look ahead, there's no need to
-        # parallelize to `n` models, so that's why we transpose X.
-        mean, scale, W_sum_recipr = self.model(X.transpose(0, 1))
-        return trace_acquisition_function(
-            mean, scale, self.model.train_Y, W_sum_recipr, self.c1, self.c2
-        ).squeeze()
+        # we could either compute the posterior as follows
+        # >>> posterior = self.model.posterior(X)
+        # >>> mean = posterior.mean.transpose(-3, -2)  # `n x 1 x 1` to `1 x n x 1`
+        # >>> scale = posterior.scale.transpose(-3, -2)  # `n x 1 x 1` to `1 x n x 1`
+        # >>> W_sum_recipr = posterior.W_sum_recipr  # `1 x n x 1`
+        # or compute all quantities already with the correct shape as follows
+        mean, scale, W_sum_recipr = self.model(X.transpose(-3, -2))
+        return acquisition_function(  # from `1 x n x 1` to `n`
+            mean, scale, self.span_Y, W_sum_recipr, self.c1, self.c2
+        ).squeeze((0, 2))

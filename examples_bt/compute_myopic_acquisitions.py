@@ -32,7 +32,7 @@ lb, ub = problem._bounds[0]
 
 # create data points - X has shape (batch, n_samples, dim)
 dv = "cpu"
-train_X = torch.as_tensor([-2.61, -1.92, -0.63, 0.38, 2], device=dv).view(1, -1, 1)
+train_X = torch.as_tensor([-2.61, -1.92, -0.63, 0.38, 2], device=dv).view(-1, 1)
 train_Y = problem(train_X)
 
 # create regressor and fit it
@@ -48,15 +48,17 @@ z = _idw_distance(W_sum_recipr)
 # compute the overall acquisition function
 c1 = 1.0
 c2 = 0.5
-a = acquisition_function(y_hat, s, train_Y, W_sum_recipr, c1, c2).squeeze()
+# TODO: dont pass train_Y but its span
+y_span = train_Y.max(-2, keepdim=True).values - train_Y.min(-2, keepdim=True).values
+a = acquisition_function(y_hat, s, y_span, W_sum_recipr, c1, c2).squeeze()
 
 # compute minimizer of analytic myopic acquisition function
 myopic_analytic_optimizer, myopic_analitic_opt = optimize_acqf(
     acq_function=MyopicAcquisitionFunction(mdl, c1, c2),
     bounds=torch.as_tensor([[lb], [ub]]),
-    q=1,
-    num_restarts=10,
-    raw_samples=20,
+    q=1,  # mc iterations - not supported for the analytical acquisition function
+    num_restarts=10,  # number of optimization restarts
+    raw_samples=20,  # initial samples to start the first `num_restarts` points
     options={"seed": 0},
 )
 
