@@ -9,6 +9,44 @@ References
 """
 
 
+# NOTE: Batching
+# --------
+# Here is discussed the batching methods used by botorch and in our regression
+# implementations, and how the two are interfaced.
+# See also: https://botorch.org/docs/batching
+#
+# Conventions
+# ------------
+# botorch uses the convention `b0 x b1 x ... x q x d`, where
+# * `b-i` is the number of batches of candidates to evaluate in parallel
+# * `q` is the number of candidates to consider jointly
+# * `d` is the dimension of the design space of each `q`-th candidate.
+# Note that while there might be more than one batch dimension, usually we need just one
+# in important methods.
+# On the other side, the implementation of the regression models uses a slightly
+# different convention, which is motivated by how pytorch treats and broadcasts linear
+# algebra operations. In particular, it uses `p x m x d`, where
+# * `p` is the number of parallel regression models (this is only useful in the
+#   non-myopic, where we need to progress many different models in parallel. This is
+#   akin to the `b` dimension in botorch)
+# * `m` is the number of training points. In case of prediction, we prefer to denote
+#   this same dimension as `n`.`
+# Note that the use of `p` parallel regressors is only useful in the non-myopic case,
+# where we need to progress many different models in parallel, by exploring different
+# acquisition points. Instead, in the myopic case, we expect `p = 1`.
+#
+# Interfacing
+# -----------
+# We make here the distinction between the myopic and non-myopic case.
+# * myopic case: for the simplest cases, i.e., the analytical acquisition functions, we
+#   expect `q = 1`. This means that the `b` dimension is botorch can be swapped in
+#   second place and used as the `m`. Usually, we call it `n` to distinguish the `m`
+#   training points from the `n` prediction points.
+#   For the Monte Carlo myopic case, TODO
+# * non-myopic case: TODO: would `b x q x 1 x d` work for regressors as repeated as
+# `b x q x m x d`?
+
+
 from typing import Any, Optional, Union
 
 import torch
@@ -49,33 +87,13 @@ class BaseRegression(Model):
         return 1  # only one output is supported
 
     def posterior(self, X: Tensor, **_: Any) -> TorchPosterior:
+        # NOTE: A bit sketchy, but `W_sum_recipr` is needed by the acquisition
+        # functions. It gets first computed here, so it is convenient to manually attach
+        # it to the posterior for re-use.
+        # NOTE: do not modify shapes here. It is the responsibility of the acquisition
+        # function calling this method to do so.
         self.eval()
-        # NOTE: This function takes care of interfacing the regression model with
-        # botorch. botorch uses the `b x q x d` convention, where
-        #   - `b` is the number of candidate points to estimate, i.e., parallel points
-        #   - `q` is the number of MC iterations
-        #   - `d` is the dimension of the design space
-        # Instead, the implementation of the regression models uses `p x m x d`, where
-        #   - `p` is the number of parallel regression models (this is only useful in
-        #     the non-myopic, where we need to progress many different models in
-        #     parallel. This is akin to the `b` dimension in botorch)
-        #   - `m` is the number of training points.
-
-        b, q, _ = X.shape
-        p, (m, d) = self.train_X.shape[:-2], self.train_X.shape[-2:]
-        if q == 1:
-            # In the myopic case, i.e., `q = 1`, the regressor model can only be one,
-            # so either `train_X` has 2 dimensions or its parallel dimensions are 1s
-            assert not p or all(p_ == 1 for p_ in p)
-            X_ = X.squeeze(1)  # from `b x 1 x d` to `b x d`
-            mean_, scale_, W_sum_recipr = self.forward(X_)  # `b x 1` or `1 x b x 1`
-            mean = mean_.view(b, 1, 1)  # for compatibility with botorch, add these 1s
-            scale = scale_.view(b, 1, 1)
-        else:
-            raise NotImplementedError
-
-        #  NOTE: a bit sketchy, but `W_sum_recipr` is needed by the acquisition
-        # functions, and it is computed here. So we manually attach it to the posterior.
+        mean, scale, W_sum_recipr = self.forward(X)
         posterior = TorchPosterior(Normal(mean, scale))
         posterior.W_sum_recipr = W_sum_recipr
         return posterior

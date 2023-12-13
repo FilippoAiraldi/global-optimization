@@ -22,7 +22,7 @@ class TestRegression(unittest.TestCase):
                 mdls[i] = Idw(X, Y)
             else:
                 mdls[i] = Rbf(X, Y, mdl.eps, mdl.svd_tol, (mdl.Minv, mdl.coeffs))
-        x_hat = torch.linspace(-3, 3, 100).view(-1, 1, 1)
+        x_hat = torch.linspace(-3, 3, 100, dtype=X.dtype).view(1, -1, 1)
         y_hat = torch.stack([mdl.posterior(x_hat).mean.squeeze() for mdl in mdls])
         y_hat_expected = torch.as_tensor(RESULTS["y_hat"][:2], dtype=y_hat.dtype)
         # NOTE: we only take the first 2 rows of y_hat because the third was computed

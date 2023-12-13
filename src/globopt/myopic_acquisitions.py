@@ -60,9 +60,9 @@ def acquisition_function(
     W_sum_recipr : Tensor
         `(b0 x b1 x ...) x n x 1` reciprocal of the sum of the IDW weights, i.e.,
         `1/sum(W)`.
-    c1 : Tensor
+    c1 : scalar Tensor
         Weight of the contribution of the variance function.
-    c2 : Tensor
+    c2 : scalar Tensor
         Weight of the contribution of the distance function.
 
     Returns
@@ -120,7 +120,7 @@ class MyopicAcquisitionFunction(AnalyticAcquisitionFunction):
         self.register_buffer("c1", torch.scalar_tensor(c1))
         self.register_buffer("c2", torch.scalar_tensor(c2))
         # pre-compute span of training data points
-        Y = model.train_Y  # `1 x m x 1` (myopic only supports no parallel models)
+        Y = model.train_Y
         span_Y = Y.max(-2, keepdim=True).values - Y.min(-2, keepdim=True).values
         self.register_buffer("span_Y", span_Y)
 
@@ -139,13 +139,13 @@ class MyopicAcquisitionFunction(AnalyticAcquisitionFunction):
             A `n`-dim tensor of myopic acquisition values at the given
             design points `X`.
         """
-        # we could either compute the posterior as follows
-        # >>> posterior = self.model.posterior(X)
-        # >>> mean = posterior.mean.transpose(-3, -2)  # `n x 1 x 1` to `1 x n x 1`
-        # >>> scale = posterior.scale.transpose(-3, -2)  # `n x 1 x 1` to `1 x n x 1`
-        # >>> W_sum_recipr = posterior.W_sum_recipr  # `1 x n x 1`
-        # or compute all quantities already with the correct shape as follows
-        mean, scale, W_sum_recipr = self.model(X.transpose(-3, -2))
+        posterior = self.model.posterior(X.transpose(-3, -2))
+        # the posterior's mean, scale and W_sum_recipr are all `1 x n x 1`
         return acquisition_function(  # from `1 x n x 1` to `n`
-            mean, scale, self.span_Y, W_sum_recipr, self.c1, self.c2
+            posterior.mean,
+            posterior.scale,
+            self.span_Y,
+            posterior.W_sum_recipr,
+            self.c1,
+            self.c2,
         ).squeeze((0, 2))
