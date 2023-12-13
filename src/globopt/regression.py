@@ -87,16 +87,15 @@ class BaseRegression(Model):
         return 1  # only one output is supported
 
     def posterior(self, X: Tensor, **_: Any) -> TorchPosterior:
-        # NOTE: A bit sketchy, but `W_sum_recipr` is needed by the acquisition
-        # functions. It gets first computed here, so it is convenient to manually attach
-        # it to the posterior for re-use.
-        # NOTE: do not modify shapes here. It is the responsibility of the acquisition
-        # function calling this method to do so.
         self.eval()
+        # NOTE: do not modify input/output shapes here. It is the responsibility of the
+        # acquisition function calling this method to do so.
         mean, scale, W_sum_recipr = self.forward(X)
-        posterior = TorchPosterior(Normal(mean, scale))
-        posterior.W_sum_recipr = W_sum_recipr
-        return posterior
+        # NOTE: it's a bit sketchy, but `W_sum_recipr` is needed by the acquisition
+        # functions. It gets first computed here, so it is convenient to manually attach
+        # it to the model for later re-use.
+        self.W_sum_recipr = W_sum_recipr
+        return TorchPosterior(Normal(mean, scale))
 
 
 def _idw_scale(Y: Tensor, train_Y: Tensor, V: Tensor) -> Tensor:

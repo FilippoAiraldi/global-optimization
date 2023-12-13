@@ -145,7 +145,7 @@ class MyopicAcquisitionFunction(AnalyticAcquisitionFunction):
             posterior.mean,
             posterior.scale,
             self.span_Y,
-            posterior.W_sum_recipr,
+            self.model.W_sum_recipr,
             self.c1,
             self.c2,
         ).squeeze((0, 2))
