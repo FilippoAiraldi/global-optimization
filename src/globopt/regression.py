@@ -200,7 +200,7 @@ def _rbf_partial_fit(
     PhiT = Phi_and_phi[..., :n]
     phi = Phi_and_phi[..., n:]
     L = Minv.matmul(PhiT.transpose(-2, -1))
-    c = (phi - PhiT.matmul(L)).to_dense()  # TODO: force invertibility
+    c = (phi - PhiT.matmul(L)).to_dense()  # NOTE: invertibility is not forced
     c_inv = torch.linalg.inv(c)
     B = -L.matmul(c_inv)
     A = (Minv - B.matmul(L.transpose(-2, -1))).to_dense()
