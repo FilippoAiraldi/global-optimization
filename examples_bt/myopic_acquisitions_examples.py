@@ -48,7 +48,6 @@ z = _idw_distance(W_sum_recipr)
 # compute the overall acquisition function
 c1 = 1.0
 c2 = 0.5
-# TODO: dont pass train_Y but its span
 y_span = train_Y.max(-2, keepdim=True).values - train_Y.min(-2, keepdim=True).values
 a = acquisition_function(y_hat, s, y_span, W_sum_recipr, c1, c2).squeeze()
 
@@ -61,6 +60,16 @@ myopic_analytic_optimizer, myopic_analitic_opt = optimize_acqf(
     raw_samples=20,  # initial samples to start the first `num_restarts` points
     options={"seed": 0},
 )
+
+# # compute minimizer of MC myopic acquisition function
+# myopic_mc_optimizer, myopic_mc_opt = optimize_acqf(
+#     acq_function=qMcMyopicAcquisitionFunction(mdl, c1, c2),
+#     bounds=torch.as_tensor([[lb], [ub]]),
+#     q=2**10,
+#     num_restarts=10,
+#     raw_samples=20,
+#     options={"seed": 0},
+# )
 
 # plot
 _, ax = plt.subplots(1, 1, constrained_layout=True, figsize=(6, 2.5))

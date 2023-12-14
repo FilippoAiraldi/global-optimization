@@ -272,6 +272,12 @@ class Rbf(BaseRegression):
         self.Minv = Minv  # cannot do `self.register_buffer("Minv", Minv)`
         self.register_buffer("coeffs", coeffs)
 
+    @property
+    def Minv_and_coeffs(self) -> tuple[Tensor, Tensor]:
+        """States of a fitted RBF regressor, i.e., the inverse of the kernel matrix and
+        coefficients. Use this to partially fit a new regressor (see `__init__`)"""
+        return self.Minv, self.coeffs
+
     def forward(self, X: Tensor) -> Normal:
         """Computes the RBF regression model.
 
