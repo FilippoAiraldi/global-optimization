@@ -26,13 +26,13 @@ plt.style.use("bmh")
 
 
 # instantiate problem and create starting training data
-DTYPE = torch.float64
+DTYPE = torch.float32  # with RBF regressor, float32 may not be enough
+N_ITERS = 6
 problem = SimpleProblem().to(DTYPE)
 lb, ub = problem._bounds[0]
 train_X = torch.as_tensor([[-2.62, -1.2, 0.14, 1.1, 2.82]], dtype=DTYPE).T
 train_Y = problem(train_X)
 eps, c1, c2 = 0.5, 1.0, 0.5
-N_ITERS = 6
 
 # start regressor state as None
 Minv_and_coeffs = None
@@ -64,7 +64,7 @@ for iteration in range(N_ITERS):
     Minv_and_coeffs = mdl.Minv_and_coeffs
 
     # compute quantities for plotting purposes
-    historic_item = (mdl(x_plot)[0], MAF(x_plot), X_opt, Y_opt, acq_opt)
+    historic_item = (mdl(x_plot.transpose(0, 1))[0], MAF(x_plot), X_opt, Y_opt, acq_opt)
     history.append(tuple(map(torch.squeeze, historic_item)))
 
 # do plotting
@@ -96,6 +96,7 @@ for i, (ax, historic_item) in enumerate(zip(axs, history)):
     ax_.plot(x_opt, acq_opt, "*", markersize=13, color="C2")
     ax_.set_axis_off()
     ax_.set_ylim(-2.3, 0.8)
+    ax.set_ylim(-0.5, 3.2)
 
     # plot next observation point
     ax.plot(x_opt, y_opt, "o", markersize=8, color="C4")

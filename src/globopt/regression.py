@@ -52,13 +52,11 @@ from typing import Any, Optional, Union
 import torch
 from botorch.models.model import Model
 from botorch.posteriors import TorchPosterior
-from linear_operator import LinearOperator, to_linear_operator
-from linear_operator.operators import KernelLinearOperator
 from torch import Tensor
 from torch.distributions import Normal
 
 """Small value to avoid division by zero."""
-DELTA = torch.scalar_tensor(1e-8)
+DELTA = torch.scalar_tensor(1e-9)
 
 
 class BaseRegression(Model):
@@ -165,18 +163,11 @@ def _cdist_and_inverse_quadratic_kernel(
     return cdist, kernel
 
 
-def _inverse_quadratic_kernel(X: Tensor, Y: Tensor, eps: Tensor) -> Tensor:
-    """RBF inverse quadratic kernel function."""
-    return _cdist_and_inverse_quadratic_kernel(X, Y, eps)[1]
-
-
 def _rbf_fit(
     X: Tensor, Y: Tensor, eps: Tensor, svd_tol: Tensor
-) -> tuple[LinearOperator, Tensor]:
+) -> tuple[Tensor, Tensor]:
     """Fits the RBF regression model to the training data."""
-    M = KernelLinearOperator(
-        X, X, _inverse_quadratic_kernel, eps=eps, num_nonbatch_dimensions={"eps": 0}
-    )
+    _, M = _cdist_and_inverse_quadratic_kernel(X, X, eps)
     U, S, VT = torch.linalg.svd(M)
     S = S.where(S > svd_tol, torch.inf)
     Minv = VT.transpose(-2, -1).div(S.unsqueeze(-2)).matmul(U.transpose(-2, -1))
@@ -185,29 +176,22 @@ def _rbf_fit(
 
 
 def _rbf_partial_fit(
-    X: Tensor,
-    Y: Tensor,
-    eps: Tensor,
-    Minv: LinearOperator,
-    coeffs: Tensor,
-) -> tuple[LinearOperator, Tensor]:
+    X: Tensor, Y: Tensor, eps: Tensor, Minv: Tensor, coeffs: Tensor
+) -> tuple[Tensor, Tensor]:
     """Fits the given RBF regression to the new training data."""
     n = coeffs.size(-2)  # index of the first new data point onwards
+    # m = X.size(-2)  # total number of training points, including new ones
     X_new = X[..., n:, :]
-    Phi_and_phi = KernelLinearOperator(
-        X_new, X, _inverse_quadratic_kernel, eps=eps, num_nonbatch_dimensions={"eps": 0}
-    )
+    _, Phi_and_phi = _cdist_and_inverse_quadratic_kernel(X_new, X, eps)
     PhiT = Phi_and_phi[..., :n]
     phi = Phi_and_phi[..., n:]
     L = Minv.matmul(PhiT.transpose(-2, -1))
-    c = (phi - PhiT.matmul(L)).to_dense()  # NOTE: invertibility is not forced
-    c_inv = torch.linalg.inv(c)
-    B = -L.matmul(c_inv)
-    A = (Minv - B.matmul(L.transpose(-2, -1))).to_dense()
-    Minv_new = to_linear_operator(
-        torch.cat(
-            (torch.cat((A, B), -1), torch.cat((B.transpose(-2, -1), c_inv), -1)), -2
-        )
+    S = phi - PhiT.matmul(L)  # Schur complement
+    Sinv = torch.linalg.inv(S)
+    B = -L.matmul(Sinv)
+    A = Minv - B.matmul(L.transpose(-2, -1))
+    Minv_new = torch.cat(
+        (torch.cat((A, B), -1), torch.cat((B.transpose(-2, -1), Sinv), -1)), -2
     )
     coeffs_new = Minv_new.matmul(Y)
     return Minv_new, coeffs_new
@@ -269,7 +253,7 @@ class Rbf(BaseRegression):
         super().__init__(train_X, train_Y)
         self.register_buffer("eps", eps)
         self.register_buffer("svd_tol", svd_tol)
-        self.Minv = Minv  # cannot do `self.register_buffer("Minv", Minv)`
+        self.register_buffer("Minv", Minv)
         self.register_buffer("coeffs", coeffs)
 
     @property
