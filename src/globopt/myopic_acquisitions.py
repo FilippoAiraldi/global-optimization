@@ -8,14 +8,16 @@ References
     functions. Computational Optimization and Applications, 77(2):571–595, 2020
 """
 
-from typing import Union
+from typing import Optional, Union
 
 import torch
 from botorch.acquisition.analytic import AnalyticAcquisitionFunction
+from botorch.acquisition.monte_carlo import MCAcquisitionFunction
+from botorch.sampling.base import MCSampler
 from botorch.utils import t_batch_mode_transform
 from torch import Tensor
 
-from globopt.regression import Idw, Rbf
+from globopt.regression import Idw, Rbf, _idw_scale
 
 
 def _idw_distance(W_sum_recipr: Tensor) -> Tensor:
@@ -152,3 +154,60 @@ class MyopicAcquisitionFunction(AnalyticAcquisitionFunction, AcquisitionFunction
             self.c1,
             self.c2,
         ).squeeze((0, 2))
+
+
+class qMcMyopicAcquisitionFunction(MCAcquisitionFunction, AcquisitionFunctionMixin):
+    """Monte Carlo-based myopic acquisition function for Global Optimization based on
+    RBF/IDW regression.
+
+    In contrast to `qAnalyticalMyopicAcquisitionFunction`, this acquisition function
+    does not approximate the expectation w.r.t. the IDW variance, and instead uses
+    Monte Carlo sampling to compute the expectation of the acquisition values
+
+    Example
+    -------
+    >>> model = Idw(train_X, train_Y)
+    >>> sampler = SobolQMCNormalSampler(1024)
+    >>> McMAF = qMcMyopicAcquisitionFunction(model, sampler)
+    >>> af = McMAF(test_X)
+    """
+
+    def __init__(
+        self,
+        model: Union[Idw, Rbf],
+        c1: Union[float, Tensor],
+        c2: Union[float, Tensor],
+        sampler: Optional[MCSampler],
+    ) -> None:
+        """Instantiates the myopic acquisition function.
+
+        Parameters
+        ----------
+        model : Idw or Rbf
+            BoTorch model based on IDW or RBF regression.
+        c1 : float or scalar Tensor
+            Weight of the contribution of the variance function.
+        c2 : float or scalar Tensor
+            Weight of the contribution of the distance function.
+        sampler : MCSampler, optional
+            The sampler used to draw base samples.
+        """
+        super().__init__(model, sampler)
+        self._setup(c1, c2, accept_batch_regression=False)
+
+    @t_batch_mode_transform()
+    def forward(self, X: Tensor) -> Tensor:
+        # input of this forward is `b x q x d`, and output `b`. See the note in
+        # regression.py to understand these shapes.
+        # first, compute the posterior for X, and sample from it
+        mdl = self.model
+        posterior = mdl.posterior(X)
+        samples = self.get_posterior_samples(posterior)
+
+        # then, for each sample, compute its mean prediction and its IDW scale, and
+        # finally, compute acquisition and reduce in t- and q-batches
+        scale = _idw_scale(samples, mdl.train_Y, posterior._V)
+        acqvals = acquisition_function(
+            samples, scale, self.span_Y, posterior._W_sum_recipr, self.c1, self.c2
+        )
+        return acqvals.amax((-2, -1)).mean(0)  # tuple(range(acqvals.ndim - 2))
