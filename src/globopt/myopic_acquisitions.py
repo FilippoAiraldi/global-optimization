@@ -35,9 +35,8 @@ def _Y_span(Y: Tensor, eps: float = 1e-3) -> Tensor:
         The span of the training data points, i.e., the difference between the maximum
         and minimum values of these, along the `m` dimension.
     """
-    return (Y.max(-2, keepdim=True).values - Y.min(-2, keepdim=True).values).clamp_min(
-        eps
-    )
+    Y_min, Y_max = Y.aminmax(dim=-2, keepdim=True)
+    return (Y_max - Y_min).clamp_min(eps)
 
 
 def _idw_distance(W_sum_recipr: Tensor) -> Tensor:

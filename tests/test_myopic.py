@@ -27,7 +27,7 @@ class TestAcquisitionFunction(unittest.TestCase):
         a1 = MAF(x.transpose(1, 0)).squeeze().neg()
 
         y_hat, s, W_sum_recipr = mdl(x)
-        dym = Y.max(-2).values - Y.min(-2).values
+        dym = Y.amax(-2) - Y.amin(-2)
         z = _idw_distance(W_sum_recipr)
         a2 = acquisition_function(y_hat, s, dym, W_sum_recipr, MAF.c1, MAF.c2).neg()
 

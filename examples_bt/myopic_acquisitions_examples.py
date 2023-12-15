@@ -48,7 +48,7 @@ z = _idw_distance(W_sum_recipr)
 # compute the overall acquisition function
 c1 = 1.0
 c2 = 0.5
-y_span = train_Y.max(-2, keepdim=True).values - train_Y.min(-2, keepdim=True).values
+y_span = train_Y.amax(-2, keepdim=True) - train_Y.amin(-2, keepdim=True)
 a = acquisition_function(y_hat, s, y_span, W_sum_recipr, c1, c2).squeeze()
 
 # compute minimizer of analytic myopic acquisition function
