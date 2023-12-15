@@ -40,7 +40,7 @@ mdl = Rbf(train_X, train_Y, 0.5)
 
 # predict the (normal) posterior over all domain via fitted model
 X = torch.linspace(lb, ub, 1000).view(1, -1, 1)
-y_hat, s, W_sum_recipr = mdl(X)
+y_hat, s, W_sum_recipr, _ = mdl(X)
 
 # compute acquisition function by components
 z = _idw_distance(W_sum_recipr)

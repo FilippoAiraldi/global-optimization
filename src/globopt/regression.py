@@ -18,8 +18,11 @@ References
 # Conventions
 # ------------
 # botorch uses the convention `b0 x b1 x ... x q x d`, where
-# * `b-i` is the number of batches of candidates to evaluate in parallel
-# * `q` is the number of candidates to consider jointly
+# * `b-i` is the number of batches of candidates to evaluate in parallel; the
+#   minimization of the acquisition function consists in minimizing its sum over the
+#   batches, and taking the best one at last
+# * `q` is the number of candidates to consider jointly per batch; often, the best is
+#   taken out of these per batch
 # * `d` is the dimension of the design space of each `q`-th candidate.
 # Note that while there might be more than one batch dimension, usually we need just one
 # in important methods.
@@ -38,13 +41,17 @@ References
 # Interfacing
 # -----------
 # We make here the distinction between the myopic and non-myopic case.
-# * myopic case: for the simplest cases, i.e., the analytical acquisition functions, we
-#   expect `q = 1`. This means that the `b` dimension is botorch can be swapped in
-#   second place and used as the `m`. Usually, we call it `n` to distinguish the `m`
-#   training points from the `n` prediction points.
-#   For the Monte Carlo myopic case, TODO
-# * non-myopic case: TODO: would `b x q x 1 x d` work for regressors as repeated as
-# `b x q x m x d`?
+# * myopic case:
+#   * `MyopicAcquisitionFunction`: in this acquisition function, `q = 1`. This means
+#     that the `b` dimension is botorch is automatically swapped in second place and
+#     used as the `m` (usually, we use `n` for prediction points, and `m` for training).
+#   * `MyopicAcquisitionFunctionInExpectation`: TODO
+#   * `qMcMyopicAcquisitionFunction`: here, `q > 1` is the number of points considered
+#     in parallel, while `b` is the number of batches of these. The acquisition function
+#     is minimized over the sum of its batches, and for each the best candidate out of
+#     `q` is taken.
+# * non-myopic case:
+#   TODO: would `b x q x 1 x d` work for regressors as repeated as `b x q x m x d`?
 
 
 from typing import Any, Optional, Union
@@ -89,7 +96,7 @@ class BaseRegression(Model):
         self.eval()
         # NOTE: do not modify input/output shapes here. It is the responsibility of the
         # acquisition function calling this method to do so.
-        mean, scale, W_sum_recipr = self.forward(X)
+        mean, scale, W_sum_recipr, V = self.forward(X)
         # NOTE: it's a bit sketchy, but `W_sum_recipr` is needed by the acquisition
         # functions. It gets first computed here, so it is convenient to manually attach
         # it to the model for later re-use.
@@ -99,6 +106,7 @@ class BaseRegression(Model):
         posterior = GPyTorchPosterior(distribution)
         posterior._scale = scale
         posterior._W_sum_recipr = W_sum_recipr
+        posterior._V = V
         return posterior
 
 
@@ -125,20 +133,20 @@ def _idw_scale(Y: Tensor, train_Y: Tensor, V: Tensor) -> Tensor:
 
 def _idw_predict(
     train_X: Tensor, train_Y: Tensor, X: Tensor
-) -> tuple[Tensor, Tensor, Tensor]:
+) -> tuple[Tensor, Tensor, Tensor, Tensor]:
     """Mean and scale for IDW regression."""
     W = torch.cdist(X, train_X).square().clamp_min(DELTA).reciprocal()
     W_sum_recipr = W.sum(-1, keepdim=True).reciprocal()
     V = W.mul(W_sum_recipr)
     mean = V.matmul(train_Y)
     std = _idw_scale(mean, train_Y, V)
-    return mean, std, W_sum_recipr
+    return mean, std, W_sum_recipr, V
 
 
 class Idw(BaseRegression):
     """Inverse Distance Weighting regression model in Global Optimization."""
 
-    def forward(self, X: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+    def forward(self, X: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         """Computes the IDW regression model.
 
         Parameters
@@ -155,6 +163,8 @@ class Idw(BaseRegression):
                 - the mean estimate `(b0 x b1 x ...) x n x 1`
                 - the standard deviation of the estimate `(b0 x b1 x ...) x n x 1`
                 - the reciprocal of the sum of the IDW weights `(b0 x b1 x ...) x n x 1`
+                - the normalized IDW weights `(b0 x b1 x ...) x n x m`, where `m` are
+                  the number of training points.
         """
         return _idw_predict(self.train_X, self.train_Y, X)
 
@@ -205,7 +215,7 @@ def _rbf_partial_fit(
 
 def _rbf_predict(
     train_X: Tensor, train_Y: Tensor, eps: Tensor, coeffs: Tensor, X: Tensor
-) -> tuple[Tensor, Tensor, Tensor]:
+) -> tuple[Tensor, Tensor, Tensor, Tensor]:
     """Predicts mean and scale for RBF regression."""
     # NOTE: here, we do not use `KernelLinearOperator` so as to avoid computing the
     # distance from `X` to `train_X` twice, one in the linear operator and one in the
@@ -216,7 +226,7 @@ def _rbf_predict(
     W_sum_recipr = W.sum(-1, keepdim=True).reciprocal()
     V = W.mul(W_sum_recipr)
     std = _idw_scale(mean, train_Y, V)
-    return mean, std, W_sum_recipr
+    return mean, std, W_sum_recipr, V
 
 
 class Rbf(BaseRegression):
@@ -268,7 +278,7 @@ class Rbf(BaseRegression):
         coefficients. Use this to partially fit a new regressor (see `__init__`)"""
         return self.Minv, self.coeffs
 
-    def forward(self, X: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+    def forward(self, X: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         """Computes the RBF regression model.
 
         Parameters
@@ -285,5 +295,7 @@ class Rbf(BaseRegression):
                 - the mean estimate `(b0 x b1 x ...) x n x 1`
                 - the standard deviation of the estimate `(b0 x b1 x ...) x n x 1`
                 - the reciprocal of the sum of the IDW weights `(b0 x b1 x ...) x n x 1`
+                - the normalized IDW weights `(b0 x b1 x ...) x n x m`, where `m` are
+                  the number of training points.
         """
         return _rbf_predict(self.train_X, self.train_Y, self.eps, self.coeffs, X)
