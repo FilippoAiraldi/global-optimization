@@ -51,9 +51,10 @@ from typing import Any, Optional, Union
 
 import torch
 from botorch.models.model import Model
-from botorch.posteriors import TorchPosterior
+from botorch.posteriors import GPyTorchPosterior
+from gpytorch.distributions import MultivariateNormal
+from linear_operator.operators import DiagLinearOperator
 from torch import Tensor
-from torch.distributions import Normal
 
 """Small value to avoid division by zero."""
 DELTA = torch.scalar_tensor(1e-12)
@@ -84,7 +85,7 @@ class BaseRegression(Model):
     def num_outputs(self) -> int:
         return 1  # only one output is supported
 
-    def posterior(self, X: Tensor, **_: Any) -> TorchPosterior:
+    def posterior(self, X: Tensor, **_: Any) -> GPyTorchPosterior:
         self.eval()
         # NOTE: do not modify input/output shapes here. It is the responsibility of the
         # acquisition function calling this method to do so.
@@ -92,8 +93,12 @@ class BaseRegression(Model):
         # NOTE: it's a bit sketchy, but `W_sum_recipr` is needed by the acquisition
         # functions. It gets first computed here, so it is convenient to manually attach
         # it to the model for later re-use.
-        posterior = TorchPosterior(Normal(mean, scale))
-        posterior.W_sum_recipr = W_sum_recipr
+        distribution = MultivariateNormal(
+            mean.squeeze(-1), DiagLinearOperator(scale.square().squeeze(-1))
+        )
+        posterior = GPyTorchPosterior(distribution)
+        posterior._scale = scale
+        posterior._W_sum_recipr = W_sum_recipr
         return posterior
 
 
@@ -118,7 +123,7 @@ def _idw_scale(Y: Tensor, train_Y: Tensor, V: Tensor) -> Tensor:
     return torch.linalg.vector_norm(scaled_diff, dim=-1, keepdim=True)
 
 
-def _idw_regression_predict(
+def _idw_predict(
     train_X: Tensor, train_Y: Tensor, X: Tensor
 ) -> tuple[Tensor, Tensor, Tensor]:
     """Mean and scale for IDW regression."""
@@ -147,11 +152,11 @@ class Idw(BaseRegression):
         -------
         tuple of 3 Tensors
             Returns
-                - the mean estimate
-                - the standard deviation of the estimate
-                - the reciprocal of the sum of the IDW weights
+                - the mean estimate `(b0 x b1 x ...) x n x 1`
+                - the standard deviation of the estimate `(b0 x b1 x ...) x n x 1`
+                - the reciprocal of the sum of the IDW weights `(b0 x b1 x ...) x n x 1`
         """
-        return _idw_regression_predict(self.train_X, self.train_Y, X)
+        return _idw_predict(self.train_X, self.train_Y, X)
 
 
 def _cdist_and_inverse_quadratic_kernel(
@@ -269,7 +274,7 @@ class Rbf(BaseRegression):
         Parameters
         ----------
         X : Tensor
-            A `(b0 x b1 x ...) x n x 1` tensor of `d`-dim design points, where `n` is
+            A `(b0 x b1 x ...) x n x d` tensor of `d`-dim design points, where `n` is
             the number of candidate points to estimate, and `b`s are the batched
             regressor sizes.
 
@@ -277,8 +282,8 @@ class Rbf(BaseRegression):
         -------
         tuple of 3 Tensors
             Returns
-                - the mean estimate
-                - the standard deviation of the estimate
-                - the reciprocal of the sum of the IDW weights
+                - the mean estimate `(b0 x b1 x ...) x n x 1`
+                - the standard deviation of the estimate `(b0 x b1 x ...) x n x 1`
+                - the reciprocal of the sum of the IDW weights `(b0 x b1 x ...) x n x 1`
         """
         return _rbf_predict(self.train_X, self.train_Y, self.eps, self.coeffs, X)

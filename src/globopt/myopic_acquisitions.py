@@ -146,9 +146,9 @@ class MyopicAcquisitionFunction(AnalyticAcquisitionFunction):
         posterior = self.model.posterior(X.transpose(-3, -2))
         return acquisition_function(
             posterior.mean,  # `1 x n x 1`
-            posterior.scale,  # `1 x n x 1`
-            self.span_Y,
-            posterior.W_sum_recipr,  # `1 x n x 1`
+            posterior._scale,  # `1 x n x 1`
+            self.span_Y,  # `1 x 1 x 1` or # `1 x 1`
+            posterior._W_sum_recipr,  # `1 x n x 1`
             self.c1,
             self.c2,
         ).squeeze((0, 2))
