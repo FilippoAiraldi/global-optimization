@@ -30,7 +30,7 @@ References
 #   non-myopic, where we need to progress many different models in parallel. This is
 #   akin to the `b` dimension in botorch)
 # * `m` is the number of training points. In case of prediction, we prefer to denote
-#   this same dimension as `n`.`
+#   this same dimension as `n`.
 # Note that the use of `p` parallel regressors is only useful in the non-myopic case,
 # where we need to progress many different models in parallel, by exploring different
 # acquisition points. Instead, in the myopic case, we expect `p = 1`.
@@ -56,7 +56,7 @@ from torch import Tensor
 from torch.distributions import Normal
 
 """Small value to avoid division by zero."""
-DELTA = torch.scalar_tensor(1e-9)
+DELTA = torch.scalar_tensor(1e-12)
 
 
 class BaseRegression(Model):
@@ -92,8 +92,9 @@ class BaseRegression(Model):
         # NOTE: it's a bit sketchy, but `W_sum_recipr` is needed by the acquisition
         # functions. It gets first computed here, so it is convenient to manually attach
         # it to the model for later re-use.
-        self.W_sum_recipr = W_sum_recipr
-        return TorchPosterior(Normal(mean, scale))
+        posterior = TorchPosterior(Normal(mean, scale))
+        posterior.W_sum_recipr = W_sum_recipr
+        return posterior
 
 
 def _idw_scale(Y: Tensor, train_Y: Tensor, V: Tensor) -> Tensor:
@@ -147,7 +148,7 @@ class Idw(BaseRegression):
         tuple of 3 Tensors
             Returns
                 - the mean estimate
-                - the idw standard deviation of the estimate
+                - the standard deviation of the estimate
                 - the reciprocal of the sum of the IDW weights
         """
         return _idw_regression_predict(self.train_X, self.train_Y, X)
@@ -262,7 +263,7 @@ class Rbf(BaseRegression):
         coefficients. Use this to partially fit a new regressor (see `__init__`)"""
         return self.Minv, self.coeffs
 
-    def forward(self, X: Tensor) -> Normal:
+    def forward(self, X: Tensor) -> tuple[Tensor, Tensor, Tensor]:
         """Computes the RBF regression model.
 
         Parameters
@@ -274,7 +275,10 @@ class Rbf(BaseRegression):
 
         Returns
         -------
-        Normal
-            The normal
+        tuple of 3 Tensors
+            Returns
+                - the mean estimate
+                - the standard deviation of the estimate
+                - the reciprocal of the sum of the IDW weights
         """
         return _rbf_predict(self.train_X, self.train_Y, self.eps, self.coeffs, X)

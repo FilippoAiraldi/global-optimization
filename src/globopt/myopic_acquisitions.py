@@ -18,6 +18,28 @@ from torch import Tensor
 from globopt.regression import Idw, Rbf
 
 
+def _Y_span(Y: Tensor, eps: float = 1e-3) -> Tensor:
+    """Computes the span of the training data points.
+
+    Parameters
+    ----------
+    Y : Tensor
+        A tensor of shape `(b0 x b1 x ...) x n x 1` containing the training data points.
+    eps : float
+        A small value to prevent this quantity to go to zero, in case all observations
+        are equal.
+
+    Returns
+    -------
+    Tensor
+        The span of the training data points, i.e., the difference between the maximum
+        and minimum values of these, along the `m` dimension.
+    """
+    return (Y.max(-2, keepdim=True).values - Y.min(-2, keepdim=True).values).clamp_min(
+        eps
+    )
+
+
 def _idw_distance(W_sum_recipr: Tensor) -> Tensor:
     """Computes the IDW distance function.
 
@@ -100,11 +122,7 @@ class MyopicAcquisitionFunction(AnalyticAcquisitionFunction):
     model: Union[Idw, Rbf]
 
     def __init__(
-        self,
-        model: Union[Idw, Rbf],
-        c1: Union[float, Tensor],
-        c2: Union[float, Tensor],
-        **kwargs: Any,
+        self, model: Union[Idw, Rbf], c1: Union[float, Tensor], c2: Union[float, Tensor]
     ) -> None:
         """Instantiates the myopic acquisition function.
 
@@ -116,27 +134,21 @@ class MyopicAcquisitionFunction(AnalyticAcquisitionFunction):
             Weight of the contribution of the variance function.
         c2 : float or scalar Tensor
             Weight of the contribution of the distance function.
-        kwargs
-            Additional arguments to `AnalyticAcquisitionFunction`.
         """
-        super().__init__(model, **kwargs)
+        super().__init__(model)
+        self.register_buffer("span_Y", _Y_span(model.train_Y))
         self.register_buffer("c1", torch.scalar_tensor(c1))
         self.register_buffer("c2", torch.scalar_tensor(c2))
-        # pre-compute span of training data points
-        Y = model.train_Y
-        span_Y = Y.max(-2, keepdim=True).values - Y.min(-2, keepdim=True).values
-        self.register_buffer("span_Y", span_Y)
 
     @t_batch_mode_transform(expected_q=1)
     def forward(self, X: Tensor) -> Tensor:
-        # input `X` is always `b x 1 x d`, and should output tensor of shape `b`
+        # input of this forward is `b x 1 x d`, and output `b`
         posterior = self.model.posterior(X.transpose(-3, -2))
-        # the posterior's mean, scale and model's W_sum_recipr are all `1 x n x 1`
         return acquisition_function(
-            posterior.mean,
-            posterior.scale,
+            posterior.mean,  # `1 x n x 1`
+            posterior.scale,  # `1 x n x 1`
             self.span_Y,
-            self.model.W_sum_recipr,
+            posterior.W_sum_recipr,  # `1 x n x 1`
             self.c1,
             self.c2,
         ).squeeze((0, 2))
