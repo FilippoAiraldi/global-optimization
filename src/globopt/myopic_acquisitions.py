@@ -18,27 +18,6 @@ from torch import Tensor
 from globopt.regression import Idw, Rbf
 
 
-def _Y_span(Y: Tensor, eps: float = 1e-3) -> Tensor:
-    """Computes the span of the training data points.
-
-    Parameters
-    ----------
-    Y : Tensor
-        A tensor of shape `(b0 x b1 x ...) x n x 1` containing the training data points.
-    eps : float
-        A small value to prevent this quantity to go to zero, in case all observations
-        are equal.
-
-    Returns
-    -------
-    Tensor
-        The span of the training data points, i.e., the difference between the maximum
-        and minimum values of these, along the `m` dimension.
-    """
-    Y_min, Y_max = Y.aminmax(dim=-2, keepdim=True)
-    return (Y_max - Y_min).clamp_min(eps)
-
-
 def _idw_distance(W_sum_recipr: Tensor) -> Tensor:
     """Computes the IDW distance function.
 
@@ -95,7 +74,31 @@ def acquisition_function(
     return Y_hat.sub(Y_std, alpha=c1).sub(Y_span.mul(distance), alpha=c2).neg()
 
 
-class MyopicAcquisitionFunction(AnalyticAcquisitionFunction):
+class AcquisitionFunctionMixin:
+    """Mixin class for acquisition functions based on RBF/IDW regression."""
+
+    def _setup(
+        self,
+        c1: Union[float, Tensor],
+        c2: Union[float, Tensor],
+        accept_batch_regression: bool,
+        span_Y_min: float = 1e-3,
+    ) -> None:
+        """Setups the acquisition function buffers, and performs some checks."""
+        if not accept_batch_regression:
+            for tensor in (self.model.train_X, self.model.train_Y):
+                if tensor.ndim >= 3 and any(s != 1 for s in tensor.shape[:-2]):
+                    raise ValueError(
+                        "Expected non-batched regression; got training data with shape "
+                        + str(tensor.shape)
+                    )
+        Y_min, Y_max = self.model.train_Y.aminmax(dim=-2, keepdim=True)
+        self.register_buffer("span_Y", (Y_max - Y_min).clamp_min(span_Y_min))
+        self.register_buffer("c1", torch.scalar_tensor(c1))
+        self.register_buffer("c2", torch.scalar_tensor(c2))
+
+
+class MyopicAcquisitionFunction(AnalyticAcquisitionFunction, AcquisitionFunctionMixin):
     """Myopic acquisition function for Global Optimization based on RBF/IDW
     regression.
 
@@ -135,9 +138,7 @@ class MyopicAcquisitionFunction(AnalyticAcquisitionFunction):
             Weight of the contribution of the distance function.
         """
         super().__init__(model)
-        self.register_buffer("span_Y", _Y_span(model.train_Y))
-        self.register_buffer("c1", torch.scalar_tensor(c1))
-        self.register_buffer("c2", torch.scalar_tensor(c2))
+        self._setup(c1, c2, accept_batch_regression=False)
 
     @t_batch_mode_transform(expected_q=1)
     def forward(self, X: Tensor) -> Tensor:
