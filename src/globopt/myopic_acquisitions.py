@@ -108,7 +108,7 @@ class MyopicAcquisitionFunction(AnalyticAcquisitionFunction, AcquisitionFunction
     estimate of the function value at the candidate points, the distance between the
     observed points, and an approximate IDW standard deviation. This acquisition
     does not exploit this deviation to approximate the estimate variance, so it only
-    supports `q=1`. For versions that do so, see `qAnalyticalMyopicAcquisitionFunction`
+    supports `q=1`. For versions that do so, see `ExpectedMyopicAcquisitionFunction`
     and `qMcMyopicAcquisitionFunction`.
 
     Example
@@ -156,11 +156,83 @@ class MyopicAcquisitionFunction(AnalyticAcquisitionFunction, AcquisitionFunction
         ).squeeze((0, 2))
 
 
+class ExpectedMyopicAcquisitionFunction(MyopicAcquisitionFunction):
+    """Myopic acquisition function for Global Optimization based on RBF/IDW
+    regression that takes into consideration uncertainty in the estimation, i.e., the
+    expected value of the acquisition function is computed approximatedly w.r.t. the IDW
+    variance.
+
+    In contrast, `qMcMyopicAcquisitionFunction` does not approximate the expectation,
+    and prefers to use Monte Carlo sampling instead.
+    """
+
+    @t_batch_mode_transform(expected_q=1)
+    def forward(self, X: Tensor) -> Tensor:
+        # input of this forward is `b x 1 x d`, and output `b`
+        posterior = self.model.posterior(X.transpose(-3, -2))
+
+        # in expectation, the scale function s(x) is approximated by its squared
+        # version, z(x)=s^2(x). The expected value and variace of z(x) are then computed
+        # instead, and finally the expected value of s(x) is approximated by the
+        # following Taylor expansion:
+        # s(x) \approx sqrt(E[z(x)]) - 1/4 * E[z(x)]^(-1.5) * Var[z(x)]
+        y_loc = posterior.mean  # mean and var of estimate of the function values
+        y_var: Tensor = posterior._scale.square()
+        V: Tensor = posterior._V
+        train_Y = self.model.train_Y
+        train_YT = train_Y.transpose(-2, -1)
+        y_loc = y_loc.unsqueeze(-1)
+        y_var = y_var.unsqueeze(-1)
+        V = V.unsqueeze(-1)
+        L = (y_loc - train_Y).square()
+        LT = L.transpose(-2, -1)
+        y_loc2 = y_loc.square()
+        train_Y2 = train_Y.square()
+        VxV = V.mul(V.transpose(-2, -1))
+        LpL = L.add(LT)
+        LxL = L.mul(LT)
+        YpY = train_Y.add(train_YT)
+        YxY = train_Y.mul(train_YT)
+        Y2pY2 = train_Y2.add(train_Y2.transpose(-2, -1))
+        YxL = train_Y.mul(LT)
+        Y2xL = train_Y2.mul(LT)
+
+        z_loc = V.mul(y_var + L).sum((-2, -1)).clamp_min(0.0)
+        c0 = (
+            y_var.sub(Y2pY2)
+            .add(LpL)
+            .mul(y_var)
+            .add(LxL)
+            .add(YxY.mul(YxY))
+            .sub(Y2xL)
+            .sub(Y2xL.transpose(-2, -1))
+        )
+        c1 = YxL.add(YxL.transpose(-2, -1)).sub(YxY.sub(y_var).mul(YpY)).mul(2 * y_loc)
+        c2 = Y2pY2.add(YxY, alpha=4).sub(LpL).sub(y_var, alpha=2).mul(y_loc2.add(y_var))
+        c3 = YpY.mul(y_loc).mul(y_loc2.add(y_var, alpha=3))
+        c4 = y_loc2.mul(y_loc2.add(y_var, alpha=6)).add(y_var.square(), alpha=3)
+        z_var = (
+            VxV.mul(c4.sub(c3, alpha=2).add(c2).add(c1).add(c0))
+            .sum((-2, -1))
+            .clamp_min(0.0)
+        )
+        s_loc_estimate = z_loc.sqrt().sub(z_loc.pow(-1.5).mul(z_var), alpha=0.25)
+
+        return acquisition_function(
+            posterior.mean,  # `1 x n x 1`
+            s_loc_estimate.unsqueeze(-1),  # `1 x n x 1`
+            self.span_Y,  # `1 x 1 x 1` or # `1 x 1`
+            posterior._W_sum_recipr,  # `1 x n x 1`
+            self.c1,
+            self.c2,
+        ).squeeze((0, 2))
+
+
 class qMcMyopicAcquisitionFunction(MCAcquisitionFunction, AcquisitionFunctionMixin):
     """Monte Carlo-based myopic acquisition function for Global Optimization based on
     RBF/IDW regression.
 
-    In contrast to `qAnalyticalMyopicAcquisitionFunction`, this acquisition function
+    In contrast to `ExpectedMyopicAcquisitionFunction`, this acquisition function
     does not approximate the expectation w.r.t. the IDW variance, and instead uses
     Monte Carlo sampling to compute the expectation of the acquisition values
 

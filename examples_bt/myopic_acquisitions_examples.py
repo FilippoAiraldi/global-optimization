@@ -18,6 +18,7 @@ from botorch.optim import optimize_acqf
 from botorch.sampling import SobolQMCNormalSampler
 
 from globopt.myopic_acquisitions import (
+    ExpectedMyopicAcquisitionFunction,
     MyopicAcquisitionFunction,
     _idw_distance,
     acquisition_function,
@@ -35,6 +36,7 @@ plt.style.use("bmh")
 # define the evaluation function and its domain
 problem = SimpleProblem()
 lb, ub = problem._bounds[0]
+bounds = torch.as_tensor([[lb], [ub]])
 
 # create data points
 train_X = torch.as_tensor([-2.61, -1.92, -0.63, 0.38, 2]).view(-1, 1)
@@ -55,8 +57,7 @@ z = _idw_distance(W_sum_recipr)
 a = acquisition_function(y_hat, s, y_span, W_sum_recipr, c1, c2).squeeze()
 
 # compute minimizer of analytic myopic acquisition function
-bounds = torch.as_tensor([[lb], [ub]])
-myopic_analytic_optimizer, myopic_analitic_opt = optimize_acqf(
+x_opt, a_opt = optimize_acqf(
     acq_function=MyopicAcquisitionFunction(mdl, c1, c2),
     bounds=bounds,
     q=1,  # mc iterations - not supported for the analytical acquisition function
@@ -69,12 +70,25 @@ myopic_analytic_optimizer, myopic_analitic_opt = optimize_acqf(
 sampler = SobolQMCNormalSampler(sample_shape=256, seed=0)
 MCMAF = qMcMyopicAcquisitionFunction(mdl, c1, c2, sampler)
 a_mc = MCMAF(X.view(-1, 1, 1))
-myopic_mc_optimizer, myopic_mc_opt = optimize_acqf(
+x_opt_mc, a_opt_mc = optimize_acqf(
     acq_function=MCMAF,
     bounds=bounds,
     q=1,  # must be one for plotting reasons
     num_restarts=64,
     raw_samples=128,
+    options={"seed": 0},
+)
+
+# instead of the monte carlo, we can also use the version that approximating the
+# expected value
+EMAF = ExpectedMyopicAcquisitionFunction(mdl, c1, c2)
+a_exp = EMAF(X.view(-1, 1, 1))
+x_opt_exp, a_opt_exp = optimize_acqf(
+    acq_function=EMAF,
+    bounds=bounds,
+    q=1,
+    num_restarts=16,
+    raw_samples=32,
     options={"seed": 0},
 )
 
@@ -93,24 +107,21 @@ ax.fill_between(
     alpha=0.2,
 )
 ax.plot(X, z.squeeze(), label="$z(x)$", color="C2")
-ax.plot(X, a - a.amin(), "--", lw=1, label="Analitycal $a(x)$", color="C3")
-ax.plot(
-    myopic_analytic_optimizer.squeeze(),
-    myopic_analitic_opt - a.amin(),
-    "*",
-    label=None,  # r"$\arg \max a(x)$",
-    markersize=17,
-    color="C3",
-)
-ax.plot(X, a_mc - a_mc.min(), "--", lw=1, label="Monte Carlo $a(x)$", color="C4")
-ax.plot(
-    myopic_mc_optimizer.squeeze(),
-    myopic_mc_opt - a_mc.amin(),
-    "*",
-    label=None,
-    markersize=17,
-    color="C4",
-)
+names = ["Analytical", "Monte Carlo", "Expected"]
+data = [(a, x_opt, a_opt), (a_mc, x_opt_mc, a_opt_mc), (a_exp, x_opt_exp, a_opt_exp)]
+for i in range(len(names)):
+    c = f"C{i + 3}"
+    a_, x_opt_, a_op_ = data[i]
+    a_min = a_.amin()
+    ax.plot(X, (a_ - a_min).squeeze(), "--", lw=1, label=f"{names[i]} $a(x)$", color=c)
+    ax.plot(
+        x_opt_.squeeze(),
+        (a_op_ - a_min).squeeze(),
+        "*",
+        label=None,  # r"$\arg \max a(x)$",
+        markersize=17,
+        color=c,
+    )
 ax.set_xlim(lb, ub)
 ax.set_ylim(0, 2.5)
 ax.legend()
