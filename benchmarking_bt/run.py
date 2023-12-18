@@ -69,8 +69,8 @@ def run_problem(
     if use_rbf:
         eps = 1.0 / ndim
         Minv_and_coeffs = None
-    num_restarts = 8 * ndim
-    raw_samples = 16 * ndim
+    num_restarts = 16 * ndim
+    raw_samples = 32 * ndim
     if myopic:
         q = 1
     else:
@@ -84,7 +84,7 @@ def run_problem(
     Y = problem(X)
 
     # run optimization loop
-    best_so_far: list[float] = []
+    best_so_far: list[float] = [Y.amin().item()]
     stage_rewards: list[float] = []
     for this_seed in map(int, np_random.integers(0, 2**32 - 1, size=maxiter)):
         # fit model
@@ -115,8 +115,7 @@ def run_problem(
     # save results, delete references and free memory (at least, try to)
     rewards = ",".join(map(str, stage_rewards))
     bests = ",".join(map(str, best_so_far))
-    lock_write(output_csv, f"{problem_name},{horizon},{rewards},{bests}")
-    # TODO: the gap should be computed w.r.t. the initially sampled points, not zero
+    lock_write(output_csv, f"{problem_name};{horizon};{rewards};{bests}")
     del problem, mdl, acqfun, X, Y, X_opt, best_so_far, stage_rewards
     torch.cuda.empty_cache()
 
