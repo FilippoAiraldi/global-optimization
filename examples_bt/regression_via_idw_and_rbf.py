@@ -18,6 +18,10 @@ from botorch.models.model import Model
 from globopt.problems import SimpleProblem
 from globopt.regression import Idw, Rbf
 
+torch.manual_seed(0)
+torch.use_deterministic_algorithms(True)
+torch.set_default_dtype(torch.float32)  # with RBF regressor, float32 may not be enough
+torch.set_default_device(torch.device("cpu"))
 plt.style.use("bmh")
 
 

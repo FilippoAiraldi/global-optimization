@@ -22,15 +22,16 @@ from globopt.regression import Rbf
 
 torch.manual_seed(0)
 torch.use_deterministic_algorithms(True)
+torch.set_default_dtype(torch.float32)  # with RBF regressor, float32 may not be enough
+torch.set_default_device(torch.device("cpu"))
 plt.style.use("bmh")
 
 
 # instantiate problem and create starting training data
-DTYPE = torch.float32  # with RBF regressor, float32 may not be enough
 N_ITERS = 6
-problem = SimpleProblem().to(DTYPE)
+problem = SimpleProblem()
 lb, ub = problem._bounds[0]
-train_X = torch.as_tensor([[-2.62, -1.2, 0.14, 1.1, 2.82]], dtype=DTYPE).T
+train_X = torch.as_tensor([[-2.62, -1.2, 0.14, 1.1, 2.82]]).T
 train_Y = problem(train_X)
 eps, c1, c2 = 0.5, 1.0, 0.5
 
@@ -38,7 +39,7 @@ eps, c1, c2 = 0.5, 1.0, 0.5
 Minv_and_coeffs = None
 
 # auxiliary quantities for plotting
-x_plot = torch.linspace(lb, ub, 300, dtype=DTYPE).view(-1, 1, 1)
+x_plot = torch.linspace(lb, ub, 300).view(-1, 1, 1)
 history: list[tuple[Tensor, ...]] = []
 
 # run optimization loop
@@ -50,7 +51,7 @@ for iteration in range(N_ITERS):
     # minimize acquisition function
     X_opt, acq_opt = optimize_acqf(
         acq_function=MyopicAcquisitionFunction(mdl, c1, c2),
-        bounds=torch.as_tensor([[lb], [ub]], dtype=DTYPE),
+        bounds=torch.as_tensor([[lb], [ub]]),
         q=1,
         num_restarts=8,
         raw_samples=16,

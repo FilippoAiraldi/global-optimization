@@ -26,6 +26,10 @@ from globopt.myopic_acquisitions import (
 from globopt.problems import SimpleProblem
 from globopt.regression import Rbf
 
+torch.manual_seed(0)
+torch.use_deterministic_algorithms(True)
+torch.set_default_dtype(torch.float64)  # with RBF regressor, float32 may not be enough
+torch.set_default_device(torch.device("cpu"))
 plt.style.use("bmh")
 
 # define the evaluation function and its domain
@@ -33,8 +37,7 @@ problem = SimpleProblem()
 lb, ub = problem._bounds[0]
 
 # create data points
-dv = "cpu"
-train_X = torch.as_tensor([-2.61, -1.92, -0.63, 0.38, 2], device=dv).view(-1, 1)
+train_X = torch.as_tensor([-2.61, -1.92, -0.63, 0.38, 2]).view(-1, 1)
 train_Y = problem(train_X)
 
 # create regressor and fit it
@@ -93,7 +96,7 @@ ax.plot(X, z.squeeze(), label="$z(x)$", color="C2")
 ax.plot(X, a - a.amin(), "--", lw=1, label="Analitycal $a(x)$", color="C3")
 ax.plot(
     myopic_analytic_optimizer.squeeze(),
-    myopic_analitic_opt - a.min(),
+    myopic_analitic_opt - a.amin(),
     "*",
     label=None,  # r"$\arg \max a(x)$",
     markersize=17,
