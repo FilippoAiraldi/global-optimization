@@ -63,8 +63,8 @@ from gpytorch.distributions import MultivariateNormal
 from linear_operator.operators import DiagLinearOperator
 from torch import Tensor
 
+DELTA = 1e-12
 """Small value to avoid division by zero."""
-DELTA = torch.scalar_tensor(1e-12)
 
 
 class BaseRegression(Model):
@@ -85,7 +85,7 @@ class BaseRegression(Model):
         """
         super().__init__()
         self.train_X = train_X
-        self.train_Y = train_Y
+        self.train_Y = train_Y.unsqueeze(-1) if train_Y.ndim == 1 else train_Y
         self.to(train_X)  # make sure we're on the right device/dtype
 
     @property
@@ -260,17 +260,20 @@ class Rbf(BaseRegression):
             `None`, in which case the model is fit anew to the training data. If
             provided, the model is only partially fit to the new data.
         """
+        super().__init__(train_X, train_Y)
         eps = torch.scalar_tensor(eps)
         svd_tol = torch.scalar_tensor(svd_tol)
         if Minv_and_coeffs is None:
-            Minv, coeffs = _rbf_fit(train_X, train_Y, eps, svd_tol)
+            Minv, coeffs = _rbf_fit(self.train_X, self.train_Y, eps, svd_tol)
         else:
-            Minv, coeffs = _rbf_partial_fit(train_X, train_Y, eps, *Minv_and_coeffs)
-        super().__init__(train_X, train_Y)
+            Minv, coeffs = _rbf_partial_fit(
+                self.train_X, self.train_Y, eps, *Minv_and_coeffs
+            )
         self.register_buffer("eps", eps)
         self.register_buffer("svd_tol", svd_tol)
         self.register_buffer("Minv", Minv)
         self.register_buffer("coeffs", coeffs)
+        self.to(train_X)
 
     @property
     def Minv_and_coeffs(self) -> tuple[Tensor, Tensor]:
