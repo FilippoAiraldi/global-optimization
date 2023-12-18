@@ -11,9 +11,19 @@ References
     http://www.sfu.ca.tudelft.idm.oclc.org/~ssurjano.
 """
 
-from typing import Literal, Optional
+from types import MappingProxyType
+from typing import Any, Literal
 
 import torch
+from botorch.test_functions import (
+    Ackley,
+    Branin,
+    Hartmann,
+    Michalewicz,
+    Rosenbrock,
+    SixHumpCamel,
+    StyblinskiTang,
+)
 from botorch.test_functions.synthetic import SyntheticTestFunction
 from torch import Tensor
 
@@ -30,10 +40,7 @@ class SimpleProblem(SyntheticTestFunction):
     dim = 1
     _optimal_value = 0.279504
     _optimizers = [(-0.959769,)]
-    _check_grad_at_opt: bool = True
-
-    def __init__(self, noise_std: Optional[float] = None, negate: bool = False) -> None:
-        super().__init__(noise_std, negate, [(-3.0, +3.0)])
+    _bounds = [(-3.0, +3.0)]
 
     def evaluate_true(self, X: Tensor) -> Tensor:
         X2 = X.square()
@@ -44,10 +51,43 @@ class SimpleProblem(SyntheticTestFunction):
         )
 
 
-TESTS: dict[str, tuple[SyntheticTestFunction, int, Literal["rbf", "idw"]]] = {
-    problem.__class__.__name__.lower(): (problem, max_evals, regressor_type)
-    for problem, max_evals, regressor_type in [(SimpleProblem(), 20, "rbf")]
-}
+class Adjiman(SyntheticTestFunction):
+    r"""Adjiman function, a 2-dimensional synthetic test function given by:
+
+        f(x) = cos(x) sin(y) - x / (y^2 + 1).
+
+    x is bounded [-1,2], y in [-1,1]. f in has a global minimum at
+    `x_opt = (2, 0.10578)` with `f_opt = -2.02181`.
+    """
+
+    dim = 2
+    _optimal_value = -2.02181
+    _optimizers = [(2.0, 0.10578)]
+    _bounds = [(-1.0, 2.0), (-1.0, 1.0)]
+
+    def evaluate_true(self, X: Tensor) -> Tensor:
+        x = X[..., 0]
+        y = X[..., 1]
+        return x.cos().mul(y.sin()).addcdiv(x, y.square() + 1.0, value=-1)
+
+
+TESTS: dict[
+    str, tuple[type[SyntheticTestFunction], dict[str, Any], int, Literal["rbf", "idw"]]
+] = MappingProxyType(
+    {
+        problem.__name__.lower(): (problem, kwargs, max_evals, regressor_type)
+        for problem, kwargs, max_evals, regressor_type in [
+            (Ackley, {}, 50, "rbf"),  # bounds increased
+            (Adjiman, {}, 10, "rbf"),
+            (Branin, {}, 40, "rbf"),
+            (Hartmann, {"dim": 3}, 50, "rbf"),
+            (Michalewicz, {"dim": 5}, 40, "idw"),  # untested
+            (Rosenbrock, {"dim": 8}, 50, "rbf"),
+            (SixHumpCamel, {"bounds": [(-5.0, 5.0), (-5.0, 5.0)]}, 10, "rbf"),
+            (StyblinskiTang, {"dim": 5}, 60, "rbf"),
+        ]
+    }
+)
 
 
 def get_available_benchmark_problems() -> list[str]:
@@ -58,18 +98,7 @@ def get_available_benchmark_problems() -> list[str]:
     list of str
         Names of all the available benchmark tests.
     """
-    return sorted(TESTS.keys() - get_available_simple_problems())
-
-
-def get_available_simple_problems() -> list[str]:
-    """Gets the names of all the simple test problems.
-
-    Returns
-    -------
-    list of str
-        Names of all the available simpler tests.
-    """
-    return [SimpleProblem.__name__.lower()]
+    return list(TESTS.keys())
 
 
 def get_benchmark_problem(
@@ -93,4 +122,5 @@ def get_benchmark_problem(
     KeyError
         Raised if the name of the benchmark test is not found.
     """
-    return TESTS[name.lower()]
+    cls, kwargs, max_evals, regressor = TESTS[name.lower()]
+    return cls(**kwargs), max_evals, regressor
