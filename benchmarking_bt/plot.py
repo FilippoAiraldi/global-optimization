@@ -7,13 +7,15 @@ import argparse
 from ast import literal_eval
 from dataclasses import dataclass
 from math import ceil
-from typing import Callable, Optional
+from typing import Any, Callable, Literal, Optional
 
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.axes import Axes
 from matplotlib.lines import Line2D
 from matplotlib.ticker import MaxNLocator
+from numpy.typing import ArrayLike
 from prettytable import PrettyTable
 
 from globopt.problems import get_benchmark_problem
@@ -120,7 +122,7 @@ def plot(data: dict[str, dict[int, Results]], figtitle: Optional[str]) -> None:
         ax_opt.set_xlim(1, evals[-1])
         ax_gap.xaxis.set_major_locator(MaxNLocator(nbins=5, integer=True))
 
-    # crete legend manually
+    # create legend manually
     handles = [
         Line2D([], [], label=f"h={h}", color=f"C{h-1}") for h in plotted_horizons
     ]
@@ -128,11 +130,113 @@ def plot(data: dict[str, dict[int, Results]], figtitle: Optional[str]) -> None:
     fig.suptitle(figtitle, fontsize=12)
 
 
+def plot_violins(data: dict[str, dict[int, Results]], figtitle: Optional[str]) -> None:
+    """Plots the results in the given dictionary. In particular, it plots the
+    evolution of the optimality gap versus the cumulative rewards as violins."""
+
+    def custom_violin(
+        ax: Axes,
+        data: ArrayLike,
+        pos: float,
+        fc: str = "b",
+        ec: str = "k",
+        alpha: float = 0.7,
+        percentiles: ArrayLike = [25, 50, 75],
+        side: Literal["left", "right", "both"] = "both",
+        scatter_kwargs: dict[str, Any] = {},
+        violin_kwargs: dict[str, Any] = {},
+    ) -> None:
+        """Customized violin plot.
+        Many thanks to https://stackoverflow.com/a/76184694/19648688."""
+        parts = ax.violinplot(data, [pos], **violin_kwargs)
+        for pc in parts["bodies"]:
+            m = np.mean(pc.get_paths()[0].vertices[:, 0])
+            if side == "left":
+                x_offset, clip_min, clip_max = -0.02, -np.inf, m
+            elif side == "right":
+                x_offset, clip_min, clip_max = 0.02, m, np.inf
+            else:
+                x_offset, clip_min, clip_max = 0, -np.inf, np.inf
+            points_x = pos + x_offset
+            pc.get_paths()[0].vertices[:, 0] = np.clip(
+                pc.get_paths()[0].vertices[:, 0], clip_min, clip_max
+            )
+            pc.set_facecolor(fc)
+            pc.set_edgecolor(ec)
+            pc.set_alpha(alpha)
+        perc = np.percentile(data, percentiles)
+        for p in perc:
+            ax.scatter(points_x, p, color=ec, zorder=3, **scatter_kwargs)
+
+    # create figure
+    problem_names = sorted(data.keys())
+    horizons = sorted(
+        {h for horizon_data in data.values() for h in horizon_data.keys()}
+    )
+    horizon_ticks = np.arange(len(horizons))
+    horizon_ticklabels = [f"h={h}" for h in horizons]
+    n_rows = len(problem_names)
+    fig, axs = plt.subplots(
+        n_rows, 1, constrained_layout=True, figsize=(6, n_rows * 2.5), sharex=True
+    )
+    if n_rows == 1:
+        axs = [axs]
+
+    # for each problem, create two violin plots - one for the optimality gap's
+    # distribution and one for the cumulative rewards' distribution
+    s_kwargs = {"s": 40, "marker": "_"}
+    v_kwargs = {
+        "showextrema": False,
+        "showmedians": False,
+        "showmeans": False,
+        "widths": 0.5,
+    }
+    for ax, problem_name in zip(axs, problem_names):
+        ax_twin = ax.twinx()
+        horizon_data = data[problem_name]
+        for horizon, results in horizon_data.items():
+            # plot the two violins
+            pos = horizons.index(horizon)
+            custom_violin(
+                ax,
+                results.gaps[:, -1],
+                pos,
+                "C0",
+                "C0",
+                side="left",
+                scatter_kwargs=s_kwargs,
+                violin_kwargs=v_kwargs,
+            )
+            custom_violin(
+                ax_twin,
+                results.rewards.sum(axis=1),
+                pos,
+                "C1",
+                "C1",
+                side="right",
+                scatter_kwargs=s_kwargs,
+                violin_kwargs=v_kwargs,
+            )
+
+        # embellish axes
+        ax.set_xticks(horizon_ticks)
+        ax.set_xticklabels(horizon_ticklabels)
+        ax.set_title(problem_name, fontsize=11)
+        ax.set_ylabel(r"$G$")
+        ax_twin.set_ylabel(r"$R$")
+        ax.tick_params(axis="y", labelcolor="C0")
+        ax_twin.tick_params(axis="y", labelcolor="C1")
+
+    # last embellishments
+    ax.set_xlabel("Horizon")
+    fig.suptitle(figtitle, fontsize=12)
+
+
 def summarize(data: dict[str, dict[int, Results]], tabletitle: Optional[str]) -> None:
     """Prints the summary of the results in the given dictionary as two tables, one
     containing the (final) optimality gap, and the other the cumulative rewards."""
     # create tables
-    problem_names = data.keys()
+    problem_names = sorted(data.keys())
     horizons = sorted(
         {h for horizon_data in data.values() for h in horizon_data.keys()}
     )
@@ -200,6 +304,7 @@ if __name__ == "__main__":
         compute_optimality_gaps(loaded_data)
         if not args.no_plot:
             plot(loaded_data, title)
+            plot_violins(loaded_data, title)
         if not args.no_summary:
             summarize(loaded_data, title)
     plt.show()
