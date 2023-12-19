@@ -67,13 +67,13 @@ x_opt, a_opt = optimize_acqf(
 )
 
 # for the monte carlo version, we can directly use the forward method
-sampler = SobolQMCNormalSampler(sample_shape=256, seed=0)
+sampler = SobolQMCNormalSampler(sample_shape=2**8, seed=0)
 MCMAF = qMcMyopicAcquisitionFunction(mdl, c1, c2, sampler)
 a_mc = MCMAF(X.view(-1, 1, 1))
 x_opt_mc, a_opt_mc = optimize_acqf(
     acq_function=MCMAF,
     bounds=bounds,
-    q=1,  # must be one for plotting reasons
+    q=1,
     num_restarts=64,
     raw_samples=128,
     options={"seed": 0},
@@ -109,14 +109,13 @@ ax.fill_between(
 ax.plot(X, z.squeeze(), label="$z(x)$", color="C2")
 names = ["Analytical", "Monte Carlo", "Expected"]
 data = [(a, x_opt, a_opt), (a_mc, x_opt_mc, a_opt_mc), (a_exp, x_opt_exp, a_opt_exp)]
-for i in range(len(names)):
+for i, (name, (a_, x_opt_, a_opt_)) in enumerate(zip(names, data)):
     c = f"C{i + 3}"
-    a_, x_opt_, a_op_ = data[i]
     a_min = a_.amin()
-    ax.plot(X, (a_ - a_min).squeeze(), "--", lw=1, label=f"{names[i]} $a(x)$", color=c)
+    ax.plot(X, (a_ - a_min).squeeze(), "--", lw=1, label=f"{name} $a(x)$", color=c)
     ax.plot(
         x_opt_.squeeze(),
-        (a_op_ - a_min).squeeze(),
+        (a_opt_ - a_min).squeeze(),
         "*",
         label=None,  # r"$\arg \max a(x)$",
         markersize=17,

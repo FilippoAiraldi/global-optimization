@@ -22,7 +22,8 @@ References
 #   minimization of the acquisition function consists in minimizing its sum over the
 #   batches, and taking the best one at last
 # * `q` is the number of candidates to consider jointly per batch; often, the best is
-#   taken out of these per batch
+#   taken out of these per batch (in other words, at each optimization iteration, the
+#   acquisition function minimization yields `q` next candidates to observe)
 # * `d` is the dimension of the design space of each `q`-th candidate.
 # Note that while there might be more than one batch dimension, usually we need just one
 # in important methods.
@@ -42,12 +43,15 @@ References
 # -----------
 # We make here the distinction between the myopic and non-myopic case.
 # * myopic case:
-#   * `MyopicAcquisitionFunction`: in this acquisition function, `q = 1`. This means
-#     that the `b` dimension is botorch is automatically swapped in second place and
-#     used as the `m` (usually, we use `n` for prediction points, and `m` for training).
-#   * `MyopicAcquisitionFunctionInExpectation`: TODO
-#   * `qMcMyopicAcquisitionFunction`: here, `q > 1` is the number of points considered
-#     in parallel, while `b` is the number of batches of these. The acquisition function
+#   * `MyopicAcquisitionFunction` and `ExpectedMyopicAcquisitionFunction`: in these
+#     acquisition function, `q = 1`. Moreover, the regressor mmust be unique, i.e.,
+#     `p = 1`. This means that, in practice, the `b` dimension is botorch is
+#     automatically swapped in second place and used as the `m` (usually, we use `n` for
+#     prediction points, and `m` for training). This is done because batching the
+#     regressor usually is numerically poorer than passing `b` points in `m` dimension.
+#   * `qMcMyopicAcquisitionFunction`: here, while `q > 1` is supported, in practice, in
+#     our optimization loops we decide to only compute one candidate per iteration.
+#     Instead, `b` is the number of batches of `q` points. The acquisition function
 #     is minimized over the sum of its batches, and for each the best candidate out of
 #     `q` is taken.
 # * non-myopic case:

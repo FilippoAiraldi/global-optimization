@@ -9,10 +9,12 @@ import os
 import sys
 from datetime import datetime
 from itertools import product
+from math import ceil, log2
 
 import numpy as np
 import torch
 from botorch.optim import optimize_acqf
+from botorch.sampling import SobolQMCNormalSampler
 from joblib import Parallel, delayed
 from scipy.stats.qmc import LatinHypercube
 from torch import Tensor
@@ -71,22 +73,24 @@ def run_problem(
         Minv_and_coeffs = None
     num_restarts = 16 * ndim
     raw_samples = 32 * ndim
-    if myopic:
-        q = 1
-    else:
-        q = 8 * ndim
+
+    # set various RNG
+    np_random = np.random.default_rng(seed)
+    mk_seed = lambda: int(np_random.integers(0, 2**32 - 1))
+    lhs = LatinHypercube(ndim, seed=mk_seed())
+    if not myopic:
+        mc_samples = 2 ** ceil(log2(256 * horizon))
+        SobolQMCNormalSampler(mc_samples, seed=mk_seed())
 
     # draw random initial points
     bounds: Tensor = problem.bounds
-    np_random = np.random.default_rng(seed)
-    lhs = LatinHypercube(d=ndim, seed=np_random.integers(0, 2**32 - 1))
     X = torch.as_tensor(lhs.random(n_init)) * (bounds[1] - bounds[0]) + bounds[0]
     Y = problem(X)
 
     # run optimization loop
     best_so_far: list[float] = [Y.amin().item()]
     stage_rewards: list[float] = []
-    for this_seed in map(int, np_random.integers(0, 2**32 - 1, size=maxiter)):
+    for _ in range(maxiter):
         # fit model
         mdl = Rbf(X, Y, eps, Minv_and_coeffs=Minv_and_coeffs) if use_rbf else Idw(X, Y)
 
@@ -96,7 +100,7 @@ def run_problem(
         else:
             raise NotImplementedError  # TODO: understand how to deal with `q>1`
         X_opt, acq_opt = optimize_acqf(
-            acqfun, bounds, q, num_restarts, raw_samples, {"seed": this_seed}
+            acqfun, bounds, 1, num_restarts, raw_samples, {"seed": mk_seed()}
         )
 
         # evaluate objective function at the new point, and append it to training data

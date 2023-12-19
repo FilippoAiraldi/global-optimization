@@ -89,7 +89,7 @@ class AcquisitionFunctionMixin:
         """Setups the acquisition function buffers, and performs some checks."""
         if not accept_batch_regression:
             for tensor in (self.model.train_X, self.model.train_Y):
-                if tensor.ndim >= 3 and any(s != 1 for s in tensor.shape[:-2]):
+                if tensor.ndim > 2 and any(s != 1 for s in tensor.shape[:-2]):
                     raise ValueError(
                         "Expected non-batched regression; got training data with shape "
                         + str(tensor.shape)
@@ -270,7 +270,8 @@ class qMcMyopicAcquisitionFunction(MCAcquisitionFunction, AcquisitionFunctionMix
     @t_batch_mode_transform()
     def forward(self, X: Tensor) -> Tensor:
         # input of this forward is `b x q x d`, and output `b`. See the note in
-        # regression.py to understand these shapes.
+        # regression.py to understand these shapes. Mostly, we use `q = 1`, in that case
+        # the posterior can be interpreted as `b` independent normal distributions.
         # first, compute the posterior for X, and sample from it
         mdl = self.model
         posterior = mdl.posterior(X)
@@ -282,4 +283,4 @@ class qMcMyopicAcquisitionFunction(MCAcquisitionFunction, AcquisitionFunctionMix
         acqvals = acquisition_function(
             samples, scale, self.span_Y, posterior._W_sum_recipr, self.c1, self.c2
         )
-        return acqvals.amax((-2, -1)).mean(0)  # tuple(range(acqvals.ndim - 2))
+        return acqvals.amax((-2, -1)).mean(0)
