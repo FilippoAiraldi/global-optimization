@@ -259,15 +259,22 @@ class qMcMyopicAcquisitionFunction(MCAcquisitionFunction, AcquisitionFunctionMix
         # input of this forward is `b x q x d`, and output `b`. See the note in
         # regression.py to understand these shapes. Mostly, we use `q = 1`, in that case
         # the posterior can be interpreted as `b` independent normal distributions.
-        # first, compute the posterior for X, and sample from it
+
+        # NOTE: there is no need to use monte carlo samples for all the terms of the
+        # acquisition function, but only for the scale. This is because this term is the
+        # only one that depends on the posterior sample variances (actually, it is the
+        # formula of the  variance itself), and we cannot directly compute. The rest
+        # are either deterministic or have an analytical expression.
         mdl = self.model
         posterior = mdl.posterior(X)
         samples = self.get_posterior_samples(posterior)
-
-        # then, for each sample, compute its mean prediction and its IDW scale, and
-        # finally, compute acquisition and reduce in t- and q-batches
         scale = _idw_scale(samples, mdl.train_Y, posterior._V)
         acqvals = acquisition_function(
-            samples, scale, self.span_Y, posterior._W_sum_recipr, self.c1, self.c2
+            posterior.mean,  # `b x q x 1`
+            scale,  # `n_samples x b x q x 1`
+            self.span_Y,  # `b x 1 x 1` or # `1 x 1`
+            posterior._W_sum_recipr,  # `b x q x 1`
+            self.c1,
+            self.c2,
         )
         return acqvals.amax((-2, -1)).mean(0)
