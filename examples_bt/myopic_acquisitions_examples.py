@@ -18,7 +18,7 @@ from botorch.optim import optimize_acqf
 from botorch.sampling import SobolQMCNormalSampler
 
 from globopt.myopic_acquisitions import (
-    GaussHermiteQuadMyopicAcquisitionFunction,
+    GhQuadratureMyopicAcquisitionFunction,
     MyopicAcquisitionFunction,
     _idw_distance,
     acquisition_function,
@@ -81,7 +81,7 @@ x_opt_mc, a_opt_mc = optimize_acqf(
 
 # instead of the monte carlo, we can also use the version that approximating the
 # expected value
-EMAF = GaussHermiteQuadMyopicAcquisitionFunction(mdl, c1, c2)
+EMAF = GhQuadratureMyopicAcquisitionFunction(mdl, c1, c2)
 a_exp = EMAF(X.view(-1, 1, 1))
 x_opt_exp, a_opt_exp = optimize_acqf(
     acq_function=EMAF,

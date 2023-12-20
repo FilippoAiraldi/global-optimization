@@ -226,6 +226,8 @@ def plot_violins(data: dict[str, dict[int, Results]], figtitle: Optional[str]) -
         ax_twin.set_ylabel(r"$R$")
         ax.tick_params(axis="y", labelcolor="C0")
         ax_twin.tick_params(axis="y", labelcolor="C1")
+        ax.grid(which="major", visible=False)
+        ax_twin.grid(which="major", visible=False)
 
     # last embellishments
     ax.set_xlabel("Horizon")

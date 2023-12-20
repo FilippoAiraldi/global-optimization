@@ -127,7 +127,7 @@ class MyopicAcquisitionFunction(AnalyticAcquisitionFunction, AcquisitionFunction
     observed points, and an approximate IDW standard deviation. This acquisition
     does not exploit this deviation to approximate the estimate variance, and it only
     supports `q = 1`. For versions that do so instead, see
-    `GaussHermiteQuadMyopicAcquisitionFunction` and `qMcMyopicAcquisitionFunction`.
+    `GhQuadratureMyopicAcquisitionFunction` and `qMcMyopicAcquisitionFunction`.
 
     Example
     -------
@@ -174,7 +174,7 @@ class MyopicAcquisitionFunction(AnalyticAcquisitionFunction, AcquisitionFunction
         ).squeeze((0, 2))
 
 
-class GaussHermiteQuadMyopicAcquisitionFunction(MyopicAcquisitionFunction):
+class GhQuadratureMyopicAcquisitionFunction(MyopicAcquisitionFunction):
     """Myopic acquisition function for Global Optimization based on RBF/IDW
     regression that takes into consideration uncertainty in the estimation, i.e., the
     expected value of the acquisition function is computed approximatedly w.r.t. the IDW
@@ -204,7 +204,7 @@ class GaussHermiteQuadMyopicAcquisitionFunction(MyopicAcquisitionFunction):
         posterior = mdl.posterior(X.transpose(-3, -2))
         gh_x, gh_w = get_gaussherm(self.gaussherm_deg, X.dtype, X.device)
         samples = posterior.mean.addcmul(posterior._scale, gh_x)
-        scale_estimate = (gh_w * _idw_scale(samples, mdl.train_Y, posterior._V)).sum(0)
+        scale_estimate = gh_w.mul(_idw_scale(samples, mdl.train_Y, posterior._V)).sum(0)
         return acquisition_function(
             posterior.mean,  # `1 x n x 1`
             scale_estimate,  # `1 x n x 1`
@@ -219,7 +219,7 @@ class qMcMyopicAcquisitionFunction(MCAcquisitionFunction, AcquisitionFunctionMix
     """Monte Carlo-based myopic acquisition function for Global Optimization based on
     RBF/IDW regression.
 
-    In contrast to `GaussHermiteQuadMyopicAcquisitionFunction`, this acquisition
+    In contrast to `GhQuadratureMyopicAcquisitionFunction`, this acquisition
     function approximates the expected value of the acquisition function via Monte Carlo
     sampling.
 
