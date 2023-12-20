@@ -8,8 +8,9 @@ References
     functions. Computational Optimization and Applications, 77(2):571–595, 2020
 """
 
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
+import numpy as np
 import torch
 from botorch.acquisition.analytic import AnalyticAcquisitionFunction
 from botorch.acquisition.monte_carlo import MCAcquisitionFunction
@@ -76,6 +77,23 @@ def acquisition_function(
     return Y_hat.sub(Y_std, alpha=c1).sub(Y_span.mul(distance), alpha=c2).neg()
 
 
+GH_CACHE: dict[int, Tensor] = {}
+
+
+def get_gaussherm(deg: int, dtype: torch.dtype, device: torch.device) -> Tensor:
+    """Gets the Gauss-Hermite quadrature abscissas and weights for the given degree."""
+    if deg in GH_CACHE:
+        tensor = GH_CACHE[deg]
+    else:
+        abscissas, weights = np.polynomial.hermite.hermgauss(deg)
+        abscissas *= np.sqrt(2.0)
+        weights /= np.sqrt(np.pi)
+        tensor = torch.from_numpy(np.asarray((abscissas, weights))).view(2, -1, 1, 1, 1)
+    tensor = tensor.to(dtype=dtype, device=device)
+    GH_CACHE[deg] = tensor  # store latest version based on dtype and device
+    return tensor
+
+
 class AcquisitionFunctionMixin:
     """Mixin class for acquisition functions based on RBF/IDW regression."""
 
@@ -107,9 +125,9 @@ class MyopicAcquisitionFunction(AnalyticAcquisitionFunction, AcquisitionFunction
     Computes the myopic acquisition function according to [1] as a function of the
     estimate of the function value at the candidate points, the distance between the
     observed points, and an approximate IDW standard deviation. This acquisition
-    does not exploit this deviation to approximate the estimate variance, so it only
-    supports `q=1`. For versions that do so, see `ExpectedMyopicAcquisitionFunction`
-    and `qMcMyopicAcquisitionFunction`.
+    does not exploit this deviation to approximate the estimate variance, and it only
+    supports `q = 1`. For versions that do so instead, see
+    `GaussHermiteQuadMyopicAcquisitionFunction` and `qMcMyopicAcquisitionFunction`.
 
     Example
     -------
@@ -156,71 +174,40 @@ class MyopicAcquisitionFunction(AnalyticAcquisitionFunction, AcquisitionFunction
         ).squeeze((0, 2))
 
 
-class ExpectedMyopicAcquisitionFunction(MyopicAcquisitionFunction):
+class GaussHermiteQuadMyopicAcquisitionFunction(MyopicAcquisitionFunction):
     """Myopic acquisition function for Global Optimization based on RBF/IDW
     regression that takes into consideration uncertainty in the estimation, i.e., the
     expected value of the acquisition function is computed approximatedly w.r.t. the IDW
-    variance.
+    variance by Gauss-Hermite quadrature.
 
-    In contrast, `qMcMyopicAcquisitionFunction` does not approximate the expectation,
-    and prefers to use Monte Carlo sampling instead.
+    In contrast, `qMcMyopicAcquisitionFunction` approximates the same expectation via
+    Monte Carlo sampling instead.
     """
+
+    def __init__(self, *args: Any, gaussherm_deg: int = 2**5, **kwargs: Any) -> None:
+        """Instantiates the myopic acquisition function.
+
+        Parameters
+        ----------
+        gaussherm_deg : int, optional
+            Degree of the Gauss-Hermite quadrature, by default `2^5`.
+        args, kwargs
+            Passed to `MyopicAcquisitionFunction`.
+        """
+        super().__init__(*args, **kwargs)
+        self.gaussherm_deg = gaussherm_deg
 
     @t_batch_mode_transform(expected_q=1)
     def forward(self, X: Tensor) -> Tensor:
         # input of this forward is `b x 1 x d`, and output `b`
-        posterior = self.model.posterior(X.transpose(-3, -2))
-
-        # in expectation, the scale function s(x) is approximated by its squared
-        # version, z(x)=s^2(x). The expected value and variace of z(x) are then computed
-        # instead, and finally the expected value of s(x) is approximated by the
-        # following Taylor expansion:
-        # s(x) \approx sqrt(E[z(x)]) - 1/4 * E[z(x)]^(-1.5) * Var[z(x)]
-        y_loc = posterior.mean  # mean and var of estimate of the function values
-        y_var: Tensor = posterior._scale.square()
-        V: Tensor = posterior._V
-        train_Y = self.model.train_Y
-        train_YT = train_Y.transpose(-2, -1)
-        y_loc = y_loc.unsqueeze(-1)
-        y_var = y_var.unsqueeze(-1)
-        V = V.unsqueeze(-1)
-        L = (y_loc - train_Y).square()
-        LT = L.transpose(-2, -1)
-        y_loc2 = y_loc.square()
-        train_Y2 = train_Y.square()
-        VxV = V.mul(V.transpose(-2, -1))
-        LpL = L.add(LT)
-        LxL = L.mul(LT)
-        YpY = train_Y.add(train_YT)
-        YxY = train_Y.mul(train_YT)
-        Y2pY2 = train_Y2.add(train_Y2.transpose(-2, -1))
-        YxL = train_Y.mul(LT)
-        Y2xL = train_Y2.mul(LT)
-
-        z_loc = V.mul(y_var + L).sum((-2, -1)).clamp_min(0.0)
-        c0 = (
-            y_var.sub(Y2pY2)
-            .add(LpL)
-            .mul(y_var)
-            .add(LxL)
-            .add(YxY.mul(YxY))
-            .sub(Y2xL)
-            .sub(Y2xL.transpose(-2, -1))
-        )
-        c1 = YxL.add(YxL.transpose(-2, -1)).sub(YxY.sub(y_var).mul(YpY)).mul(2 * y_loc)
-        c2 = Y2pY2.add(YxY, alpha=4).sub(LpL).sub(y_var, alpha=2).mul(y_loc2.add(y_var))
-        c3 = YpY.mul(y_loc).mul(y_loc2.add(y_var, alpha=3))
-        c4 = y_loc2.mul(y_loc2.add(y_var, alpha=6)).add(y_var.square(), alpha=3)
-        z_var = (
-            VxV.mul(c4.sub(c3, alpha=2).add(c2).add(c1).add(c0))
-            .sum((-2, -1))
-            .clamp_min(0.0)
-        )
-        s_loc_estimate = z_loc.sqrt().sub(z_loc.pow(-1.5).mul(z_var), alpha=0.25)
-
+        mdl = self.model
+        posterior = mdl.posterior(X.transpose(-3, -2))
+        gh_x, gh_w = get_gaussherm(self.gaussherm_deg, X.dtype, X.device)
+        samples = posterior.mean.addcmul(posterior._scale, gh_x)
+        scale_estimate = (gh_w * _idw_scale(samples, mdl.train_Y, posterior._V)).sum(0)
         return acquisition_function(
             posterior.mean,  # `1 x n x 1`
-            s_loc_estimate.unsqueeze(-1),  # `1 x n x 1`
+            scale_estimate,  # `1 x n x 1`
             self.span_Y,  # `1 x 1 x 1` or # `1 x 1`
             posterior._W_sum_recipr,  # `1 x n x 1`
             self.c1,
@@ -232,9 +219,9 @@ class qMcMyopicAcquisitionFunction(MCAcquisitionFunction, AcquisitionFunctionMix
     """Monte Carlo-based myopic acquisition function for Global Optimization based on
     RBF/IDW regression.
 
-    In contrast to `ExpectedMyopicAcquisitionFunction`, this acquisition function
-    does not approximate the expectation w.r.t. the IDW variance, and instead uses
-    Monte Carlo sampling to compute the expectation of the acquisition values
+    In contrast to `GaussHermiteQuadMyopicAcquisitionFunction`, this acquisition
+    function approximates the expected value of the acquisition function via Monte Carlo
+    sampling.
 
     Example
     -------

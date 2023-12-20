@@ -43,9 +43,9 @@ References
 # -----------
 # We make here the distinction between the myopic and non-myopic case.
 # * myopic case:
-#   * `MyopicAcquisitionFunction` and `ExpectedMyopicAcquisitionFunction`: in these
-#     acquisition function, `q = 1`. Moreover, the regressor mmust be unique, i.e.,
-#     `p = 1`. This means that, in practice, the `b` dimension is botorch is
+#   * `MyopicAcquisitionFunction` and `GaussHermiteQuadMyopicAcquisitionFunction`: in
+#     these acquisition function, `q = 1`. Moreover, the regressor mmust be unique,
+#     i.e., `p = 1`. This means that, in practice, the `b` dimension is botorch is
 #     automatically swapped in second place and used as the `m` (usually, we use `n` for
 #     prediction points, and `m` for training). This is done because batching the
 #     regressor usually is numerically poorer than passing `b` points in `m` dimension.
