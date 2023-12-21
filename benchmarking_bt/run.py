@@ -5,8 +5,6 @@ problems.
 
 import argparse
 import fcntl
-import os
-import sys
 from datetime import datetime
 from itertools import product
 from math import ceil, log2
@@ -22,10 +20,6 @@ from torch import Tensor
 from globopt.myopic_acquisitions import IdwAcquisitionFunction
 from globopt.problems import get_available_benchmark_problems, get_benchmark_problem
 from globopt.regression import Idw, Rbf
-
-sys.path.append(os.getcwd())
-
-from benchmarking.status import filter_tasks_by_status
 
 BENCHMARK_PROBLEMS = get_available_benchmark_problems()
 FNV_OFFSET = 0xCBF29CE484222325
@@ -98,7 +92,7 @@ def run_problem(
         if myopic:
             acqfun = IdwAcquisitionFunction(mdl, c1, c2)
         else:
-            raise NotImplementedError  # TODO: understand how to deal with `q>1`
+            raise NotImplementedError
         X_opt, acq_opt = optimize_acqf(
             acqfun, bounds, 1, num_restarts, raw_samples, {"seed": mk_seed()}
         )
@@ -125,13 +119,17 @@ def run_problem(
 
 
 def run_benchmarks(
-    problems: list[str], horizons: list[int], trials: int, seed: int, n_jobs: int
+    problems: list[str],
+    horizons: list[int],
+    trials: int,
+    seed: int,
+    n_jobs: int,
+    csv: str,
 ) -> None:
     """Run the benchmarks for the given problems and horizons, repeated per the number
     of trials."""
     if problems == ["all"]:
         problems = BENCHMARK_PROBLEMS
-
     # create one seed per each trial. These are independent of the horizons, so that
     # myopic and non-myopic methods start with the same initial conditions; moreover,
     # they are crafted out of the name of the problem, so that new benchmarks can be
@@ -141,11 +139,7 @@ def run_benchmarks(
         p: np.random.SeedSequence(fnv1a_64(p, seed)).generate_state(trials)
         for p in problems
     }
-
-    # create output csv name, and launch each benchmarking iteration in parallel
-    nowstr = datetime.now().strftime("%Y%m%d_%H%M%S")
-    csv = f"results_{nowstr}.csv"
-    tasks = filter_tasks_by_status(product(range(trials), problems, horizons), csv)
+    tasks = product(range(trials), problems, horizons)  # TODO: rework task filtering
     n_jobs = NUM_GPUS * min(1, n_jobs)
     Parallel(n_jobs=n_jobs, verbose=100, backend="loky")(
         delayed(run_problem)(i, p, h, seeds[p][t], csv)
@@ -154,6 +148,8 @@ def run_benchmarks(
 
 
 if __name__ == "__main__":
+    assert torch.cuda.is_available(), "CUDA not available!"
+
     # parse the arguments
     parser = argparse.ArgumentParser(
         description="Benchmarking of GO strategies on synthetic problems.",
@@ -180,11 +176,20 @@ if __name__ == "__main__":
         "--n-jobs", type=int, default=2, help="Number (positive) of parallel processes."
     )
     parser.add_argument("--seed", type=int, default=0, help="RNG seed.")
+    parser.add_argument("--csv", type=str, default="", help="Output csv filename.")
     args = parser.parse_args()
 
+    # if the output csv is not specified, create it
+    if args.csv is None or args.csv == "":
+        nowstr = datetime.now().strftime("%Y%m%d_%H%M%S")
+        args.csv = f"results_{nowstr}.csv"
+    elif not args.csv.endswith(".csv"):
+        args.csv += ".csv"
+
     # run the benchmarks
-    assert torch.cuda.is_available(), "CUDA is not available"
-    run_benchmarks(args.problems, args.horizons, args.n_trials, args.seed, args.n_jobs)
+    run_benchmarks(
+        args.problems, args.horizons, args.n_trials, args.seed, args.n_jobs, args.csv
+    )
 
 
 #  python benchmarking/run.py --problems=all --horizons 1 2 4 6 --n-trials=30 --n-jobs=6 --seed=0
