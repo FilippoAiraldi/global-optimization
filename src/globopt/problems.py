@@ -20,7 +20,9 @@ from botorch.test_functions import (
     Branin,
     Hartmann,
     Michalewicz,
+    Rastrigin,
     Rosenbrock,
+    Shekel,
     SixHumpCamel,
     StyblinskiTang,
 )
@@ -77,12 +79,14 @@ TESTS: dict[
     {
         problem.__name__.lower(): (problem, kwargs, max_evals, regressor_type)
         for problem, kwargs, max_evals, regressor_type in [
-            (Ackley, {}, 50, "rbf"),  # bounds increased
-            (Adjiman, {}, 10, "rbf"),
-            (Branin, {}, 40, "rbf"),
+            (Ackley, {}, 50, "idw"),
+            (Adjiman, {}, 10, "idw"),
+            (Branin, {}, 40, "idw"),
             (Hartmann, {"dim": 3}, 50, "rbf"),
-            (Michalewicz, {"dim": 5}, 40, "idw"),  # untested
+            (Michalewicz, {"dim": 5}, 40, "rbf"),  # untested
+            (Rastrigin, {"dim": 4}, 80, "rbf"),
             (Rosenbrock, {"dim": 8}, 50, "rbf"),
+            (Shekel, {"m": 7}, 60, "rbf"),
             (SixHumpCamel, {"bounds": [(-5.0, 5.0), (-5.0, 5.0)]}, 10, "rbf"),
             (StyblinskiTang, {"dim": 5}, 60, "rbf"),
         ]
