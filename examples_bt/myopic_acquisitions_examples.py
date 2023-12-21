@@ -18,7 +18,7 @@ from botorch.optim import optimize_acqf
 from botorch.sampling import SobolQMCNormalSampler
 
 from globopt.myopic_acquisitions import (
-    GhQuadratureMyopicAcquisitionFunction,
+    GaussHermiteSampler,
     IdwAcquisitionFunction,
     _idw_distance,
     acquisition_function,
@@ -67,11 +67,11 @@ x_opt, a_opt = optimize_acqf(
 )
 
 # for the monte carlo version, we can directly use the forward method
-sampler = SobolQMCNormalSampler(sample_shape=2**8, seed=0)
-MCMAF = qIdwAcquisitionFunction(mdl, c1, c2, sampler)
-a_mc = MCMAF(X.view(-1, 1, 1))
+sampler = SobolQMCNormalSampler(sample_shape=torch.Size([2**8]), seed=0)
+MCAF = qIdwAcquisitionFunction(mdl, c1, c2, sampler)
+a_mc = MCAF(X.view(-1, 1, 1))
 x_opt_mc, a_opt_mc = optimize_acqf(
-    acq_function=MCMAF,
+    acq_function=MCAF,
     bounds=bounds,
     q=1,
     num_restarts=64,
@@ -79,12 +79,13 @@ x_opt_mc, a_opt_mc = optimize_acqf(
     options={"seed": 0},
 )
 
-# instead of the monte carlo, we can also use the version that approximating the
-# expected value
-EMAF = GhQuadratureMyopicAcquisitionFunction(mdl, c1, c2)
-a_exp = EMAF(X.view(-1, 1, 1))
+# instead of the quasi-monte carlo approach, we can also use a version that approximates
+# the expected value via Gauss-Hermite quadrature
+sampler = GaussHermiteSampler(sample_shape=torch.Size([2**3]))
+GHAF = qIdwAcquisitionFunction(mdl, c1, c2, sampler)
+a_exp = GHAF(X.view(-1, 1, 1))
 x_opt_exp, a_opt_exp = optimize_acqf(
-    acq_function=EMAF,
+    acq_function=GHAF,
     bounds=bounds,
     q=1,
     num_restarts=16,
