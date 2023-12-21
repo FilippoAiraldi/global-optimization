@@ -4,7 +4,7 @@ import unittest
 import torch
 
 from globopt.myopic_acquisitions import (
-    MyopicAcquisitionFunction,
+    IdwAcquisitionFunction,
     _idw_distance,
     acquisition_function,
 )
@@ -23,7 +23,7 @@ class TestAcquisitionFunction(unittest.TestCase):
 
         mdl = Rbf(X, Y, 0.5)
         x = torch.linspace(-3, 3, 1000, dtype=X.dtype).view(1, -1, 1)
-        MAF = MyopicAcquisitionFunction(mdl, 1.0, 0.5)
+        MAF = IdwAcquisitionFunction(mdl, 1.0, 0.5)
         a1 = MAF(x.transpose(1, 0)).squeeze().neg()
 
         y_hat, s, W_sum_recipr, _ = mdl(x)

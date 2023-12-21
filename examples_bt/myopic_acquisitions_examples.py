@@ -19,10 +19,10 @@ from botorch.sampling import SobolQMCNormalSampler
 
 from globopt.myopic_acquisitions import (
     GhQuadratureMyopicAcquisitionFunction,
-    MyopicAcquisitionFunction,
+    IdwAcquisitionFunction,
     _idw_distance,
     acquisition_function,
-    qMcMyopicAcquisitionFunction,
+    qIdwAcquisitionFunction,
 )
 from globopt.problems import SimpleProblem
 from globopt.regression import Rbf
@@ -58,7 +58,7 @@ a = acquisition_function(y_hat, s, y_span, W_sum_recipr, c1, c2).squeeze()
 
 # compute minimizer of analytic myopic acquisition function
 x_opt, a_opt = optimize_acqf(
-    acq_function=MyopicAcquisitionFunction(mdl, c1, c2),
+    acq_function=IdwAcquisitionFunction(mdl, c1, c2),
     bounds=bounds,
     q=1,  # mc iterations - not supported for the analytical acquisition function
     num_restarts=16,  # number of optimization restarts
@@ -68,7 +68,7 @@ x_opt, a_opt = optimize_acqf(
 
 # for the monte carlo version, we can directly use the forward method
 sampler = SobolQMCNormalSampler(sample_shape=2**8, seed=0)
-MCMAF = qMcMyopicAcquisitionFunction(mdl, c1, c2, sampler)
+MCMAF = qIdwAcquisitionFunction(mdl, c1, c2, sampler)
 a_mc = MCMAF(X.view(-1, 1, 1))
 x_opt_mc, a_opt_mc = optimize_acqf(
     acq_function=MCMAF,

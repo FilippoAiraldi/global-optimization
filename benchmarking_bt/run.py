@@ -19,7 +19,7 @@ from joblib import Parallel, delayed
 from scipy.stats.qmc import LatinHypercube
 from torch import Tensor
 
-from globopt.myopic_acquisitions import MyopicAcquisitionFunction
+from globopt.myopic_acquisitions import IdwAcquisitionFunction
 from globopt.problems import get_available_benchmark_problems, get_benchmark_problem
 from globopt.regression import Idw, Rbf
 
@@ -96,7 +96,7 @@ def run_problem(
 
         # minimize acquisition function
         if myopic:
-            acqfun = MyopicAcquisitionFunction(mdl, c1, c2)
+            acqfun = IdwAcquisitionFunction(mdl, c1, c2)
         else:
             raise NotImplementedError  # TODO: understand how to deal with `q>1`
         X_opt, acq_opt = optimize_acqf(

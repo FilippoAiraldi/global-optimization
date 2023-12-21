@@ -94,32 +94,8 @@ def get_gaussherm(deg: int, dtype: torch.dtype, device: torch.device) -> Tensor:
     return tensor
 
 
-class AcquisitionFunctionMixin:
-    """Mixin class for acquisition functions based on RBF/IDW regression."""
-
-    def _setup(
-        self,
-        c1: Union[float, Tensor],
-        c2: Union[float, Tensor],
-        accept_batch_regression: bool,
-        span_Y_min: float = 1e-3,
-    ) -> None:
-        """Setups the acquisition function buffers, and performs some checks."""
-        if not accept_batch_regression:
-            for tensor in (self.model.train_X, self.model.train_Y):
-                if tensor.ndim > 2 and any(s != 1 for s in tensor.shape[:-2]):
-                    raise ValueError(
-                        "Expected non-batched regression; got training data with shape "
-                        + str(tensor.shape)
-                    )
-        Y_min, Y_max = self.model.train_Y.aminmax(dim=-2, keepdim=True)
-        self.register_buffer("span_Y", (Y_max - Y_min).clamp_min(span_Y_min))
-        self.register_buffer("c1", torch.scalar_tensor(c1))
-        self.register_buffer("c2", torch.scalar_tensor(c2))
-
-
-class MyopicAcquisitionFunction(AnalyticAcquisitionFunction, AcquisitionFunctionMixin):
-    """Myopic acquisition function for Global Optimization based on RBF/IDW
+class IdwAcquisitionFunction(AnalyticAcquisitionFunction):
+    """IDW (myopic) acquisition function for Global Optimization based on RBF/IDW
     regression.
 
     Computes the myopic acquisition function according to [1] as a function of the
@@ -127,12 +103,12 @@ class MyopicAcquisitionFunction(AnalyticAcquisitionFunction, AcquisitionFunction
     observed points, and an approximate IDW standard deviation. This acquisition
     does not exploit this deviation to approximate the estimate variance, and it only
     supports `q = 1`. For versions that do so instead, see
-    `GhQuadratureMyopicAcquisitionFunction` and `qMcMyopicAcquisitionFunction`.
+    `GhQuadratureMyopicAcquisitionFunction` and `qIdwAcquisitionFunction`.
 
     Example
     -------
     >>> model = Idw(train_X, train_Y)
-    >>> MAF = MyopicAcquisitionFunction(model)
+    >>> MAF = IdwAcquisitionFunction(model)
     >>> af = MAF(test_X)
 
     References
@@ -141,10 +117,12 @@ class MyopicAcquisitionFunction(AnalyticAcquisitionFunction, AcquisitionFunction
         functions. Computational Optimization and Applications, 77(2):571–595, 2020
     """
 
-    model: Union[Idw, Rbf]
-
     def __init__(
-        self, model: Union[Idw, Rbf], c1: Union[float, Tensor], c2: Union[float, Tensor]
+        self,
+        model: Union[Idw, Rbf],
+        c1: Union[float, Tensor],
+        c2: Union[float, Tensor],
+        span_Y_min: float = 1e-3,
     ) -> None:
         """Instantiates the myopic acquisition function.
 
@@ -156,9 +134,15 @@ class MyopicAcquisitionFunction(AnalyticAcquisitionFunction, AcquisitionFunction
             Weight of the contribution of the variance function.
         c2 : float or scalar Tensor
             Weight of the contribution of the distance function.
+        span_Y_min: float, optional
+            Minimum value of the span of observed values (avoids that the distance
+            contribution is null).
         """
         super().__init__(model)
-        self._setup(c1, c2, accept_batch_regression=False)
+        Y_min, Y_max = model.train_Y.aminmax(dim=-2, keepdim=True)
+        self.register_buffer("span_Y", (Y_max - Y_min).clamp_min(span_Y_min))
+        self.register_buffer("c1", torch.scalar_tensor(c1))
+        self.register_buffer("c2", torch.scalar_tensor(c2))
 
     @t_batch_mode_transform(expected_q=1)
     def forward(self, X: Tensor) -> Tensor:
@@ -174,13 +158,13 @@ class MyopicAcquisitionFunction(AnalyticAcquisitionFunction, AcquisitionFunction
         ).squeeze((0, 2))
 
 
-class GhQuadratureMyopicAcquisitionFunction(MyopicAcquisitionFunction):
+class GhQuadratureMyopicAcquisitionFunction(IdwAcquisitionFunction):
     """Myopic acquisition function for Global Optimization based on RBF/IDW
     regression that takes into consideration uncertainty in the estimation, i.e., the
     expected value of the acquisition function is computed approximatedly w.r.t. the IDW
     variance by Gauss-Hermite quadrature.
 
-    In contrast, `qMcMyopicAcquisitionFunction` approximates the same expectation via
+    In contrast, `qIdwAcquisitionFunction` approximates the same expectation via
     Monte Carlo sampling instead.
     """
 
@@ -192,7 +176,7 @@ class GhQuadratureMyopicAcquisitionFunction(MyopicAcquisitionFunction):
         gaussherm_deg : int, optional
             Degree of the Gauss-Hermite quadrature, by default `2^5`.
         args, kwargs
-            Passed to `MyopicAcquisitionFunction`.
+            Passed to `IdwAcquisitionFunction`.
         """
         super().__init__(*args, **kwargs)
         self.gaussherm_deg = gaussherm_deg
@@ -215,7 +199,7 @@ class GhQuadratureMyopicAcquisitionFunction(MyopicAcquisitionFunction):
         ).squeeze((0, 2))
 
 
-class qMcMyopicAcquisitionFunction(MCAcquisitionFunction, AcquisitionFunctionMixin):
+class qIdwAcquisitionFunction(MCAcquisitionFunction):
     """Monte Carlo-based myopic acquisition function for Global Optimization based on
     RBF/IDW regression.
 
@@ -227,7 +211,7 @@ class qMcMyopicAcquisitionFunction(MCAcquisitionFunction, AcquisitionFunctionMix
     -------
     >>> model = Idw(train_X, train_Y)
     >>> sampler = SobolQMCNormalSampler(1024)
-    >>> McMAF = qMcMyopicAcquisitionFunction(model, sampler)
+    >>> McMAF = qIdwAcquisitionFunction(model, sampler)
     >>> af = McMAF(test_X)
     """
 
@@ -237,6 +221,7 @@ class qMcMyopicAcquisitionFunction(MCAcquisitionFunction, AcquisitionFunctionMix
         c1: Union[float, Tensor],
         c2: Union[float, Tensor],
         sampler: Optional[MCSampler],
+        span_Y_min: float = 1e-3,
     ) -> None:
         """Instantiates the myopic acquisition function.
 
@@ -250,9 +235,15 @@ class qMcMyopicAcquisitionFunction(MCAcquisitionFunction, AcquisitionFunctionMix
             Weight of the contribution of the distance function.
         sampler : MCSampler, optional
             The sampler used to draw base samples.
+        span_Y_min: float, optional
+            Minimum value of the span of observed values (avoids that the distance
+            contribution is null).
         """
         super().__init__(model, sampler)
-        self._setup(c1, c2, accept_batch_regression=False)
+        Y_min, Y_max = model.train_Y.aminmax(dim=-2, keepdim=True)
+        self.register_buffer("span_Y", (Y_max - Y_min).clamp_min(span_Y_min))
+        self.register_buffer("c1", torch.scalar_tensor(c1))
+        self.register_buffer("c2", torch.scalar_tensor(c2))
 
     @t_batch_mode_transform()
     def forward(self, X: Tensor) -> Tensor:

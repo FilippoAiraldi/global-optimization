@@ -43,13 +43,13 @@ References
 # -----------
 # We make here the distinction between the myopic and non-myopic case.
 # * myopic case:
-#   * `MyopicAcquisitionFunction` and `GhQuadratureMyopicAcquisitionFunction`: in
+#   * `IdwAcquisitionFunction` and `GhQuadratureMyopicAcquisitionFunction`: in
 #     these acquisition function, `q = 1`. Moreover, the regressor mmust be unique,
 #     i.e., `p = 1`. This means that, in practice, the `b` dimension is botorch is
 #     automatically swapped in second place and used as the `m` (usually, we use `n` for
 #     prediction points, and `m` for training). This is done because batching the
 #     regressor usually is numerically poorer than passing `b` points in `m` dimension.
-#   * `qMcMyopicAcquisitionFunction`: here, while `q > 1` is supported, in practice, in
+#   * `qIdwAcquisitionFunction`: here, while `q > 1` is supported, in practice, in
 #     our optimization loops we decide to only compute one candidate per iteration.
 #     Instead, `b` is the number of batches of `q` points. The acquisition function
 #     is minimized over the sum of its batches, and for each the best candidate out of

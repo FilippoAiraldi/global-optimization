@@ -16,7 +16,7 @@ import torch
 from botorch.optim import optimize_acqf
 from torch import Tensor
 
-from globopt.myopic_acquisitions import MyopicAcquisitionFunction
+from globopt.myopic_acquisitions import IdwAcquisitionFunction
 from globopt.problems import SimpleProblem
 from globopt.regression import Rbf
 
@@ -46,11 +46,11 @@ history: list[tuple[Tensor, ...]] = []
 for iteration in range(N_ITERS):
     # instantiate model and acquisition function
     mdl = Rbf(train_X, train_Y, eps, Minv_and_coeffs=Minv_and_coeffs)
-    MAF = MyopicAcquisitionFunction(mdl, c1, c2)
+    MAF = IdwAcquisitionFunction(mdl, c1, c2)
 
     # minimize acquisition function
     X_opt, acq_opt = optimize_acqf(
-        acq_function=MyopicAcquisitionFunction(mdl, c1, c2),
+        acq_function=IdwAcquisitionFunction(mdl, c1, c2),
         bounds=torch.as_tensor([[lb], [ub]]),
         q=1,
         num_restarts=8,
