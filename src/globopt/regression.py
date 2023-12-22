@@ -71,6 +71,140 @@ DELTA = 1e-12
 """Small value to avoid division by zero."""
 
 
+def trace(*args: Any, **kwargs: Any):
+    """Applies `torch.jit.trace` to the decorated function."""
+
+    def _inner_decorator(func):
+        return torch.jit.trace(func, *args, **kwargs)
+
+    return _inner_decorator
+
+
+def script(*args: Any, **kwargs: Any):
+    """Applies `torch.jit.script` to the decorated function."""
+
+    def _inner_decorator(func):
+        return torch.jit.script(func, *args, **kwargs)
+
+    return _inner_decorator
+
+
+@trace((torch.rand(5, 4, 1), torch.rand(5, 3, 1), torch.rand(5, 4, 3)))
+def _idw_scale(Y: Tensor, train_Y: Tensor, V: Tensor) -> Tensor:
+    """Computes the IDW standard deviation function.
+
+    Parameters
+    ----------
+    Y : Tensor
+        `(b0 x b1 x ...) x n x 1` estimates of function values at the candidate points.
+    train_Y : Tensor
+        `(b0 x b1 x ...) x m x 1` training data points.
+    V : Tensor
+        `(b0 x b1 x ...) x n x m` normalized IDW weights.
+
+    Returns
+    -------
+    Tensor
+        The standard deviation of shape `(b0 x b1 x ...) x n x 1`.
+    """
+    scaled_diff = V.sqrt().mul(train_Y.transpose(-1, -2) - Y)
+    return torch.linalg.vector_norm(scaled_diff, dim=-1, keepdim=True)
+
+
+@trace((torch.rand(5, 4, 3), torch.rand(5, 4, 1), torch.rand(5, 7, 3)))
+def _idw_predict(
+    train_X: Tensor, train_Y: Tensor, X: Tensor
+) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    """Mean and scale for IDW regression."""
+    W = torch.cdist(X, train_X).square().clamp_min(DELTA).reciprocal()
+    W_sum_recipr = W.sum(-1, keepdim=True).reciprocal()
+    V = W.mul(W_sum_recipr)
+    mean = V.matmul(train_Y)
+    std = _idw_scale(mean, train_Y, V)
+    return mean, std, W_sum_recipr, V
+
+
+@trace((torch.rand(5, 4, 3), torch.rand(5, 7, 3), torch.rand(())))
+def _cdist_and_inverse_quadratic_kernel(
+    X: Tensor, Xother: Tensor, eps: Tensor
+) -> tuple[Tensor, Tensor]:
+    """RBF inverse quadratic kernel function."""
+    cdist = torch.cdist(X, Xother)
+    scaled_cdist = eps[..., None, None] * cdist
+    kernel = (scaled_cdist.square() + 1).reciprocal()
+    return cdist, kernel
+
+
+@trace((torch.rand(5, 4, 3), torch.rand(5, 4, 1), torch.rand(()), torch.rand(())))
+def _rbf_fit(
+    X: Tensor, Y: Tensor, eps: Tensor, svd_tol: Tensor
+) -> tuple[Tensor, Tensor]:
+    """Fits the RBF regression model to the training data."""
+    _, M = _cdist_and_inverse_quadratic_kernel(X, X, eps)
+    U, S, VT = torch.linalg.svd(M)
+    S = S.where(S > svd_tol, torch.inf)
+    Minv = VT.transpose(-2, -1).div(S.unsqueeze(-2)).matmul(U.transpose(-2, -1))
+    coeffs = Minv.matmul(Y)
+    return Minv, coeffs
+
+
+@script(
+    example_inputs=[
+        (
+            torch.rand(2, 5, 3),
+            torch.rand(2, 5, 1),
+            torch.rand(()),
+            torch.rand(2, 3, 3),
+            torch.rand(2, 3, 1),
+        )
+    ]
+)  # unable to trace this one
+def _rbf_partial_fit(
+    X: Tensor, Y: Tensor, eps: Tensor, Minv: Tensor, coeffs: Tensor
+) -> tuple[Tensor, Tensor]:
+    """Fits the given RBF regression to the new training data."""
+    n = coeffs.shape[-2]  # index of the first new data point onwards
+    X_new = X[..., n:, :]
+    _, Phi_and_phi = _cdist_and_inverse_quadratic_kernel(X_new, X, eps)
+    PhiT = Phi_and_phi[..., :n]
+    phi = Phi_and_phi[..., n:]
+    L = Minv.matmul(PhiT.transpose(-2, -1))
+    S = phi - PhiT.matmul(L)  # Schur complement
+    Sinv = torch.linalg.inv(S)
+    B = -L.matmul(Sinv)
+    A = Minv - B.matmul(L.transpose(-2, -1))
+    Minv_new = torch.cat(
+        (torch.cat((A, B), -1), torch.cat((B.transpose(-2, -1), Sinv), -1)), -2
+    )
+    coeffs_new = Minv_new.matmul(Y)
+    return Minv_new, coeffs_new
+
+
+@trace(
+    (
+        torch.rand(5, 4, 3),
+        torch.rand(5, 4, 1),
+        torch.rand(()),
+        torch.rand(5, 4, 1),
+        torch.rand(5, 3, 3),
+    )
+)
+def _rbf_predict(
+    train_X: Tensor, train_Y: Tensor, eps: Tensor, coeffs: Tensor, X: Tensor
+) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    """Predicts mean and scale for RBF regression."""
+    # NOTE: here, we do not use `KernelLinearOperator` so as to avoid computing the
+    # distance from `X` to `train_X` twice, one in the linear operator and one in the
+    # `idw_weighting` function.
+    dist, M = _cdist_and_inverse_quadratic_kernel(X, train_X, eps)
+    mean = M.matmul(coeffs)
+    W = dist.square().clamp_min(DELTA).reciprocal()
+    W_sum_recipr = W.sum(-1, keepdim=True).reciprocal()
+    V = W.mul(W_sum_recipr)
+    std = _idw_scale(mean, train_Y, V)
+    return mean, std, W_sum_recipr, V
+
+
 class BaseRegression(Model):
     """Base class for a regression model."""
 
@@ -114,39 +248,6 @@ class BaseRegression(Model):
         return posterior
 
 
-def _idw_scale(Y: Tensor, train_Y: Tensor, V: Tensor) -> Tensor:
-    """Computes the IDW standard deviation function.
-
-    Parameters
-    ----------
-    Y : Tensor
-        `(b0 x b1 x ...) x n x 1` estimates of function values at the candidate points.
-    train_Y : Tensor
-        `(b0 x b1 x ...) x m x 1` training data points.
-    V : Tensor
-        `(b0 x b1 x ...) x n x m` normalized IDW weights.
-
-    Returns
-    -------
-    Tensor
-        The standard deviation of shape `(b0 x b1 x ...) x n x 1`.
-    """
-    scaled_diff = V.sqrt().mul(train_Y.transpose(-1, -2) - Y)
-    return torch.linalg.vector_norm(scaled_diff, dim=-1, keepdim=True)
-
-
-def _idw_predict(
-    train_X: Tensor, train_Y: Tensor, X: Tensor
-) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-    """Mean and scale for IDW regression."""
-    W = torch.cdist(X, train_X).square().clamp_min(DELTA).reciprocal()
-    W_sum_recipr = W.sum(-1, keepdim=True).reciprocal()
-    V = W.mul(W_sum_recipr)
-    mean = V.matmul(train_Y)
-    std = _idw_scale(mean, train_Y, V)
-    return mean, std, W_sum_recipr, V
-
-
 class Idw(BaseRegression):
     """Inverse Distance Weighting regression model in Global Optimization."""
 
@@ -171,66 +272,6 @@ class Idw(BaseRegression):
                   the number of training points.
         """
         return _idw_predict(self.train_X, self.train_Y, X)
-
-
-def _cdist_and_inverse_quadratic_kernel(
-    X: Tensor, Y: Tensor, eps: Tensor
-) -> tuple[Tensor, Tensor]:
-    """RBF inverse quadratic kernel function."""
-    cdist = torch.cdist(X, Y)
-    scaled_cdist = eps[..., None, None] * cdist
-    kernel = torch.scalar_tensor(1.0).addcmul(scaled_cdist, scaled_cdist).reciprocal()
-    return cdist, kernel
-
-
-def _rbf_fit(
-    X: Tensor, Y: Tensor, eps: Tensor, svd_tol: Tensor
-) -> tuple[Tensor, Tensor]:
-    """Fits the RBF regression model to the training data."""
-    _, M = _cdist_and_inverse_quadratic_kernel(X, X, eps)
-    U, S, VT = torch.linalg.svd(M)
-    S = S.where(S > svd_tol, torch.inf)
-    Minv = VT.transpose(-2, -1).div(S.unsqueeze(-2)).matmul(U.transpose(-2, -1))
-    coeffs = Minv.matmul(Y)
-    return Minv, coeffs
-
-
-def _rbf_partial_fit(
-    X: Tensor, Y: Tensor, eps: Tensor, Minv: Tensor, coeffs: Tensor
-) -> tuple[Tensor, Tensor]:
-    """Fits the given RBF regression to the new training data."""
-    n = coeffs.size(-2)  # index of the first new data point onwards
-    # m = X.size(-2)  # total number of training points, including new ones
-    X_new = X[..., n:, :]
-    _, Phi_and_phi = _cdist_and_inverse_quadratic_kernel(X_new, X, eps)
-    PhiT = Phi_and_phi[..., :n]
-    phi = Phi_and_phi[..., n:]
-    L = Minv.matmul(PhiT.transpose(-2, -1))
-    S = phi - PhiT.matmul(L)  # Schur complement
-    Sinv = torch.linalg.inv(S)
-    B = -L.matmul(Sinv)
-    A = Minv - B.matmul(L.transpose(-2, -1))
-    Minv_new = torch.cat(
-        (torch.cat((A, B), -1), torch.cat((B.transpose(-2, -1), Sinv), -1)), -2
-    )
-    coeffs_new = Minv_new.matmul(Y)
-    return Minv_new, coeffs_new
-
-
-def _rbf_predict(
-    train_X: Tensor, train_Y: Tensor, eps: Tensor, coeffs: Tensor, X: Tensor
-) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-    """Predicts mean and scale for RBF regression."""
-    # NOTE: here, we do not use `KernelLinearOperator` so as to avoid computing the
-    # distance from `X` to `train_X` twice, one in the linear operator and one in the
-    # `idw_weighting` function.
-    dist, M = _cdist_and_inverse_quadratic_kernel(X, train_X, eps)
-    mean = M.matmul(coeffs)
-    W = dist.square().clamp_min(DELTA).reciprocal()
-    W_sum_recipr = W.sum(-1, keepdim=True).reciprocal()
-    V = W.mul(W_sum_recipr)
-    std = _idw_scale(mean, train_Y, V)
-    return mean, std, W_sum_recipr, V
 
 
 class Rbf(BaseRegression):

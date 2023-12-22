@@ -20,9 +20,10 @@ from botorch.sampling.base import MCSampler
 from botorch.utils import t_batch_mode_transform
 from torch import Tensor
 
-from globopt.regression import Idw, Rbf, _idw_scale
+from globopt.regression import Idw, Rbf, _idw_scale, trace
 
 
+@trace(torch.rand(2, 3, 4, 1))
 def _idw_distance(W_sum_recipr: Tensor) -> Tensor:
     """Computes the IDW distance function.
 
@@ -41,6 +42,16 @@ def _idw_distance(W_sum_recipr: Tensor) -> Tensor:
     return W_sum_recipr.arctan().mul(2 / torch.pi)
 
 
+@trace(
+    (
+        torch.rand(2, 3, 4, 1),
+        torch.rand(2, 3, 4, 1),
+        torch.rand(2, 3, 1, 1),
+        torch.rand(2, 3, 4, 1),
+        torch.rand(()),
+        torch.rand(()),
+    )
+)
 def acquisition_function(
     Y_hat: Tensor,
     Y_std: Tensor,
