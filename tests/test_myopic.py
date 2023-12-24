@@ -5,8 +5,8 @@ import torch
 
 from globopt.myopic_acquisitions import (
     IdwAcquisitionFunction,
-    _acquisition_function,
     _idw_distance,
+    idw_acquisition_function,
 )
 from globopt.problems import SimpleProblem
 from globopt.regression import Rbf
@@ -29,7 +29,7 @@ class TestAcquisitionFunction(unittest.TestCase):
         y_hat, s, W_sum_recipr, _ = mdl(x)
         dym = Y.amax(-2) - Y.amin(-2)
         z = _idw_distance(W_sum_recipr)
-        a2 = _acquisition_function(y_hat, s, dym, W_sum_recipr, MAF.c1, MAF.c2).neg()
+        a2 = idw_acquisition_function(y_hat, s, dym, W_sum_recipr, MAF.c1, MAF.c2).neg()
 
         out = torch.stack((s.squeeze(), z.squeeze(), a2.squeeze()))
         out_expected = torch.as_tensor(RESULTS["acquisitions"], dtype=a1.dtype)

@@ -20,8 +20,8 @@ from botorch.sampling import SobolQMCNormalSampler
 from globopt.myopic_acquisitions import (
     GaussHermiteSampler,
     IdwAcquisitionFunction,
-    _acquisition_function,
     _idw_distance,
+    idw_acquisition_function,
     qIdwAcquisitionFunction,
 )
 from globopt.problems import SimpleProblem
@@ -54,7 +54,7 @@ c1 = 1.0
 c2 = 0.5
 y_span = train_Y.amax(-2, keepdim=True) - train_Y.amin(-2, keepdim=True)
 z = _idw_distance(W_sum_recipr)
-a = _acquisition_function(y_hat, s, y_span, W_sum_recipr, c1, c2).squeeze()
+a = idw_acquisition_function(y_hat, s, y_span, W_sum_recipr, c1, c2).squeeze()
 
 # compute minimizer of analytic myopic acquisition function
 x_opt, a_opt = optimize_acqf(

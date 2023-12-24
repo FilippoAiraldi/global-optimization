@@ -10,20 +10,24 @@ from datetime import datetime
 from itertools import chain, cycle, product
 from pathlib import Path
 from time import perf_counter
+from typing import Union
 
 import numpy as np
 import torch
 from botorch.acquisition import ExpectedImprovement
+from botorch.fit import fit_gpytorch_mll
 from botorch.models import SingleTaskGP
 from botorch.optim import optimize_acqf
+from botorch.utils import standardize
+from gpytorch.mlls import ExactMarginalLogLikelihood
 from joblib import Parallel, delayed
 from scipy.stats.qmc import LatinHypercube
 from status import filter_tasks_by_status
 from torch import Tensor
 
-from globopt.myopic_acquisitions import IdwAcquisitionFunction
+from globopt.myopic_acquisitions import IdwAcquisitionFunction, idw_acquisition_function
 from globopt.problems import get_available_benchmark_problems, get_benchmark_problem
-from globopt.regression import Idw, Rbf
+from globopt.regression import DELTA, Idw, Rbf
 
 BENCHMARK_PROBLEMS = get_available_benchmark_problems()
 FNV_OFFSET = 0xCBF29CE484222325
@@ -81,9 +85,9 @@ def run_problem(
     # set hyperparameters
     ndim = problem.dim
     n_init = ndim * 2
-    c1 = 1.0 / ndim
-    c2 = 0.5 / ndim
-    eps = 1.0 / ndim
+    c1 = torch.scalar_tensor(1.0 / ndim)
+    c2 = torch.scalar_tensor(0.5 / ndim)
+    eps = torch.scalar_tensor(1.0 / ndim)
     num_restarts = 16 * ndim
     raw_samples = 32 * ndim
 
@@ -98,14 +102,30 @@ def run_problem(
     # sampler = SobolQMCNormalSampler(mc_samples, seed=mk_seed())
 
     # define mdoel and acquisition function getters
-    # TODO: different getters for each method
     if method == "ei":
 
-        def get_mdl(X: Tensor, Y: Tensor, prev_mdl: SingleTaskGP) -> SingleTaskGP:
-            # TODO: standardize Y, create model, fit it, load dict state
-            pass
+        def get_mdl(X: Tensor, Y: Tensor, _) -> SingleTaskGP:
+            Y = Y.unsqueeze(-1)
+            mdl = SingleTaskGP(X, standardize(Y))
+            fit_gpytorch_mll(ExactMarginalLogLikelihood(mdl.likelihood, mdl))
+            mdl.train_X = X
+            mdl.train_Y = Y
+            return mdl
 
-        get_acqfun = lambda mdl, Y: ExpectedImprovement(mdl, Y.amin(), maximize=False)
+        def get_next_point_and_reward(model: SingleTaskGP) -> tuple[Tensor, float]:
+            acqfun = ExpectedImprovement(model, model.train_Y.amin(), maximize=False)
+            X_opt, _ = optimize_acqf(
+                acqfun, bounds, 1, num_restarts, raw_samples, {"seed": mk_seed()}
+            )
+            # manually compute the reward, since the model is a GP
+            posterior = model.posterior(X_opt)
+            Y_min, Y_max = model.train_Y.aminmax(dim=-2, keepdim=True)
+            W = torch.cdist(X_opt, model.train_X).square().clamp_min(DELTA).reciprocal()
+            W_sum_recipr = W.sum(-1, keepdim=True).reciprocal()
+            acq_opt = idw_acquisition_function(
+                posterior.mean, posterior.stddev, Y_max - Y_min, W_sum_recipr, c1, c2
+            )
+            return X_opt, acq_opt.item()
 
     elif method == "myopic":
         if regression_type == "rbf":
@@ -115,11 +135,20 @@ def run_problem(
                 return Rbf(X, Y, eps, Minv_and_coeffs=Mc)
 
         elif regression_type == "idw":
-            get_mdl = lambda X, Y, _: Idw(X, Y)
+
+            def get_mdl(X: Tensor, Y: Tensor, _) -> Idw:
+                return Idw(X, Y)
+
         else:
             raise RuntimeError(f"Unrecognized regression type {regression_type}.")
 
-        get_acqfun = lambda mdl, *_: IdwAcquisitionFunction(mdl, c1, c2)
+        def get_next_point_and_reward(model: Union[Rbf, Idw]) -> tuple[Tensor, float]:
+            acqfun = IdwAcquisitionFunction(model, c1, c2)
+            X_opt, acq_opt = optimize_acqf(
+                acqfun, bounds, 1, num_restarts, raw_samples, {"seed": mk_seed()}
+            )
+            return X_opt, acq_opt.item()
+
     else:
         raise NotImplementedError
 
@@ -131,13 +160,9 @@ def run_problem(
     for _ in range(maxiter):
         start_time = perf_counter()
 
-        # fit model and optimize acquisition function
+        # fit model and optimize acquisition function to get the next point to sample
         mdl = get_mdl(X, Y, prev_mdl)
-        acqfun = get_acqfun(mdl, Y)
-        X_opt, acq_opt = optimize_acqf(
-            acqfun, bounds, 1, num_restarts, raw_samples, {"seed": mk_seed()}
-        )
-        # TODO: implement optimized_acqf_and_obtain_next_point
+        X_opt, acq_opt = get_next_point_and_reward(mdl)
 
         # evaluate objective function at the new point, and append it to training data
         X = torch.cat((X, X_opt))
@@ -145,11 +170,7 @@ def run_problem(
 
         # compute and save best-so-far and incurred cost
         best_so_far.append(Y.amin().item())
-        stage_reward.append(
-            acq_opt.item()
-            if isinstance(acqfun, IdwAcquisitionFunction)
-            else IdwAcquisitionFunction(mdl, c1, c2)(X_opt).item()
-        )
+        stage_reward.append(acq_opt)
         prev_mdl = mdl
         iteration_times.append(perf_counter() - start_time)
 
@@ -157,7 +178,7 @@ def run_problem(
     rewards = ",".join(map(str, stage_reward))
     bests = ",".join(map(str, best_so_far))
     lock_write(csv, f"{problem_name};{method};{rewards};{bests};{iteration_times}")
-    del problem, mdl, acqfun, X, Y, X_opt, best_so_far, stage_reward
+    del problem, mdl, X, Y, X_opt, best_so_far, stage_reward
     if device.startswith("cuda"):
         torch.cuda.empty_cache()
 
