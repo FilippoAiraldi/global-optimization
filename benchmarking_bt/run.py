@@ -17,6 +17,7 @@ from botorch.models import SingleTaskGP
 from botorch.optim import optimize_acqf
 from joblib import Parallel, delayed
 from scipy.stats.qmc import LatinHypercube
+from status import filter_tasks_by_status
 from torch import Tensor
 
 from globopt.myopic_acquisitions import IdwAcquisitionFunction
@@ -183,8 +184,9 @@ def run_benchmarks(
         p: np.random.SeedSequence(fnv1a_64(p, seed)).generate_state(n_trials)
         for p in problems
     }
-    # TODO: rework task filtering
-    tasks = product(range(n_trials), problems, methods_and_horizons)
+    tasks = filter_tasks_by_status(
+        product(range(n_trials), problems, methods_and_horizons), csv
+    )
     Parallel(n_jobs=n_jobs, verbose=100, backend="loky")(
         delayed(run_problem)(prob, methodhor, seeds[prob][trial], csv, device)
         for (trial, prob, methodhor), device in zip(tasks, cycle(devices))
