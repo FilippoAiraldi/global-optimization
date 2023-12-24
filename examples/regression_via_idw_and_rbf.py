@@ -12,55 +12,54 @@ References
 """
 
 import matplotlib.pyplot as plt
-import numpy as np
+import torch
+from botorch.models.model import Model
 
-from globopt.core.problems import Simple1dProblem
-from globopt.core.regression import (
-    Idw,
-    Kernel,
-    Rbf,
-    RegressorType,
-    fit,
-    partial_fit,
-    predict,
-)
+from globopt.problems import SimpleProblem
+from globopt.regression import Idw, Rbf
 
+torch.manual_seed(0)
+torch.use_deterministic_algorithms(True)
+torch.set_default_dtype(torch.float32)  # with RBF regressor, float32 may not be enough
+torch.set_default_device(torch.device("cpu"))
 plt.style.use("bmh")
-
-
-f = Simple1dProblem.f
 
 
 # create data points - X has shape (batch, n_samples, dim). Since we only have one
 # batch of data, its dimension is 1
-X = np.array([-2.61, -1.92, -0.63, 0.38, 2]).reshape(1, -1, 1)
-y = f(X)
+problem = SimpleProblem()
+train_X = torch.as_tensor([-2.61, -1.92, -0.63, 0.38, 2], device="cpu").unsqueeze(-1)
+train_Y = problem(train_X)
 
-# fit regression models to first 3 data points
-mdls: list[RegressorType] = [
-    Idw(),
-    Idw(True),
-    Rbf(Kernel.InverseQuadratic, 0.5),
-    Rbf(Kernel.ThinPlateSpline, 0.01),
+# fit regression models - only first n points for now
+n = 3
+mdls: list[Model] = [
+    Idw(train_X[:n], train_Y[:n]),
+    Rbf(train_X[:n], train_Y[:n], eps=0.5),
+    Rbf(train_X[:n], train_Y[:n], eps=2.0),
 ]
-mdls = [fit(mdl, X[:, :3], y[:, :3]) for mdl in mdls]
 
-# partially fit regression models to remaining data points
-mdls = [partial_fit(mdl, X[:, 3:], y[:, 3:]) for mdl in mdls]
+# to partially fit new data, pass new dataset, and only the newest data will be used
+for i in range(len(mdls)):
+    mdl = mdls[i]
+    if isinstance(mdl, Idw):
+        mdls[i] = Idw(train_X, train_Y)  # easier than RBFs
+    else:
+        # for RBFs, pass also the previously fitted results
+        mdls[i] = Rbf(train_X, train_Y, mdl.eps, mdl.svd_tol, (mdl.Minv, mdl.coeffs))
 
 # predict values over all domain via the fitted models
-x = np.linspace(-3, 3, 1000).reshape(1, -1, 1)
-y_hat = [predict(mdl, x).squeeze() for mdl in mdls]
+X = torch.linspace(-3, 3, 1000).view(-1, 1, 1)
+Y_hat = [mdl.posterior(X).mean for mdl in mdls]
 
 # plot model predictions
-x = x.flatten()
 _, ax = plt.subplots(constrained_layout=True, figsize=(7, 3))
-ax.plot(X.squeeze(), y.squeeze(), "o", markersize=9, color="C0")
-ax.plot(x, f(x), "--", label="f(x)", lw=3)
-for mdl, y_hat_ in zip(mdls, y_hat):
-    ax.plot(x, y_hat_, label=str(mdl))
+ax.plot(train_X.squeeze(), train_Y.squeeze(), "o", markersize=9, color="C0")
+ax.plot(X.squeeze(), problem(X).squeeze(), "--", label="f(x)", lw=3)
+for mdl, Y_hat_ in zip(mdls, Y_hat):
+    ax.plot(X.squeeze(), Y_hat_.squeeze(), label=mdl.__class__.__name__)
 ax.set_xlabel("x")
-ax.set_xlim(-3, 3)
+ax.set_xlim(*problem._bounds[0])
 ax.set_ylim(0, 2.5)
 ax.legend()
 plt.show()

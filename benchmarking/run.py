@@ -3,163 +3,258 @@ Benchmarking of myopic and non-myopic Global Optimization strategies on syntheti
 problems.
 """
 
-
-import os
-
-os.environ["NUMBA_NUM_THREADS"] = "1"
-
 import argparse
-import sys
-from contextlib import contextmanager
+import fcntl
+from collections.abc import Iterable
 from datetime import datetime
-from itertools import product
-from multiprocessing import shared_memory
-from time import sleep
+from itertools import chain, cycle, product
+from pathlib import Path
 
 import numpy as np
+import torch
+from botorch.acquisition import ExpectedImprovement
+from botorch.models import SingleTaskGP
+from botorch.optim import optimize_acqf
 from joblib import Parallel, delayed
+from scipy.stats.qmc import LatinHypercube
+from status import filter_tasks_by_status
+from torch import Tensor
 
-from globopt.core.problems import (
-    get_available_benchmark_problems,
-    get_available_simple_problems,
-    get_benchmark_problem,
-)
-from globopt.core.regression import Idw, Rbf
-from globopt.myopic.algorithm import go
-from globopt.nonmyopic.algorithm import nmgo
-from globopt.util.callback import (
-    BestSoFarCallback,
-    CallbackCollection,
-    DpStageCostCallback,
-)
-
-sys.path.append(os.getcwd())
-
-from benchmarking.status import filter_tasks_by_status
+from globopt.myopic_acquisitions import IdwAcquisitionFunction
+from globopt.problems import get_available_benchmark_problems, get_benchmark_problem
+from globopt.regression import Idw, Rbf
 
 BENCHMARK_PROBLEMS = get_available_benchmark_problems()
-SIMPLE_PROBLEMS = get_available_simple_problems()
+FNV_OFFSET = 0xCBF29CE484222325
+FNV_PRIME = 0x100000001B3
 
 
-@contextmanager
-def shm_lock(
-    shm_name: str, sleep_interval: float = 1.0, max_wait_intervals: int = 100
-) -> None:
-    """Emulates a lock using a shared memory object."""
-    shm = shared_memory.SharedMemory(name=shm_name)
-    for _ in range(max_wait_intervals):
-        if shm.buf[0] == 0:
-            break
-        sleep(sleep_interval)
+# TODO: why are 250Mib allocated in cuda:0 when running on cpu?
+
+
+def convert_methods_arg(method: str) -> Iterable[str]:
+    """Given a `method` argument, decodes the horizon values from it, and returns an
+    iterable of (method, horizon)-strings (if the method is myopic, the horizon is not
+    included in the string)."""
+    if method.startswith("ei") or method.startswith("myopic"):
+        yield method
+    elif method.startswith("rollout") or method.startswith("multi-tree"):
+        method, *horizons = method.split(".")
+        for horizon in horizons:
+            if int(horizon) < 2:
+                raise argparse.ArgumentTypeError(
+                    "Horizons for non-myopic methods must be greater than 1; got "
+                    f"{method} with horizon {horizon} instead."
+                )
+            yield f"{method}.{horizon}"
     else:
-        raise RuntimeError("Timeout waiting for shared memory lock.")
-    shm.buf[0] = 1
-    try:
-        yield
-    finally:
-        shm.buf[0] = 0
-        shm.close()
+        raise argparse.ArgumentTypeError(f"Unrecognized method {method}.")
+
+
+def fnv1a_64(s: str, base_seed: int = 0) -> int:
+    """Creates a 64-bit hash of the given string using the FNV-1a algorithm."""
+    hash64 = FNV_OFFSET + base_seed
+    for char in s:
+        hash64 ^= ord(char)
+        hash64 *= FNV_PRIME
+        hash64 &= 0xFFFFFFFFFFFFFFFF  # Ensure hash is 64-bit
+    return hash64
+
+
+def lock_write(filename: str, data: str) -> None:
+    """Appends data to file, locking it to prevent concurrent writes."""
+    with open(filename, "a", encoding="utf-8") as f:
+        try:
+            fcntl.lockf(f, fcntl.LOCK_EX)
+            f.write(data + "\n")
+        finally:
+            fcntl.lockf(f, fcntl.LOCK_UN)
 
 
 def run_problem(
-    problem_name: str, horizon: int, seed: int, output_csv: str, shm_name: str
+    problem_name: str, method: str, seed: int, csv: str, device: str
 ) -> None:
-    """Solves the given problem with the given algorithm (based on the specified
-    horizon), and saves as result the performance of the run in terms of best-so-far
-    and total cost."""
-    c1, c2, eps = 1.0, 0.5, 1.0
-    bsf_callback = BestSoFarCallback()
-    dp_callback = DpStageCostCallback()
-    callbacks = CallbackCollection(bsf_callback, dp_callback)
+    """Runs the given problem, with the given horizon, and writes the results to csv."""
+    torch.set_default_device(device)
+    torch.set_default_dtype(torch.float64)
+    torch.manual_seed(seed)
     problem, maxiter, regression_type = get_benchmark_problem(problem_name)
-    kwargs = {
-        "func": problem.f,
-        "lb": problem.lb,
-        "ub": problem.ub,
-        "mdl": Rbf(eps=eps / problem.dim) if regression_type == "rbf" else Idw(),
-        "init_points": problem.dim,
-        "c1": c1 / problem.dim,
-        "c2": c2 / problem.dim,
-        "maxiter": maxiter,
-        "seed": seed,
-        "callback": callbacks,
-        "pso_kwargs": {
-            "swarmsize": 5 * problem.dim,
-            "xtol": 1e-9,
-            "ftol": 1e-9,
-            "maxiter": 300,
-            "patience": 10,
-        },
-    }
-    if horizon == 1:
-        go(**kwargs)
+
+    # set hyperparameters
+    ndim = problem.dim
+    n_init = ndim * 2
+    c1 = 1.0 / ndim
+    c2 = 0.5 / ndim
+    eps = 1.0 / ndim
+    num_restarts = 16 * ndim
+    raw_samples = 32 * ndim
+
+    # draw random initial points via LHS
+    np_random = np.random.default_rng(seed)
+    mk_seed = lambda: int(np_random.integers(0, 2**32 - 1))
+    lhs = LatinHypercube(ndim, seed=mk_seed())
+    bounds: Tensor = problem.bounds
+    X = torch.as_tensor(lhs.random(n_init)) * (bounds[1] - bounds[0]) + bounds[0]
+    Y = problem(X)
+    # mc_samples = 2 ** ceil(log2(256 * horizon))
+    # sampler = SobolQMCNormalSampler(mc_samples, seed=mk_seed())
+
+    # define mdoel and acquisition function getters
+    # TODO: different getters for each method
+    if method == "ei":
+
+        def get_mdl(X: Tensor, Y: Tensor, prev_mdl: SingleTaskGP) -> SingleTaskGP:
+            # TODO: standardize Y, create model, fit it, load dict state
+            pass
+
+        get_acqfun = lambda mdl, Y: ExpectedImprovement(mdl, Y.amin(), maximize=False)
+
+    elif method == "myopic":
+        if regression_type == "rbf":
+
+            def get_mdl(X: Tensor, Y: Tensor, prev_mdl: Rbf) -> Rbf:
+                Mc = None if prev_mdl is None else prev_mdl.Minv_and_coeffs
+                return Rbf(X, Y, eps, Minv_and_coeffs=Mc)
+
+        elif regression_type == "idw":
+            get_mdl = lambda X, Y, _: Idw(X, Y)
+        else:
+            raise RuntimeError(f"Unrecognized regression type {regression_type}.")
+
+        get_acqfun = lambda mdl, *_: IdwAcquisitionFunction(mdl, c1, c2)
     else:
-        nmgo(horizon=horizon, discount=1.0, mc_iters=0, parallel=None, **kwargs)
-    cost = sum(dp_callback)
-    bests = ",".join(map(str, bsf_callback))
-    with shm_lock(shm_name), open(output_csv, "a") as f:
-        f.write(f"{problem_name},{horizon},{cost},{bests}\n")
+        raise NotImplementedError
+
+    # run optimization loop
+    prev_mdl = None
+    best_so_far: list[float] = [Y.amin().item()]
+    stage_reward: list[float] = []
+    start_events = [torch.cuda.Event(enable_timing=True) for _ in range(maxiter)]
+    end_events = [torch.cuda.Event(enable_timing=True) for _ in range(maxiter)]
+    for i in range(maxiter):
+        start_events[i].record()
+
+        # fit model and optimize acquisition function
+        mdl = get_mdl(X, Y, prev_mdl)
+        acqfun = get_acqfun(mdl, Y)
+        X_opt, acq_opt = optimize_acqf(
+            acqfun, bounds, 1, num_restarts, raw_samples, {"seed": mk_seed()}
+        )
+        # TODO: implement optimized_acqf_and_obtain_next_point
+
+        # evaluate objective function at the new point, and append it to training data
+        X = torch.cat((X, X_opt))
+        Y = torch.cat((Y, problem(X_opt)))
+
+        # compute and save best-so-far and incurred cost
+        best_so_far.append(Y.amin().item())
+        stage_reward.append(
+            acq_opt.item()
+            if isinstance(acqfun, IdwAcquisitionFunction)
+            else IdwAcquisitionFunction(mdl, c1, c2)(X_opt).item()
+        )
+        prev_mdl = mdl
+        end_events[i].record()
+
+    # save results, delete references and free memory (at least, try to)
+    torch.cuda.synchronize()
+    rewards = ",".join(map(str, stage_reward))
+    bests = ",".join(map(str, best_so_far))
+    times = ",".join(str(s.elapsed_time(e)) for s, e in zip(start_events, end_events))
+    lock_write(csv, f"{problem_name};{method};{rewards};{bests};{times}")
+    del problem, mdl, acqfun, X, Y, X_opt, best_so_far, stage_reward
+    torch.cuda.empty_cache()
 
 
 def run_benchmarks(
-    problems: list[str], horizons: list[int], trials: int, seed: int, n_jobs: int
+    methods_and_horizons: Iterable[str],
+    problems: list[str],
+    n_trials: int,
+    seed: int,
+    n_jobs: int,
+    csv: str,
+    devices: list[torch.device],
 ) -> None:
-    """Run the benchmarks for the given problems and horizons, repeated per the number
-    of trials."""
+    """Runs the benchmarks for the given problems, methods and horizons, repeated per
+    the number of trials, distributively across the given devices."""
+    # for each problem, create one seed per trial. These are independent of the method
+    # and horizon, so that myopic and non-myopic algorithms start with the same initial
+    # conditions; moreover, they are crafted out of the name of the problem, so that new
+    # benchmarks (with different, new names) can be added without having to simulate all
+    # again. Lastly, they are also subsquent, so that new trials can be appended freely.
     if problems == ["all"]:
         problems = BENCHMARK_PROBLEMS
-
-    # create seeds that are independent of the horizons
-    child_seeds = np.random.SeedSequence(seed).spawn(len(problems))
-    seeds = {p: child_seeds[i].generate_state(trials) for i, p in enumerate(problems)}
-
-    # create name of csv that will be filled with the results of each iteration
-    nowstr = datetime.now().strftime("%Y%m%d_%H%M%S")
-    csv = f"results_{nowstr}.csv"
-
-    # create shared mem lock and launch each benchmarking iteration in parallel
-    shm = shared_memory.SharedMemory(create=True, size=1)
-    shm.buf[0] = 0  # set to unlocked
-    tasks = filter_tasks_by_status(product(range(trials), problems, horizons), csv)
-    try:
-        Parallel(n_jobs=n_jobs, verbose=100, backend="loky")(
-            delayed(run_problem)(p, h, seeds[p][t], csv, shm.name) for t, p, h in tasks
-        )
-    finally:
-        shm.close()
-        shm.unlink()
+    seeds = {
+        p: np.random.SeedSequence(fnv1a_64(p, seed)).generate_state(n_trials)
+        for p in problems
+    }
+    tasks = filter_tasks_by_status(
+        product(range(n_trials), problems, methods_and_horizons), csv
+    )
+    Parallel(n_jobs=n_jobs, verbose=100, backend="loky")(
+        delayed(run_problem)(prob, methodhor, seeds[prob][trial], csv, device)
+        for (trial, prob, methodhor), device in zip(tasks, cycle(devices))
+    )
 
 
 if __name__ == "__main__":
     # parse the arguments
     parser = argparse.ArgumentParser(
-        description="Benchmarking of GO strategies on synthetic problems.",
+        description="Benchmarking of Global Optimization strategies on synthetic "
+        "benchmark problems.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument(
+    group = parser.add_argument_group("Benchmarking options")
+    group.add_argument(
+        "--methods",
+        type=convert_methods_arg,
+        nargs="+",
+        help="Methods to run the benchmarking on. Greedy algorithms include `ei` and "
+        " `myopic`. Non-myopic algorithms are `rollout` and `multi-tree`, where the "
+        "horizons to simulate can be specified with a dot folloewd by (one or more) "
+        "horizons, e.g., `rollout.2.3`. These horizons should be larger than 1.",
+        required=True,
+    )
+    group.add_argument(
         "--problems",
-        choices=["all"] + BENCHMARK_PROBLEMS + SIMPLE_PROBLEMS,
+        choices=["all"] + BENCHMARK_PROBLEMS,
         nargs="+",
         default=["all"],
         help="Problems to include in the benchmarking.",
     )
-    parser.add_argument(
-        "--horizons",
-        type=int,
+    group.add_argument(
+        "--n-trials", type=int, default=30, help="Number  of trials to run per problem."
+    )
+    group = parser.add_argument_group("Simulation options")
+    group.add_argument(
+        "--n-jobs", type=int, default=2, help="Number (positive) of parallel processes."
+    )
+    group.add_argument("--seed", type=int, default=0, help="RNG seed.")
+    group.add_argument("--csv", type=str, default="", help="Output csv filename.")
+    group.add_argument(
+        "--devices",
+        type=str,
         nargs="+",
-        default=[1, 2, 3, 4, 5],
-        help="Horizons for non-myopic strategies to benchmark.",
+        default=["cpu"],
+        help="List of torch devices to use, e.g., `cpu`, `cuda:0`, etc..",
     )
-    parser.add_argument(
-        "--n-trials", type=int, default=30, help="Number of trials to run per problem."
-    )
-    parser.add_argument(
-        "--n-jobs", type=int, default=1, help="Number of parallel processes."
-    )
-    parser.add_argument("--seed", type=int, default=1909, help="RNG seed.")
     args = parser.parse_args()
 
-    # run the benchmarks
-    run_benchmarks(args.problems, args.horizons, args.n_trials, args.seed, args.n_jobs)
+    # if the output csv is not specified, create it, and write header if anew
+    if args.csv is None or args.csv == "":
+        args.csv = f"results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    elif not args.csv.endswith(".csv"):
+        args.csv += ".csv"
+    if not Path(args.csv).is_file():
+        lock_write(args.csv, "problem;method;stage-reward;best-so-far;time")
 
-# python benchmarking/run.py --problems=all --horizons 1 2 4 6 --n-trials=30 --n-jobs=6 --seed=0
+    # run the benchmarks
+    run_benchmarks(
+        chain.from_iterable(args.methods),
+        args.problems,
+        args.n_trials,
+        args.seed,
+        args.n_jobs,
+        args.csv,
+        args.devices,
+    )

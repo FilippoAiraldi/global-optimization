@@ -4,27 +4,18 @@
 import argparse
 from collections.abc import Iterable, Iterator
 from datetime import datetime
-from typing import Optional
+from pathlib import Path
 
-import matplotlib.pyplot as plt
-from prettytable import PrettyTable
-
-from globopt.core.problems import (
-    get_available_benchmark_problems,
-    get_available_simple_problems,
-    get_benchmark_problem,
-)
-
-PROBLEMS = get_available_benchmark_problems() + get_available_simple_problems()
+import pandas as pd
 
 
-def get_status(filename_for_status: str) -> dict[str, dict[int, int]]:
-    """Computes the status of the run.
+def get_status(csv: str) -> pd.DataFrame:
+    """Computes the status of the run, given its csv file.
 
     Parameters
     ----------
-    filename : str
-        filename of the results whose status needs to be retrieved.
+    csv : str
+        csv filename of the results whose status needs to be retrieved.
 
     Returns
     -------
@@ -32,85 +23,46 @@ def get_status(filename_for_status: str) -> dict[str, dict[int, int]]:
         Returns the status of the run, i.e., the number of iterations for each problem
         and for each horizon that has already been computed.
     """
-    out: dict[str, dict[int, int]] = {}
-
-    try:
-        with open(filename_for_status) as f:
-            lines = f.readlines()  # better to read all at once
-    except FileNotFoundError:
-        return out
-
-    maxiters = {n: get_benchmark_problem(n)[1] + 1 for n in PROBLEMS}
-    for line in lines:
-        elements = line.split(",")
-        name = elements[0]
-        horizon = int(elements[1])
-
-        iters = len(elements[3:])
-        assert iters == maxiters[name], (
-            f"Incorrect number of iterations for {name}; expected {maxiters[name]}, got"
-            f" {iters} instead."
+    return (
+        pd.read_csv(  # better to read all at once
+            csv,
+            sep=";",
+            dtype={"problem": pd.StringDtype(), "method": pd.StringDtype()},
+            usecols=["problem", "method"],
         )
-
-        if name not in out:
-            out[name] = {}
-        if horizon not in out[name]:
-            out[name][horizon] = 0
-        out[name][horizon] += 1
-    return out
+        .groupby(["problem", "method"], dropna=False)
+        .size()
+    )
 
 
 def filter_tasks_by_status(
-    tasks: Iterator[tuple[int, str, int]], filename_for_status: str
+    tasks: Iterator[tuple[int, str, str]], csv: str
 ) -> Iterable[tuple[int, str, int]]:
-    """Filters the given tasks by the status of the given run.
+    """Yields tasks filtering out the already completed ones (taken from the given csv).
 
     Parameters
     ----------
-    tasks : Iterator of (int, str, int)
-        Iterator of tasks to be filtered, i.e., (trial, problem name, horizon) tuples.
-    filename : str
-        The filename of the results whose status needs to be retrieved.
+    tasks : Iterator of (int, str, str)
+        Iterator of tasks to be filtered, i.e., (trial, problem name, method) tuples.
+    csv : str
+        The filename of the csv whose status needs to be retrieved.
 
     Yields
     ------
-    Iterable of (int, str, int)
+    Iterable of (int, str, str)
         Filtered tasks that have not been completed yet.
     """
-    status = get_status(filename_for_status)
-    for trial, name, horizon in tasks:
-        if (
-            (name not in status)
-            or (horizon not in status[name])
-            or (trial >= status[name][horizon])  # trail is 0-based, status is a counter
-        ):
-            yield trial, name, horizon
-
-
-def print_status(data: dict[str, dict[int, int]], tabletitle: Optional[str]) -> None:
-    """Prints the status of the data in the given dictionary."""
-
-    problem_names = set(data.keys())
-    problem_names.update(PROBLEMS)
-    problem_names = sorted(problem_names)
-
-    horizons = set()
-    for h in data.values():
-        horizons.update(h.keys())
-    horizons = sorted(horizons)
-
-    table = PrettyTable()
-    table.field_names = ["Function name"] + [f"h={h}" for h in horizons]
-    if tabletitle is not None:
-        table.title = tabletitle
-    for problem_name in problem_names:
-        name_data = data.get(problem_name)
-        if name_data is None:
-            row_data = ["-" for _ in horizons]
-        else:
-            row_data = [name_data.get(h, 0) for h in horizons]
-        table.add_row([problem_name] + row_data)
-    print(table)
+    # load the file into a dataframe, then loop over all the tasks. If the problem name
+    # does not appear, or if it has never been computed for that method, or if its
+    # number of trials is less than the one specified, then yield the task.
+    if not Path(csv).is_file():
+        yield from tasks
+    df = get_status(csv)
+    index = df.index
+    for trial, name, method in tasks:
+        # trail is 0-based, df holds counters
+        if (name, method) not in index or df.loc[(name, method)] <= trial:
+            yield trial, name, method
 
 
 if __name__ == "__main__":
@@ -129,5 +81,4 @@ if __name__ == "__main__":
 
     # load each result and plot
     for filename in args.filenames:
-        print_status(get_status(filename), f"{filename} @ {datetime.now()}")
-    plt.show()
+        print(filename, "@", datetime.now(), "\n", get_status(filename), "\n")

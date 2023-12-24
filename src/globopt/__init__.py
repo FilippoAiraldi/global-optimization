@@ -1,6 +1,16 @@
 __version__ = "0.0.0"
 
-__all__ = ["go", "nmgo"]
+__all__ = [
+    "qIdwAcquisitionFunction",
+    "GaussHermiteSampler",
+    "Idw",
+    "IdwAcquisitionFunction",
+    "Rbf",
+]
 
-from .myopic.algorithm import go
-from .nonmyopic.algorithm import nmgo
+from globopt.myopic_acquisitions import (
+    GaussHermiteSampler,
+    IdwAcquisitionFunction,
+    qIdwAcquisitionFunction,
+)
+from globopt.regression import Idw, Rbf

@@ -52,7 +52,7 @@ def _idw_distance(W_sum_recipr: Tensor) -> Tensor:
         torch.rand(()),
     )
 )
-def acquisition_function(
+def _acquisition_function(
     Y_hat: Tensor,
     Y_std: Tensor,
     Y_span: Tensor,
@@ -185,7 +185,7 @@ class IdwAcquisitionFunction(AnalyticAcquisitionFunction):
     def forward(self, X: Tensor) -> Tensor:
         # input of this forward is `b x 1 x d`, and output `b`
         posterior = self.model.posterior(X.transpose(-3, -2))
-        return acquisition_function(
+        return _acquisition_function(
             posterior.mean,  # `1 x n x 1`
             posterior._scale,  # `1 x n x 1`
             self.span_Y,  # `1 x 1 x 1` or # `1 x 1`
@@ -263,7 +263,7 @@ class qIdwAcquisitionFunction(MCAcquisitionFunction):
         if hasattr(sampler, "base_weights") and sampler.base_weights is not None:
             scale = sampler.base_weights.unsqueeze(-1).mul(scale).sum(0, keepdim=True)
 
-        acqvals = acquisition_function(
+        acqvals = _acquisition_function(
             posterior.mean,  # `b x q x 1`
             scale,  # `n_samples x b x q x 1` or `1 x b x q x 1` for GH quadrature
             self.span_Y,  # `b x 1 x 1` or # `1 x 1`
