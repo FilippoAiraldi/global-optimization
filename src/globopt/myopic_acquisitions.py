@@ -66,7 +66,7 @@ def _acquisition_function(
     ----------
     Y_hat : Tensor
         `(b0 x b1 x ...) x n x 1` estimates of the function values at the candidate
-        points. `q` is the number of candidate points, and `b`s are the batched
+        points. `n` is the number of candidate points, and `b`s are the batched
         regressor sizes.
     Y_std : Tensor
         `(b0 x b1 x ...) x n x 1` standard deviation of the estimates.
