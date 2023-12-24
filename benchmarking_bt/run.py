@@ -9,7 +9,6 @@ from collections.abc import Iterable
 from datetime import datetime
 from itertools import chain, cycle, product
 from pathlib import Path
-from typing import Literal, Optional
 
 import numpy as np
 import torch
@@ -29,21 +28,21 @@ FNV_OFFSET = 0xCBF29CE484222325
 FNV_PRIME = 0x100000001B3
 
 
-def convert_methods_arg(method: str) -> Iterable[tuple[str, Optional[int]]]:
+def convert_methods_arg(method: str) -> Iterable[str]:
     """Given a `method` argument, decodes the horizon values from it, and returns an
-    iterable of (method, horizon)-tuples (if the method is myopic, the horizon is
-    `None`)."""
+    iterable of (method, horizon)-strings (if the method is myopic, the horizon is not
+    included in the string)."""
     if method.startswith("ei") or method.startswith("myopic"):
-        yield method, None
+        yield method
     elif method.startswith("rollout") or method.startswith("multi-tree"):
         method, *horizons = method.split(".")
-        for horizon in map(int, horizons):
-            if horizon < 2:
+        for horizon in horizons:
+            if int(horizon) < 2:
                 raise argparse.ArgumentTypeError(
                     "Horizons for non-myopic methods must be greater than 1; got "
                     f"{method} with horizon {horizon} instead."
                 )
-            yield method, horizon
+            yield f"{method}.{horizon}"
     else:
         raise argparse.ArgumentTypeError(f"Unrecognized method {method}.")
 
@@ -69,12 +68,7 @@ def lock_write(filename: str, data: str) -> None:
 
 
 def run_problem(
-    problem_name: str,
-    method: Literal["ei", "myopic", "rollout", "multi-tree"],
-    horizon: Optional[int],
-    seed: int,
-    csv: str,
-    device: str,
+    problem_name: str, method: str, seed: int, csv: str, device: str
 ) -> None:
     """Runs the given problem, with the given horizon, and writes the results to csv."""
     torch.set_default_device(device)
@@ -162,13 +156,13 @@ def run_problem(
     rewards = ",".join(map(str, stage_reward))
     bests = ",".join(map(str, best_so_far))
     times = ",".join(str(s.elapsed_time(e)) for s, e in zip(start_events, end_events))
-    lock_write(csv, f"{problem_name};{method};{horizon};{rewards};{bests};{times}")
+    lock_write(csv, f"{problem_name};{method};{rewards};{bests};{times}")
     del problem, mdl, acqfun, X, Y, X_opt, best_so_far, stage_reward
     torch.cuda.empty_cache()
 
 
 def run_benchmarks(
-    methods_and_horizons: Iterable[tuple[str, Optional[int]]],
+    methods_and_horizons: Iterable[str],
     problems: list[str],
     n_trials: int,
     seed: int,
@@ -192,8 +186,8 @@ def run_benchmarks(
     # TODO: rework task filtering
     tasks = product(range(n_trials), problems, methods_and_horizons)
     Parallel(n_jobs=n_jobs, verbose=100, backend="loky")(
-        delayed(run_problem)(p, m, h, seeds[p][t], csv, d)
-        for (t, p, (m, h)), d in zip(tasks, cycle(devices))
+        delayed(run_problem)(prob, methodhor, seeds[prob][trial], csv, device)
+        for (trial, prob, methodhor), device in zip(tasks, cycle(devices))
     )
 
 
@@ -246,7 +240,7 @@ if __name__ == "__main__":
     elif not args.csv.endswith(".csv"):
         args.csv += ".csv"
     if not Path(args.csv).is_file():
-        lock_write(args.csv, "problem;method;horizon;stage-reward;best-so-far;time")
+        lock_write(args.csv, "problem;method;stage-reward;best-so-far;time")
 
     # run the benchmarks
     run_benchmarks(

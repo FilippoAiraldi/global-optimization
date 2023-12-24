@@ -278,7 +278,7 @@ if __name__ == "__main__":
         title = filename if include_title else None
         dataframe = load_data(filename)
         if not args.no_plot:
-            # plot(dataframe, title)
+            plot(dataframe, title)
             plot_violins(dataframe, title)
         if not args.no_summary:
             summarize(dataframe, title)

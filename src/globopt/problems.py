@@ -83,10 +83,10 @@ TESTS: dict[
             (Adjiman, {}, 10, "idw"),
             (Branin, {}, 40, "idw"),
             (Hartmann, {"dim": 3}, 50, "rbf"),
-            (Michalewicz, {"dim": 5}, 40, "rbf"),  # untested
+            (Michalewicz, {"dim": 5}, 50, "rbf"),
             (Rastrigin, {"dim": 4}, 80, "rbf"),
             (Rosenbrock, {"dim": 8}, 50, "rbf"),
-            (Shekel, {"m": 7}, 60, "rbf"),
+            (Shekel, {"m": 7}, 80, "rbf"),
             (SixHumpCamel, {"bounds": [(-5.0, 5.0), (-5.0, 5.0)]}, 10, "rbf"),
             (StyblinskiTang, {"dim": 5}, 60, "rbf"),
         ]
