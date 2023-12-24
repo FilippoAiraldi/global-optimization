@@ -9,6 +9,7 @@ from collections.abc import Iterable
 from datetime import datetime
 from itertools import chain, cycle, product
 from pathlib import Path
+from time import perf_counter
 
 import numpy as np
 import torch
@@ -27,9 +28,6 @@ from globopt.regression import Idw, Rbf
 BENCHMARK_PROBLEMS = get_available_benchmark_problems()
 FNV_OFFSET = 0xCBF29CE484222325
 FNV_PRIME = 0x100000001B3
-
-
-# TODO: why are 250Mib allocated in cuda:0 when running on cpu?
 
 
 def convert_methods_arg(method: str) -> Iterable[str]:
@@ -129,10 +127,9 @@ def run_problem(
     prev_mdl = None
     best_so_far: list[float] = [Y.amin().item()]
     stage_reward: list[float] = []
-    start_events = [torch.cuda.Event(enable_timing=True) for _ in range(maxiter)]
-    end_events = [torch.cuda.Event(enable_timing=True) for _ in range(maxiter)]
-    for i in range(maxiter):
-        start_events[i].record()
+    iteration_times: list[float] = []
+    for _ in range(maxiter):
+        start_time = perf_counter()
 
         # fit model and optimize acquisition function
         mdl = get_mdl(X, Y, prev_mdl)
@@ -154,16 +151,15 @@ def run_problem(
             else IdwAcquisitionFunction(mdl, c1, c2)(X_opt).item()
         )
         prev_mdl = mdl
-        end_events[i].record()
+        iteration_times.append(perf_counter() - start_time)
 
     # save results, delete references and free memory (at least, try to)
-    torch.cuda.synchronize()
     rewards = ",".join(map(str, stage_reward))
     bests = ",".join(map(str, best_so_far))
-    times = ",".join(str(s.elapsed_time(e)) for s, e in zip(start_events, end_events))
-    lock_write(csv, f"{problem_name};{method};{rewards};{bests};{times}")
+    lock_write(csv, f"{problem_name};{method};{rewards};{bests};{iteration_times}")
     del problem, mdl, acqfun, X, Y, X_opt, best_so_far, stage_reward
-    torch.cuda.empty_cache()
+    if device.startswith("cuda"):
+        torch.cuda.empty_cache()
 
 
 def run_benchmarks(
