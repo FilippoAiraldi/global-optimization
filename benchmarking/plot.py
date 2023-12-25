@@ -5,6 +5,7 @@ Optimization strategies on synthetic problems.
 
 import argparse
 from functools import partial
+from itertools import zip_longest
 from math import ceil
 from typing import Any, Literal, Optional
 
@@ -16,6 +17,8 @@ from matplotlib.axes import Axes
 from matplotlib.lines import Line2D
 from matplotlib.ticker import MaxNLocator
 from numpy.typing import ArrayLike
+from prettytable import PrettyTable
+from scipy.stats import wilcoxon
 
 from globopt.problems import get_benchmark_problem
 
@@ -220,35 +223,100 @@ def plot_violins(df: pd.DataFrame, figtitle: Optional[str]) -> None:
 
 
 def summarize(df: pd.DataFrame, tabletitle: Optional[str]) -> None:
-    """Prints the summary of the results in the given dataframe as two tables, one
-    containing the (final) optimality gap, and the other the cumulative rewards."""
+    """Prints the summary of the results in the given dataframe as three tables, one
+    containing the (final) optimality gap, one the cumulative rewards, and the last
+    the time per iteration."""
 
-    precision = 6
+    # first, build the dataframe with the statistics for gap, returns, and time
 
-    def row2string(row: pd.Series) -> pd.Series:
-        strs = row.map(lambda x: f"\033[2;36m{x:.{precision}f}\033[0m")
-        best_idx = np.nanargmax(row)
-        strs.iloc[best_idx] = f"\033[1;35m{row.iloc[best_idx]:.{precision}f}\033[0m"
-        return strs
-
-    tables: list[str] = []
-    for col, getter in zip(
-        ("gap", "stage-reward"), (lambda g: g[:, -1], lambda r: r.sum(axis=1))
-    ):
-        mean = df[col].map(lambda g: np.mean(getter(g)))
-        median = df[col].map(lambda g: np.median(getter(g)))
-        tables.append(
-            pd.concat((mean, median), axis=1, keys=["mean", "median"])
-            .stack(level=0, dropna=False)
-            .unstack(level="method", fill_value=pd.NA)
-            .apply(row2string, axis=1)
-            .to_string(na_rep="-", justify="left")
+    def stats(row: pd.Series) -> pd.Series:
+        gap = row["gap"][:, -1]
+        return_ = row["stage-reward"].sum(axis=1)
+        time = row["time"]
+        return pd.Series(
+            {
+                "g_mean": np.mean(gap),
+                "g_median": np.median(gap),
+                "r_mean": np.mean(return_),
+                "r_median": np.median(return_),
+                "t_mean": np.mean(time),
+                "t_std": np.std(time),
+            }
         )
 
+    df_stats = (
+        df.apply(stats, axis=1)
+        .stack(level=0, dropna=False)
+        .unstack(level="method", fill_value=pd.NA)
+    )
+
+    # then, instantiate the pretty tables to be filled with the statistics
+    field_names = ["Function name", ""] + df.index.unique(level="method").to_list()
+    tables = (
+        PrettyTable(field_names, title="gap"),
+        PrettyTable(field_names, title="return"),
+        PrettyTable(field_names[:1] + field_names[2:], title="time"),
+    )
+
+    def fmt_row(
+        row: pd.Series,
+        src_data: pd.DataFrame,
+        order: Literal["min", "max"] = "max",
+        prec: int = 3,
+        threshold_alpha: float = 5e-2,
+    ) -> list[str]:
+        # first, convert all row entries to strings
+        strs = [f"{x:.{prec}f}" for x in row]
+
+        # now, identify the best method and make it bold blue
+        print(src_data)
+        methods = row.index.to_list()
+        problem = row.name[0]
+        best_method_idx = getattr(row, f"arg{order}")()
+        strs[best_method_idx] = f"\033[1;34m{strs[best_method_idx]}\033[0m"
+        best_method_data = src_data[(problem, methods[best_method_idx])]
+
+        # then, loop over the rest of the methods, and compare them in a pairwise
+        # fashion via the Wilcoxon (one-sided) signed-rank test. If the null hypothesis
+        # of the best method being better than the other method cannot be rejected,
+        # highlight the other method in italic violet
+        side = "less" if order == "min" else "greater"
+        for other_method_idx in (i for i in range(len(strs)) if i != best_method_idx):
+            other_method_data = src_data[(problem, methods[other_method_idx])]
+            _, alpha = wilcoxon(best_method_data, other_method_data, alternative=side)
+            if alpha > threshold_alpha:
+                strs[other_method_idx] = f"\033[3;35m{strs[other_method_idx]}\033[0m"
+        return strs
+
+    # loop over every problem and fill the pretty tables
+    for pname in df_stats.index.get_level_values("problem").unique():
+        # gap (mean and median)
+        gap_data = df["gap"].map(lambda g: g[:, -1])
+        g_mean = fmt_row(df_stats.loc[(pname, "g_mean")], gap_data, prec=5)
+        g_median = fmt_row(df_stats.loc[(pname, "g_median")], gap_data, prec=5)
+        tables[0].add_row([pname, "mean"] + g_mean)
+        tables[0].add_row(["", "median"] + g_median)
+
+        # return (mean and median)
+        return_data = df["stage-reward"].map(lambda r: r.sum(axis=1))
+        r_mean = fmt_row(df_stats.loc[(pname, "r_mean")], return_data, prec=3)
+        r_median = fmt_row(df_stats.loc[(pname, "r_median")], return_data, prec=3)
+        tables[1].add_row([pname, "mean"] + r_mean)
+        tables[1].add_row(["", "median"] + r_median)
+
+        # time (mean +/- std)
+        time_data = df["time"].map(lambda t: t.mean(axis=1))
+        t_mean = fmt_row(df_stats.loc[(pname, "t_mean")], time_data, "min", prec=2)
+        t_mean_std = [
+            f"{m} +/- {s:.2f}" for m, s in zip(t_mean, df_stats.loc[(pname, "t_std")])
+        ]
+        tables[2].add_row([pname] + t_mean_std)
+
+    # finally, print the tables side by side
     if tabletitle is not None:
-        print(tabletitle, "\n")
-    rows = zip(*(t.splitlines() for t in tables))
-    print("\n".join(row1 + "\t" + row2 for row1, row2 in rows))
+        print(tabletitle)
+    rows = zip_longest(*(t.get_string().splitlines() for t in tables), fillvalue="")
+    print("\n".join("\t".join(group_of_rows) for group_of_rows in rows))
 
 
 if __name__ == "__main__":
