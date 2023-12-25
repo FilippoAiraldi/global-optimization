@@ -7,6 +7,7 @@ import argparse
 import fcntl
 from collections.abc import Iterable
 from datetime import datetime
+from functools import partial
 from itertools import chain, cycle, product
 from pathlib import Path
 from time import perf_counter
@@ -17,6 +18,7 @@ import torch
 from botorch.acquisition import ExpectedImprovement
 from botorch.fit import fit_gpytorch_mll
 from botorch.models import SingleTaskGP
+from botorch.models.transforms import Normalize
 from botorch.optim import optimize_acqf
 from botorch.utils import standardize
 from gpytorch.mlls import ExactMarginalLogLikelihood
@@ -25,9 +27,13 @@ from scipy.stats.qmc import LatinHypercube
 from status import filter_tasks_by_status
 from torch import Tensor
 
-from globopt.myopic_acquisitions import IdwAcquisitionFunction, idw_acquisition_function
+from globopt.myopic_acquisitions import (
+    GaussHermiteSampler,
+    IdwAcquisitionFunction,
+    qIdwAcquisitionFunction,
+)
 from globopt.problems import get_available_benchmark_problems, get_benchmark_problem
-from globopt.regression import DELTA, Idw, Rbf
+from globopt.regression import Idw, Rbf
 
 BENCHMARK_PROBLEMS = get_available_benchmark_problems()
 FNV_OFFSET = 0xCBF29CE484222325
@@ -38,7 +44,7 @@ def convert_methods_arg(method: str) -> Iterable[str]:
     """Given a `method` argument, decodes the horizon values from it, and returns an
     iterable of (method, horizon)-strings (if the method is myopic, the horizon is not
     included in the string)."""
-    if method.startswith("ei") or method.startswith("myopic"):
+    if method in ["ei", "myopic", "s-myopic"]:
         yield method
     elif method.startswith("rollout") or method.startswith("multi-tree"):
         method, *horizons = method.split(".")
@@ -89,7 +95,10 @@ def run_problem(
     c2 = torch.scalar_tensor(0.5 / ndim)
     eps = torch.scalar_tensor(1.0 / ndim)
     num_restarts = 16 * ndim
-    raw_samples = 32 * ndim
+    raw_samples = 16 * 8 * ndim
+    gh_sampler = GaussHermiteSampler(sample_shape=torch.Size([16]))
+    # mc_samples = 2 ** ceil(log2(256 * horizon))
+    # sampler = SobolQMCNormalSampler(mc_samples, seed=mk_seed())
 
     # draw random initial points via LHS
     np_random = np.random.default_rng(seed)
@@ -98,17 +107,16 @@ def run_problem(
     bounds: Tensor = problem.bounds
     X = torch.as_tensor(lhs.random(n_init)) * (bounds[1] - bounds[0]) + bounds[0]
     Y = problem(X)
-    # mc_samples = 2 ** ceil(log2(256 * horizon))
-    # sampler = SobolQMCNormalSampler(mc_samples, seed=mk_seed())
 
     # define mdoel and acquisition function getters
     if method == "ei":
 
         def get_mdl(X: Tensor, Y: Tensor, _) -> SingleTaskGP:
             Y = Y.unsqueeze(-1)
-            mdl = SingleTaskGP(X, standardize(Y))
+            mdl = SingleTaskGP(
+                X, standardize(Y), input_transform=Normalize(ndim, bounds=bounds)
+            )
             fit_gpytorch_mll(ExactMarginalLogLikelihood(mdl.likelihood, mdl))
-            mdl.train_X = X
             mdl.train_Y = Y
             return mdl
 
@@ -117,17 +125,9 @@ def run_problem(
             X_opt, _ = optimize_acqf(
                 acqfun, bounds, 1, num_restarts, raw_samples, {"seed": mk_seed()}
             )
-            # manually compute the reward, since the model is a GP
-            posterior = model.posterior(X_opt)
-            Y_min, Y_max = model.train_Y.aminmax(dim=-2, keepdim=True)
-            W = torch.cdist(X_opt, model.train_X).square().clamp_min(DELTA).reciprocal()
-            W_sum_recipr = W.sum(-1, keepdim=True).reciprocal()
-            acq_opt = idw_acquisition_function(
-                posterior.mean, posterior.stddev, Y_max - Y_min, W_sum_recipr, c1, c2
-            )
-            return X_opt, acq_opt.item()
+            return X_opt, torch.nan
 
-    elif method == "myopic":
+    elif method == "myopic" or method == "s-myopic":
         if regression_type == "rbf":
 
             def get_mdl(X: Tensor, Y: Tensor, prev_mdl: Rbf) -> Rbf:
@@ -142,8 +142,14 @@ def run_problem(
         else:
             raise RuntimeError(f"Unrecognized regression type {regression_type}.")
 
+        acqf_cls = (
+            IdwAcquisitionFunction
+            if method == "myopic"
+            else partial(qIdwAcquisitionFunction, sampler=gh_sampler)
+        )
+
         def get_next_point_and_reward(model: Union[Rbf, Idw]) -> tuple[Tensor, float]:
-            acqfun = IdwAcquisitionFunction(model, c1, c2)
+            acqfun = acqf_cls(model, c1, c2)
             X_opt, acq_opt = optimize_acqf(
                 acqfun, bounds, 1, num_restarts, raw_samples, {"seed": mk_seed()}
             )
@@ -177,7 +183,8 @@ def run_problem(
     # save results, delete references and free memory (at least, try to)
     rewards = ",".join(map(str, stage_reward))
     bests = ",".join(map(str, best_so_far))
-    lock_write(csv, f"{problem_name};{method};{rewards};{bests};{iteration_times}")
+    times = ",".join(map(str, iteration_times))
+    lock_write(csv, f"{problem_name};{method};{rewards};{bests};{times}")
     del problem, mdl, X, Y, X_opt, best_so_far, stage_reward
     if device.startswith("cuda"):
         torch.cuda.empty_cache()
@@ -229,7 +236,8 @@ if __name__ == "__main__":
         help="Methods to run the benchmarking on. Greedy algorithms include `ei` and "
         " `myopic`. Non-myopic algorithms are `rollout` and `multi-tree`, where the "
         "horizons to simulate can be specified with a dot folloewd by (one or more) "
-        "horizons, e.g., `rollout.2.3`. These horizons should be larger than 1.",
+        "horizons, e.g., `rollout.2.3`. These horizons should be larger than 1. "
+        "Methods are: `ei`, `myopic`, `s-myopic`.",
         required=True,
     )
     group.add_argument(

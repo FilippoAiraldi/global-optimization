@@ -57,12 +57,16 @@ def filter_tasks_by_status(
     # number of trials is less than the one specified, then yield the task.
     if not Path(csv).is_file():
         yield from tasks
-    df = get_status(csv)
-    index = df.index
-    for trial, name, method in tasks:
-        # trail is 0-based, df holds counters
-        if (name, method) not in index or df.loc[(name, method)] <= trial:
-            yield trial, name, method
+    else:
+        df = get_status(csv)
+        if df.empty:
+            yield from tasks
+        else:
+            index = df.index
+            for trial, name, method in tasks:
+                # trail is 0-based, df holds 1-based counters instead
+                if (name, method) not in index or df.loc[(name, method)] <= trial:
+                    yield trial, name, method
 
 
 if __name__ == "__main__":

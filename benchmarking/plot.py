@@ -4,7 +4,7 @@ Optimization strategies on synthetic problems.
 """
 
 import argparse
-from ast import literal_eval
+from functools import partial
 from math import ceil
 from typing import Any, Literal, Optional
 
@@ -24,14 +24,12 @@ plt.style.use("bmh")
 
 def load_data(csv_filename: str) -> pd.DataFrame:
     """Loads the data from the given file into a dataframe."""
+    converter = partial(np.fromstring, sep=",")
     df = pd.read_csv(
         csv_filename,
         sep=";",
         dtype={"problem": pd.StringDtype(), "method": pd.StringDtype()},
-        converters={
-            s: lambda o: np.array(literal_eval(o))
-            for s in ["stage-reward", "best-so-far", "time"]
-        },
+        converters={s: converter for s in ["stage-reward", "best-so-far", "time"]},
     )
 
     # group by problem, method, and horizon, and stack all trials into 2d arrays
@@ -109,45 +107,45 @@ def plot(df: pd.DataFrame, figtitle: Optional[str]) -> None:
     fig.suptitle(figtitle, fontsize=12)
 
 
+def custom_violin(
+    ax: Axes,
+    data: ArrayLike,
+    pos: float,
+    fc: str = "b",
+    ec: str = "k",
+    alpha: float = 0.7,
+    percentiles: ArrayLike = [25, 50, 75],
+    side: Literal["left", "right", "both"] = "both",
+    scatter_kwargs: dict[str, Any] = {},
+    violin_kwargs: dict[str, Any] = {},
+) -> None:
+    """Customized violin plot.
+    Many thanks to https://stackoverflow.com/a/76184694/19648688."""
+    parts = ax.violinplot(data, [pos], **violin_kwargs)
+    for pc in parts["bodies"]:
+        m = np.mean(pc.get_paths()[0].vertices[:, 0])
+        if side == "left":
+            x_offset, clip_min, clip_max = -0.02, -np.inf, m
+        elif side == "right":
+            x_offset, clip_min, clip_max = 0.02, m, np.inf
+        else:
+            x_offset, clip_min, clip_max = 0, -np.inf, np.inf
+        points_x = pos + x_offset
+        pc.get_paths()[0].vertices[:, 0] = np.clip(
+            pc.get_paths()[0].vertices[:, 0], clip_min, clip_max
+        )
+        pc.set_facecolor(fc)
+        pc.set_edgecolor(ec)
+        pc.set_alpha(alpha)
+    perc = np.percentile(data, percentiles)
+    for p in perc:
+        ax.scatter(points_x, p, color=ec, zorder=3, **scatter_kwargs)
+
+
 def plot_violins(df: pd.DataFrame, figtitle: Optional[str]) -> None:
     """Plots the results in the given dataframe. In particular, it plots the
     distribution of the (final) optimality gap versus the cumulative rewards as violins.
     """
-
-    def custom_violin(
-        ax: Axes,
-        data: ArrayLike,
-        pos: float,
-        fc: str = "b",
-        ec: str = "k",
-        alpha: float = 0.7,
-        percentiles: ArrayLike = [25, 50, 75],
-        side: Literal["left", "right", "both"] = "both",
-        scatter_kwargs: dict[str, Any] = {},
-        violin_kwargs: dict[str, Any] = {},
-    ) -> None:
-        """Customized violin plot.
-        Many thanks to https://stackoverflow.com/a/76184694/19648688."""
-        parts = ax.violinplot(data, [pos], **violin_kwargs)
-        for pc in parts["bodies"]:
-            m = np.mean(pc.get_paths()[0].vertices[:, 0])
-            if side == "left":
-                x_offset, clip_min, clip_max = -0.02, -np.inf, m
-            elif side == "right":
-                x_offset, clip_min, clip_max = 0.02, m, np.inf
-            else:
-                x_offset, clip_min, clip_max = 0, -np.inf, np.inf
-            points_x = pos + x_offset
-            pc.get_paths()[0].vertices[:, 0] = np.clip(
-                pc.get_paths()[0].vertices[:, 0], clip_min, clip_max
-            )
-            pc.set_facecolor(fc)
-            pc.set_edgecolor(ec)
-            pc.set_alpha(alpha)
-        perc = np.percentile(data, percentiles)
-        for p in perc:
-            ax.scatter(points_x, p, color=ec, zorder=3, **scatter_kwargs)
-
     gaps = df["gap"].map(lambda g: g[:, -1])
     returns = df["stage-reward"].map(lambda r: r.sum(axis=1))
     df_: pd.DataFrame = (
@@ -191,16 +189,18 @@ def plot_violins(df: pd.DataFrame, figtitle: Optional[str]) -> None:
                 scatter_kwargs=s_kwargs,
                 violin_kwargs=v_kwargs,
             )
-            custom_violin(
-                ax_twin,
-                df_.loc[(problem_name, "return")][method],
-                pos,
-                "C1",
-                "C1",
-                side="right",
-                scatter_kwargs=s_kwargs,
-                violin_kwargs=v_kwargs,
-            )
+            return_ = df_.loc[(problem_name, "return")][method]
+            if np.logical_not(np.isnan(return_)).any():
+                custom_violin(
+                    ax_twin,
+                    return_,
+                    pos,
+                    "C1",
+                    "C1",
+                    side="right",
+                    scatter_kwargs=s_kwargs,
+                    violin_kwargs=v_kwargs,
+                )
 
         # embellish axes
         ax.set_xticks(methods_ticks)
@@ -222,10 +222,12 @@ def summarize(df: pd.DataFrame, tabletitle: Optional[str]) -> None:
     """Prints the summary of the results in the given dataframe as two tables, one
     containing the (final) optimality gap, and the other the cumulative rewards."""
 
-    def row2string(row: pd.Series, precision: int = 6) -> pd.Series:
-        strs = row.map(lambda x: f"{x:.{precision}f}")
-        best_idx = np.argmax(row)
-        strs.iloc[best_idx] = f"\033[1;34;40m{strs.iloc[best_idx]}\033[0m"
+    precision = 6
+
+    def row2string(row: pd.Series) -> pd.Series:
+        strs = row.map(lambda x: f"\033[2;36m{x:.{precision}f}\033[0m")
+        best_idx = np.nanargmax(row)
+        strs.iloc[best_idx] = f"\033[1;35m{row.iloc[best_idx]:.{precision}f}\033[0m"
         return strs
 
     tables: list[str] = []
@@ -239,7 +241,7 @@ def summarize(df: pd.DataFrame, tabletitle: Optional[str]) -> None:
             .stack(level=0, dropna=False)
             .unstack(level="method", fill_value=pd.NA)
             .apply(row2string, axis=1)
-            .to_string(na_rep="-")
+            .to_string(na_rep="-", justify="left")
         )
 
     if tabletitle is not None:

@@ -19,7 +19,6 @@ from botorch.test_functions import (
     Ackley,
     Branin,
     Hartmann,
-    Michalewicz,
     Rastrigin,
     Rosenbrock,
     Shekel,
@@ -73,6 +72,27 @@ class Adjiman(SyntheticTestFunction):
         return x.cos().mul(y.sin()).addcdiv(x, y.square() + 1.0, value=-1)
 
 
+class Step2Function(SyntheticTestFunction):
+    r"""Step 2 function, a m-dimensional synthetic test function given by:
+
+        f(x) = sum( floor(x + 0.5)^2 ).
+
+    x is bounded [-100,100] in each dimension. f in has infinitely many global minima at
+    `[-0.5,0.5]`, with `f_opt = 0`.
+    """
+
+    _optimal_value = 0.0
+    _optimizers = [(2.0, 0.10578)]
+    _bounds = [(-1.0, 2.0), (-1.0, 1.0)]
+
+    def __init__(self, dim: int, *args: Any, **kwargs: Any) -> None:
+        self.dim = dim
+        super().__init__(bounds=[(-100.0, 100.0) for _ in range(dim)], *args, **kwargs)
+
+    def evaluate_true(self, X: Tensor) -> Tensor:
+        return (X + 0.5).floor().square().sum(-1)
+
+
 TESTS: dict[
     str, tuple[type[SyntheticTestFunction], dict[str, Any], int, Literal["rbf", "idw"]]
 ] = MappingProxyType(
@@ -80,14 +100,14 @@ TESTS: dict[
         problem.__name__.lower(): (problem, kwargs, max_evals, regressor_type)
         for problem, kwargs, max_evals, regressor_type in [
             (Ackley, {}, 50, "idw"),
-            (Adjiman, {}, 10, "idw"),
+            (Adjiman, {}, 20, "idw"),
             (Branin, {}, 40, "idw"),
             (Hartmann, {"dim": 3}, 50, "rbf"),
-            (Michalewicz, {"dim": 5}, 50, "rbf"),
             (Rastrigin, {"dim": 4}, 80, "rbf"),
             (Rosenbrock, {"dim": 8}, 50, "rbf"),
             (Shekel, {"m": 7}, 80, "rbf"),
             (SixHumpCamel, {"bounds": [(-5.0, 5.0), (-5.0, 5.0)]}, 10, "rbf"),
+            (Step2Function, {"dim": 5}, 80, "idw"),
             (StyblinskiTang, {"dim": 5}, 60, "rbf"),
         ]
     }
