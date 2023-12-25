@@ -72,7 +72,7 @@ class Adjiman(SyntheticTestFunction):
         return x.cos().mul(y.sin()).addcdiv(x, y.square() + 1.0, value=-1)
 
 
-class Step2Function(SyntheticTestFunction):
+class Step2(SyntheticTestFunction):
     r"""Step 2 function, a m-dimensional synthetic test function given by:
 
         f(x) = sum( floor(x + 0.5)^2 ).
@@ -107,7 +107,7 @@ TESTS: dict[
             (Rosenbrock, {"dim": 8}, 50, "rbf"),
             (Shekel, {"m": 7}, 80, "rbf"),
             (SixHumpCamel, {"bounds": [(-5.0, 5.0), (-5.0, 5.0)]}, 10, "rbf"),
-            (Step2Function, {"dim": 5}, 80, "idw"),
+            (Step2, {"dim": 5}, 80, "idw"),
             (StyblinskiTang, {"dim": 5}, 60, "rbf"),
         ]
     }

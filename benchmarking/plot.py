@@ -218,7 +218,7 @@ def plot_violins(df: pd.DataFrame, figtitle: Optional[str]) -> None:
         ax_twin.grid(which="major", visible=False)
 
     # last embellishments
-    ax.set_xlabel("Horizon")
+    ax.set_xlabel("Method")
     fig.suptitle(figtitle, fontsize=12)
 
 
@@ -269,7 +269,6 @@ def summarize(df: pd.DataFrame, tabletitle: Optional[str]) -> None:
         strs = [f"{x:.{prec}f}" for x in row]
 
         # now, identify the best method and make it bold blue
-        print(src_data)
         methods = row.index.to_list()
         problem = row.name[0]
         best_method_idx = getattr(row, f"arg{order}")()

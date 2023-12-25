@@ -44,7 +44,7 @@ def convert_methods_arg(method: str) -> Iterable[str]:
     """Given a `method` argument, decodes the horizon values from it, and returns an
     iterable of (method, horizon)-strings (if the method is myopic, the horizon is not
     included in the string)."""
-    if method in ["ei", "myopic", "s-myopic"]:
+    if method in ["random", "ei", "myopic", "s-myopic"]:
         yield method
     elif method.startswith("rollout") or method.startswith("multi-tree"):
         method, *horizons = method.split(".")
@@ -109,7 +109,16 @@ def run_problem(
     Y = problem(X)
 
     # define mdoel and acquisition function getters
-    if method == "ei":
+    if method == "random":
+
+        def get_mdl(*_, **__) -> None:
+            return None
+
+        def get_next_point_and_reward(_) -> tuple[Tensor, float]:
+            X_opt = torch.rand(1, ndim) * (bounds[1] - bounds[0]) + bounds[0]
+            return X_opt, torch.nan
+
+    elif method == "ei":
 
         def get_mdl(X: Tensor, Y: Tensor, _) -> SingleTaskGP:
             Y = Y.unsqueeze(-1)
@@ -128,6 +137,8 @@ def run_problem(
             return X_opt, torch.nan
 
     elif method == "myopic" or method == "s-myopic":
+        # NOTE: the stage reward is slightly different between myopic and s-myopic
+
         if regression_type == "rbf":
 
             def get_mdl(X: Tensor, Y: Tensor, prev_mdl: Rbf) -> Rbf:
@@ -237,7 +248,7 @@ if __name__ == "__main__":
         " `myopic`. Non-myopic algorithms are `rollout` and `multi-tree`, where the "
         "horizons to simulate can be specified with a dot folloewd by (one or more) "
         "horizons, e.g., `rollout.2.3`. These horizons should be larger than 1. "
-        "Methods are: `ei`, `myopic`, `s-myopic`.",
+        "Methods are: `random`, `ei`, `myopic`, `s-myopic`.",
         required=True,
     )
     group.add_argument(
