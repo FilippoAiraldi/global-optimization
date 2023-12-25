@@ -22,7 +22,7 @@ from globopt.problems import get_benchmark_problem
 plt.style.use("bmh")
 
 
-def load_data(csv_filename: str) -> pd.DataFrame:
+def load_data(csv_filename: str, exclude: list[str]) -> pd.DataFrame:
     """Loads the data from the given file into a dataframe."""
     converter = partial(np.fromstring, sep=",")
     df = pd.read_csv(
@@ -31,6 +31,7 @@ def load_data(csv_filename: str) -> pd.DataFrame:
         dtype={"problem": pd.StringDtype(), "method": pd.StringDtype()},
         converters={s: converter for s in ["stage-reward", "best-so-far", "time"]},
     )
+    df = df[~df["method"].isin(exclude)]
 
     # group by problem, method, and horizon, and stack all trials into 2d arrays
     df = df.groupby(["problem", "method"], dropna=False).aggregate(np.stack)
@@ -263,6 +264,13 @@ if __name__ == "__main__":
         help="Filenames of the results to be visualized.",
     )
     parser.add_argument(
+        "--exclude",
+        type=str,
+        nargs="+",
+        default=[],
+        help="List of methods to exclude from the visualization.",
+    )
+    parser.add_argument(
         "--no-plot",
         action="store_true",
         help="Only print the summary and do not show the plots.",
@@ -278,7 +286,7 @@ if __name__ == "__main__":
     include_title = len(args.filenames) > 1
     for filename in args.filenames:
         title = filename if include_title else None
-        dataframe = load_data(filename)
+        dataframe = load_data(filename, args.exclude)
         if not args.no_plot:
             plot(dataframe, title)
             plot_violins(dataframe, title)
