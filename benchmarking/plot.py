@@ -18,7 +18,7 @@ from matplotlib.lines import Line2D
 from matplotlib.ticker import MaxNLocator
 from numpy.typing import ArrayLike
 from prettytable import PrettyTable
-from scipy.stats import wilcoxon
+from scipy.stats import sem, t, wilcoxon
 
 from globopt.problems import get_benchmark_problem
 
@@ -60,7 +60,7 @@ def plot(df: pd.DataFrame, figtitle: Optional[str]) -> None:
     fig = plt.figure(figsize=(n_cols * 3.5, n_rows * 2.5))
 
     # create main grid of plots
-    plotted_methods = set()
+    plotted_methods = {}
     main_grid = gridspec.GridSpec(n_rows, n_cols, figure=fig, hspace=0.3)
     for i, problem_name in enumerate(problem_names):
         row, col = i // n_cols, i % n_cols
@@ -78,15 +78,15 @@ def plot(df: pd.DataFrame, figtitle: Optional[str]) -> None:
             for ax, col in zip((ax_opt, ax_gap), ("best-so-far", "gap")):
                 data = row_data[col]
                 avg = data.mean(axis=0)
-                worst = data.max(axis=0)
-                best = data.min(axis=0)
+                scale = sem(data, axis=0) + 1e-12
+                ci_lb, ci_ub = t.interval(0.95, data.shape[0] - 1, loc=avg, scale=scale)
                 h = ax.plot(evals, avg, lw=1.0, color=color)
                 if color is None:
                     color = h[0].get_color()
-                # ax.plot(evals, worst, color=c, lw=0.25)
-                # ax.plot(evals, best, color=c, lw=0.25)
-                ax.fill_between(evals, worst, best, alpha=0.2, color=color)
-            plotted_methods.add((method, color))
+                ax.fill_between(evals, ci_lb, ci_ub, alpha=0.2, color=color)
+                ax.plot(evals, ci_lb, color=color, lw=0.1)
+                ax.plot(evals, ci_ub, color=color, lw=0.1)
+            plotted_methods[method] = color
 
         # plot also the optimal point in background
         f_opt = get_benchmark_problem(problem_name)[0].optimal_value
@@ -106,7 +106,7 @@ def plot(df: pd.DataFrame, figtitle: Optional[str]) -> None:
         ax_gap.xaxis.set_major_locator(MaxNLocator(nbins=5, integer=True))
 
     # create legend manually
-    handles = [Line2D([], [], label=m, color=c) for m, c in plotted_methods]
+    handles = [Line2D([], [], label=m, color=c) for m, c in plotted_methods.items()]
     fig.legend(handles=handles, loc="outside lower center", ncol=len(handles))
     fig.suptitle(figtitle, fontsize=12)
 
