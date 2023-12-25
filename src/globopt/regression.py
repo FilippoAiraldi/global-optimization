@@ -61,11 +61,12 @@ References
 from typing import Any, Optional, Union
 
 import torch
-from botorch.models.model import Model
+from botorch.models.model import FantasizeMixin, Model
 from botorch.posteriors import GPyTorchPosterior
 from gpytorch.distributions import MultivariateNormal
 from linear_operator.operators import DiagLinearOperator
 from torch import Tensor
+from torch.nn import Module
 
 DELTA = 1e-12
 """Small value to avoid division by zero."""
@@ -205,7 +206,7 @@ def _rbf_predict(
     return mean, std, W_sum_recipr, V
 
 
-class BaseRegression(Model):
+class BaseRegression(Model, FantasizeMixin):
     """Base class for a regression model."""
 
     def __init__(self, train_X: Tensor, train_Y: Tensor) -> None:
@@ -221,7 +222,8 @@ class BaseRegression(Model):
             A `(b0 x b1 x ...) x m x 1` tensor of evaluation corresponding to the
             `train_X` points.
         """
-        super().__init__()
+        Model.__init__(self)
+        FantasizeMixin.__init__(self)
         self.train_X = train_X
         self.train_Y = train_Y.unsqueeze(-1) if train_Y.ndim == 1 else train_Y
         self.to(train_X)  # make sure we're on the right device/dtype
@@ -229,6 +231,11 @@ class BaseRegression(Model):
     @property
     def num_outputs(self) -> int:
         return 1  # only one output is supported
+
+    @property
+    def likelihood(self) -> None:
+        """No likelihood is supported (just for compatibility with `FantasizeMixin`)."""
+        return None
 
     def posterior(self, X: Tensor, **_: Any) -> GPyTorchPosterior:
         self.eval()
@@ -246,6 +253,9 @@ class BaseRegression(Model):
         posterior._W_sum_recipr = W_sum_recipr
         posterior._V = V
         return posterior
+
+    def transform_inputs(self, X: Tensor, _: Optional[Module] = None) -> Tensor:
+        return X  # do nothing
 
 
 class Idw(BaseRegression):
@@ -272,6 +282,11 @@ class Idw(BaseRegression):
                   the number of training points.
         """
         return _idw_predict(self.train_X, self.train_Y, X)
+
+    def condition_on_observations(self, X: Tensor, Y: Tensor, **_: Any) -> "Idw":
+        return Idw(
+            torch.cat((self.train_X, X), dim=-2), torch.cat((self.train_Y, Y), dim=-2)
+        )
 
 
 class Rbf(BaseRegression):
@@ -347,3 +362,12 @@ class Rbf(BaseRegression):
                   the number of training points.
         """
         return _rbf_predict(self.train_X, self.train_Y, self.eps, self.coeffs, X)
+
+    def condition_on_observations(self, X: Tensor, Y: Tensor, **_: Any) -> "Rbf":
+        return Rbf(
+            torch.cat((self.train_X, X), dim=-2),
+            torch.cat((self.train_Y, Y), dim=-2),
+            self.eps,
+            self.svd_tol,
+            self.Minv_and_coeffs,
+        )

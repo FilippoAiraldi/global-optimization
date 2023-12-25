@@ -11,9 +11,10 @@ References
     functions. Computational Optimization and Applications, 77(2):571–595, 2020
 """
 
+from typing import Union
+
 import matplotlib.pyplot as plt
 import torch
-from botorch.models.model import Model
 
 from globopt.problems import SimpleProblem
 from globopt.regression import Idw, Rbf
@@ -33,20 +34,22 @@ train_Y = problem(train_X)
 
 # fit regression models - only first n points for now
 n = 3
-mdls: list[Model] = [
+mdls: list[Union[Idw, Rbf]] = [
     Idw(train_X[:n], train_Y[:n]),
     Rbf(train_X[:n], train_Y[:n], eps=0.5),
     Rbf(train_X[:n], train_Y[:n], eps=2.0),
 ]
 
-# to partially fit new data, pass new dataset, and only the newest data will be used
+# to partially fit new data, use the `fantasize` method, or manually pass the new
+# dataset to the constructor, and only the newest data will be used
 for i in range(len(mdls)):
-    mdl = mdls[i]
-    if isinstance(mdl, Idw):
-        mdls[i] = Idw(train_X, train_Y)  # easier than RBFs
-    else:
-        # for RBFs, pass also the previously fitted results
-        mdls[i] = Rbf(train_X, train_Y, mdl.eps, mdl.svd_tol, (mdl.Minv, mdl.coeffs))
+    mdls[i] = mdls[i].fantasize(train_X[n:], sampler=lambda _: train_Y[n:])
+    # mdl = mdls[i]
+    # if isinstance(mdl, Idw):
+    #     mdls[i] = Idw(train_X, train_Y)  # easier than RBFs
+    # else:
+    #     # for RBFs, pass also the previously fitted results
+    #     mdls[i] = Rbf(train_X, train_Y, mdl.eps, mdl.svd_tol, (mdl.Minv, mdl.coeffs))
 
 # predict values over all domain via the fitted models
 X = torch.linspace(-3, 3, 1000).view(-1, 1, 1)
