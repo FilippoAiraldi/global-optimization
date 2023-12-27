@@ -69,7 +69,7 @@ def load_data(csv_filename: str, exclude: list[str]) -> pd.DataFrame:
         dtype={"problem": pd.StringDtype(), "method": pd.StringDtype()},
         converters={s: converter for s in ["stage-reward", "best-so-far", "time"]},
     )
-    df = df[~df["method"].isin(exclude)]
+    df = df[~(df["method"].isin(exclude) | df["problem"].isin(exclude))]
 
     # manually sort problems alphabetically but methods in a custom order
     df.sort_values(
@@ -411,7 +411,7 @@ if __name__ == "__main__":
         type=str,
         nargs="+",
         default=[],
-        help="List of methods to exclude from the visualization.",
+        help="List of methods and/or benchmarks to exclude from the visualization.",
     )
     parser.add_argument(
         "--no-plot",
