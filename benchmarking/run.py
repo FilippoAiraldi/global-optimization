@@ -1,6 +1,5 @@
 """
-Benchmarking of myopic and non-myopic Global Optimization strategies on synthetic
-problems.
+Benchmarking myopic and non-myopic Global Optimization strategies on benchmark problems.
 """
 
 import argparse

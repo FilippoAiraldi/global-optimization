@@ -1,4 +1,4 @@
-"""Status of an on-going benchmarking on synthetic problems."""
+"""Status of an on-going benchmarking on problems."""
 
 
 import argparse

@@ -1,6 +1,6 @@
 """
 Collection of popular tests for benchmarking optimization algorithms. These tests were
-implemented according to [1, 2].
+implemented according to [1, 2, 3].
 
 References
 ----------
@@ -9,11 +9,19 @@ References
 [2] Surjanovic, S. & Bingham, D. (2013). Virtual Library of Simulation Experiments: Test
     Functions and Datasets. Retrieved May 3, 2023, from
     http://www.sfu.ca.tudelft.idm.oclc.org/~ssurjano.
+[3] Jiang, S., Chai, H., Gonzalez, J. and Garnett, R., 2020, November. BINOCULARS for
+    efficient, nonmyopic sequential experimental design. In International Conference on
+    Machine Learning (pp. 4794-4803). PMLR.
+[4] Wang, Z. and Jegelka, S., 2017, July. Max-value entropy search for efficient
+    Bayesian optimization. In International Conference on Machine Learning
+    (pp. 3627-3635). PMLR.
 """
 
+from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal
+from typing import Any, Literal, Union
 
+import numpy as np
 import torch
 from botorch.test_functions import (
     Ackley,
@@ -26,6 +34,8 @@ from botorch.test_functions import (
     StyblinskiTang,
 )
 from botorch.test_functions.synthetic import SyntheticTestFunction
+from joblib import dump, load
+from sklearn.ensemble import RandomForestRegressor
 from torch import Tensor
 
 
@@ -93,6 +103,92 @@ class Step2(SyntheticTestFunction):
         return (X + 0.5).floor().square().sum(-1)
 
 
+class HyperTuningGridTestFunction(SyntheticTestFunction):
+    """Test function for hyperparameter tuning. Given a grid of pre-computed points, it
+    fits a regressor to interpolate function values at new points."""
+
+    def __init__(
+        self,
+        dataname: str,
+        noise_std: Union[None, float, list[float]] = None,
+        negate: bool = False,
+    ) -> None:
+        data = np.genfromtxt(dataname, delimiter=",")
+        is_not_nan = np.logical_not(np.any(np.isnan(data), axis=1))
+        data = data[is_not_nan, :]
+        self.dim = data.shape[1] - 1
+        bounds = [(data[:, i].min(), data[:, i].max()) for i in range(self.dim)]
+
+        opt_idx = np.argmin(data[:, -1])
+        self._optimal_value = data[opt_idx, -1]
+        self._optimizers = [tuple(data[opt_idx, :-1])]
+
+        path = Path(dataname)
+        model_path = path.parent / f"{path.stem}.model"
+        try:
+            self.model = load(model_path)
+        except (FileNotFoundError, EOFError):
+            self.model = RandomForestRegressor(n_estimators=200)
+            self.model.fit(data[:, :-1], data[:, -1])
+            dump(self.model, model_path)
+
+        super().__init__(noise_std, negate, bounds)
+
+    def evaluate_true(self, X: Tensor) -> Tensor:
+        with torch.no_grad():
+            Y = self.model.predict(X.cpu().numpy())
+            return torch.as_tensor(Y, dtype=X.dtype, device=X.device)
+
+
+class Lda(HyperTuningGridTestFunction):
+    """Online Latent Dirichlet allocation (LDA) for Wikipedia articles."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__("benchmarking/data/lda_on_grid.csv", *args, **kwargs)
+
+
+class LogReg(HyperTuningGridTestFunction):
+    """Logistic regression for the MNIST dataset."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__("benchmarking/data/logreg_on_grid.csv", *args, **kwargs)
+
+
+class NnBoston(HyperTuningGridTestFunction):
+    """Neural network hyperparameter tuning for the Boston housing dataset."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__("benchmarking/data/nn_boston_on_grid.csv", *args, **kwargs)
+
+
+class NnCancer(HyperTuningGridTestFunction):
+    """Neural network hyperparameter tuning for the breast cancer dataset."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__("benchmarking/data/nn_cancer_on_grid.csv", *args, **kwargs)
+
+
+class RobotPush3(HyperTuningGridTestFunction):
+    """Robot pushing task (3-dimensional)."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__("benchmarking/data/robotpush3_on_grid.csv", *args, **kwargs)
+
+
+class RobotPush4(HyperTuningGridTestFunction):
+    """Robot pushing task (4-dimensional)."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__("benchmarking/data/robotpush4_on_grid.csv", *args, **kwargs)
+
+
+class Svm(HyperTuningGridTestFunction):
+    """Structured support vector machine (SVM) on UniPROBE dataset."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__("benchmarking/data/svm_on_grid.csv", *args, **kwargs)
+
+
 TESTS: dict[
     str, tuple[type[SyntheticTestFunction], dict[str, Any], int, Literal["rbf", "idw"]]
 ] = MappingProxyType(
@@ -103,15 +199,32 @@ TESTS: dict[
             (Adjiman, {}, 20, "idw"),
             (Branin, {}, 40, "idw"),
             (Hartmann, {"dim": 3}, 50, "rbf"),
+            (Lda, {}, 30, "idw"),
+            (LogReg, {}, 30, "idw"),
+            (NnBoston, {}, 100, "rbf"),
+            (NnCancer, {}, 80, "rbf"),
             (Rastrigin, {"dim": 4}, 80, "rbf"),
+            (RobotPush3, {}, 90, "idw"),
+            (RobotPush4, {}, 100, "rbf"),
             (Rosenbrock, {"dim": 8}, 50, "rbf"),
             (Shekel, {"m": 7}, 80, "rbf"),
             (SixHumpCamel, {"bounds": [(-5.0, 5.0), (-5.0, 5.0)]}, 10, "rbf"),
             (Step2, {"dim": 5}, 80, "idw"),
             (StyblinskiTang, {"dim": 5}, 60, "rbf"),
+            (Svm, {}, 60, "idw"),
         ]
     }
 )
+
+
+# NOTE:
+# General observations:
+# - RBF is a bit faster than IDW to simulate
+# - Ackley: with bounds increased, RBF h=1 is bad, whereas IDW is super good (maybe too
+#   good?)
+# - Adjiman: with RBF, too good
+# - Michalewicz: appears to be very difficult
+# - Shekel: with RBF decent, abismal with IDW
 
 
 def get_available_benchmark_problems() -> list[str]:

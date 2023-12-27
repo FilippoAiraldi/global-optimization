@@ -1,6 +1,6 @@
 """
 Visualization and summary of results of benchmarking of myopic and non-myopic Global
-Optimization strategies on synthetic problems.
+Optimization strategies on various problems.
 """
 
 import argparse
@@ -321,7 +321,7 @@ def summarize(df: pd.DataFrame, tabletitle: Optional[str]) -> None:
 if __name__ == "__main__":
     # parse the arguments
     parser = argparse.ArgumentParser(
-        description="Visualization of synthetic benchmark results.",
+        description="Visualization of benchmark results.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
