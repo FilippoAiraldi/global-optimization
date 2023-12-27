@@ -252,6 +252,61 @@ def plot_gap_reward_violins(df: pd.DataFrame, figtitle: Optional[str]) -> None:
     fig.suptitle(figtitle, fontsize=12)
 
 
+def _compute_dispersion(row: pd.Series) -> pd.Series:
+    """Computes the dispersion of the given row of the dataframe."""
+    # compute the mean and std of the time per iteration
+    out = {}
+    for col in ("final-gap-mean", "time-mean"):
+        val = np.asarray(row[col])
+        mean = val.mean()
+        name = col.split("-")[-2]
+        out[name] = mean
+        out[f"{name}-err"] = sem(val)
+    return pd.Series(out)
+
+
+def plot_timings(df: pd.DataFrame, figtitle: Optional[str]) -> None:
+    """Plots the average time per iteration versus the optimality gap."""
+    df_ = (
+        df[["final-gap-mean", "time-mean"]]
+        .droplevel("problem")
+        .groupby("method", sort=False)
+        .aggregate(list)
+        .apply(_compute_dispersion, axis=1)
+    )
+    fig, ax = plt.subplots(1, 1, constrained_layout=True)
+    ax.errorbar(
+        x=df_["time"],
+        xerr=df_["time-err"],
+        y=df_["gap"],
+        yerr=df_["gap-err"],
+        ls="none",
+        lw=1.5,
+        capsize=3,
+        capthick=1.5,
+        marker="o",
+        markersize=8,
+        markeredgecolor="white",
+    )
+    options = {
+        "random": {"ha": "left", "xytext": (5, 5)},
+        "ei": {"ha": "left", "xytext": (5, 5)},
+        "myopic": {"ha": "right", "xytext": (-5, 5)},
+        "s-myopic": {"ha": "left", "xytext": (5, 5)},
+    }
+    for method in df_.index:
+        ax.annotate(
+            method,
+            xy=(df_.loc[method, "time"], df_.loc[method, "gap"]),
+            textcoords="offset points",
+            **options[method],
+        )
+    ax.set_xscale("log")
+    ax.set_xlabel("Seconds per iteration")
+    ax.set_ylabel("Optimality gap")
+    fig.suptitle(figtitle, fontsize=12)
+
+
 def _format_row(
     row: pd.Series,
     src_data: pd.DataFrame,
@@ -378,6 +433,7 @@ if __name__ == "__main__":
         if not args.no_plot:
             plot_converges(dataframe, title)
             plot_gap_reward_violins(dataframe, title)
+            plot_timings(dataframe, title)
         if not args.no_summary:
             summarize(dataframe, title)
     plt.show()
