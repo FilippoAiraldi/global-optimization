@@ -24,6 +24,41 @@ from globopt.problems import get_benchmark_problem
 
 plt.style.use("bmh")
 
+METHODS_ORDER = ["random", "ei", "myopic", "s-myopic"]
+
+
+def _compute_all_stats(row: pd.Series) -> pd.Series:
+    # optimality gaps and final gap
+    problem_name = row.name[0]
+    f_opt = get_benchmark_problem(problem_name)[0].optimal_value
+    bests_so_far = row["best-so-far"]
+    init_best = bests_so_far[:, 0, np.newaxis]
+    gaps = (bests_so_far - init_best) / (f_opt - init_best)
+    final_gap = gaps[:, -1]
+
+    # cumulative return
+    return_ = row["stage-reward"].sum(axis=1)
+
+    # average time per iteration and std
+    time = row["time"]
+    time_avg = time.mean()
+    time_std = time.std()
+    return pd.Series(
+        {
+            "best-so-far": bests_so_far,
+            "gap": gaps,
+            "final-gap": final_gap,
+            "final-gap-mean": final_gap.mean(),
+            "final-gap-median": np.median(final_gap),
+            "return": return_,
+            "return-mean": return_.mean(),
+            "return-median": np.median(return_),
+            "time": time,
+            "time-mean": time_avg,
+            "time-std": time_std,
+        }
+    )
+
 
 def load_data(csv_filename: str, exclude: list[str]) -> pd.DataFrame:
     """Loads the data from the given file into a dataframe."""
@@ -36,21 +71,22 @@ def load_data(csv_filename: str, exclude: list[str]) -> pd.DataFrame:
     )
     df = df[~df["method"].isin(exclude)]
 
+    # manually sort problems alphabetically but methods in a custom order
+    df.sort_values(
+        ["problem", "method"],
+        key=lambda s: s if s.name == "problem" else s.map(METHODS_ORDER.index),
+        ignore_index=True,
+        inplace=True,
+    )
+
     # group by problem, method, and horizon, and stack all trials into 2d arrays
-    df = df.groupby(["problem", "method"], dropna=False).aggregate(np.stack)
+    df = df.groupby(["problem", "method"], dropna=False, sort=False).aggregate(np.stack)
 
-    # compute the optimality gaps
-    def compute_optimality_gaps(row: pd.Series) -> np.ndarray:
-        problem_name = row.name[0]
-        f_opt = get_benchmark_problem(problem_name)[0].optimal_value
-        init_best = row["best-so-far"][:, 0, np.newaxis]
-        return (row["best-so-far"] - init_best) / (f_opt - init_best)
-
-    df["gap"] = df.apply(compute_optimality_gaps, axis=1)
-    return df
+    # compute all the statistics for visualization and summary
+    return df.apply(_compute_all_stats, axis=1)
 
 
-def plot(df: pd.DataFrame, figtitle: Optional[str]) -> None:
+def plot_converges(df: pd.DataFrame, figtitle: Optional[str]) -> None:
     """Plots the results in the given dataframe. In particular, it plots the
     convergence to the optimum, and the evolution of the optimality gap."""
     # create figure
@@ -101,7 +137,7 @@ def plot(df: pd.DataFrame, figtitle: Optional[str]) -> None:
             ax_gap.set_xlabel("Evaluations")
         ax_opt.set_title(problem_name, fontsize=11)
         ax_opt.tick_params(labelbottom=False)
-        ax_opt.set_xlim(1, evals[-1])
+        ax_opt.set_xlim(0, evals[-1])
         ax_gap.set_ylim(-0.05, 1.05)
         ax_gap.xaxis.set_major_locator(MaxNLocator(nbins=5, integer=True))
 
@@ -111,14 +147,14 @@ def plot(df: pd.DataFrame, figtitle: Optional[str]) -> None:
     fig.suptitle(figtitle, fontsize=12)
 
 
-def custom_violin(
+def _custom_violin(
     ax: Axes,
     data: ArrayLike,
     pos: float,
     fc: str = "b",
     ec: str = "k",
     alpha: float = 0.7,
-    percentiles: ArrayLike = [25, 50, 75],
+    percentiles: ArrayLike = (25, 50, 75),
     side: Literal["left", "right", "both"] = "both",
     scatter_kwargs: dict[str, Any] = {},
     violin_kwargs: dict[str, Any] = {},
@@ -146,17 +182,11 @@ def custom_violin(
         ax.scatter(points_x, p, color=ec, zorder=3, **scatter_kwargs)
 
 
-def plot_violins(df: pd.DataFrame, figtitle: Optional[str]) -> None:
+def plot_gap_reward_violins(df: pd.DataFrame, figtitle: Optional[str]) -> None:
     """Plots the results in the given dataframe. In particular, it plots the
     distribution of the (final) optimality gap versus the cumulative rewards as violins.
     """
-    gaps = df["gap"].map(lambda g: g[:, -1])
-    returns = df["stage-reward"].map(lambda r: r.sum(axis=1))
-    df_: pd.DataFrame = (
-        pd.concat((gaps, returns), axis=1, keys=["gap", "return"])
-        .stack(level=0, dropna=False)
-        .unstack(level="method", fill_value=pd.NA)
-    )
+    df_ = df[["final-gap", "return"]].stack(0, False).unstack("method", pd.NA)
 
     # create figure
     problem_names = df.index.unique(level="problem")
@@ -183,9 +213,9 @@ def plot_violins(df: pd.DataFrame, figtitle: Optional[str]) -> None:
         for method in methods:
             # plot the two violins
             pos = methods.index(method)
-            custom_violin(
+            _custom_violin(
                 ax,
-                df_.loc[(problem_name, "gap")][method],
+                df_.loc[(problem_name, "final-gap")][method],
                 pos,
                 "C0",
                 "C0",
@@ -195,7 +225,7 @@ def plot_violins(df: pd.DataFrame, figtitle: Optional[str]) -> None:
             )
             return_ = df_.loc[(problem_name, "return")][method]
             if np.logical_not(np.isnan(return_)).any():
-                custom_violin(
+                _custom_violin(
                     ax_twin,
                     return_,
                     pos,
@@ -222,33 +252,53 @@ def plot_violins(df: pd.DataFrame, figtitle: Optional[str]) -> None:
     fig.suptitle(figtitle, fontsize=12)
 
 
+def _format_row(
+    row: pd.Series,
+    src_data: pd.DataFrame,
+    order: Literal["min", "max"] = "max",
+    prec: int = 3,
+    threshold_alpha: float = 5e-2,
+) -> list[str]:
+    """Formats the given row of the dataframe as a list of (possibly highlighted)
+    strings."""
+    # first, convert all row entries to strings
+    strs = [f"{x:.{prec}f}" for x in row]
+
+    # now, identify the best method and make it bold blue
+    methods = row.index.to_list()
+    problem = row.name[0]
+    best_method_idx = getattr(row, f"arg{order}")()
+    strs[best_method_idx] = f"\033[1;34m{strs[best_method_idx]}\033[0m"
+    best_method_data = src_data[(problem, methods[best_method_idx])]
+
+    # then, loop over the rest of the methods, and compare them in a pairwise
+    # fashion via the Wilcoxon (one-sided) signed-rank test. If the null hypothesis
+    # of the best method being better than the other method cannot be rejected,
+    # highlight the other method in italic violet
+    side = "less" if order == "min" else "greater"
+    for other_method_idx in (i for i in range(len(strs)) if i != best_method_idx):
+        other_method_data = src_data[(problem, methods[other_method_idx])]
+        _, alpha = wilcoxon(best_method_data, other_method_data, alternative=side)
+        if alpha > threshold_alpha:
+            strs[other_method_idx] = f"\033[35m{strs[other_method_idx]}\033[0m"
+    return strs
+
+
 def summarize(df: pd.DataFrame, tabletitle: Optional[str]) -> None:
     """Prints the summary of the results in the given dataframe as three tables, one
     containing the (final) optimality gap, one the cumulative rewards, and the last
     the time per iteration."""
 
     # first, build the dataframe with the statistics for gap, returns, and time
-
-    def stats(row: pd.Series) -> pd.Series:
-        gap = row["gap"][:, -1]
-        return_ = row["stage-reward"].sum(axis=1)
-        time = row["time"]
-        return pd.Series(
-            {
-                "g_mean": np.mean(gap),
-                "g_median": np.median(gap),
-                "r_mean": np.mean(return_),
-                "r_median": np.median(return_),
-                "t_mean": np.mean(time),
-                "t_std": np.std(time),
-            }
-        )
-
-    df_stats = (
-        df.apply(stats, axis=1)
-        .stack(level=0, dropna=False)
-        .unstack(level="method", fill_value=pd.NA)
-    )
+    cols = [
+        "final-gap-mean",
+        "final-gap-median",
+        "return-mean",
+        "return-median",
+        "time-mean",
+        "time-std",
+    ]
+    df_ = df[cols].stack(0, False).unstack("method", pd.NA)
 
     # then, instantiate the pretty tables to be filled with the statistics
     field_names = ["Function name", ""] + df.index.unique(level="method").to_list()
@@ -258,56 +308,27 @@ def summarize(df: pd.DataFrame, tabletitle: Optional[str]) -> None:
         PrettyTable(field_names[:1] + field_names[2:], title="time"),
     )
 
-    def fmt_row(
-        row: pd.Series,
-        src_data: pd.DataFrame,
-        order: Literal["min", "max"] = "max",
-        prec: int = 3,
-        threshold_alpha: float = 5e-2,
-    ) -> list[str]:
-        # first, convert all row entries to strings
-        strs = [f"{x:.{prec}f}" for x in row]
-
-        # now, identify the best method and make it bold blue
-        methods = row.index.to_list()
-        problem = row.name[0]
-        best_method_idx = getattr(row, f"arg{order}")()
-        strs[best_method_idx] = f"\033[1;34m{strs[best_method_idx]}\033[0m"
-        best_method_data = src_data[(problem, methods[best_method_idx])]
-
-        # then, loop over the rest of the methods, and compare them in a pairwise
-        # fashion via the Wilcoxon (one-sided) signed-rank test. If the null hypothesis
-        # of the best method being better than the other method cannot be rejected,
-        # highlight the other method in italic violet
-        side = "less" if order == "min" else "greater"
-        for other_method_idx in (i for i in range(len(strs)) if i != best_method_idx):
-            other_method_data = src_data[(problem, methods[other_method_idx])]
-            _, alpha = wilcoxon(best_method_data, other_method_data, alternative=side)
-            if alpha > threshold_alpha:
-                strs[other_method_idx] = f"\033[3;35m{strs[other_method_idx]}\033[0m"
-        return strs
-
     # loop over every problem and fill the pretty tables
-    for pname in df_stats.index.get_level_values("problem").unique():
+    for pname in df_.index.get_level_values("problem").unique():
         # gap (mean and median)
-        gap_data = df["gap"].map(lambda g: g[:, -1])
-        g_mean = fmt_row(df_stats.loc[(pname, "g_mean")], gap_data, prec=5)
-        g_median = fmt_row(df_stats.loc[(pname, "g_median")], gap_data, prec=5)
+        gap_data = df["final-gap"]
+        g_mean = _format_row(df_.loc[(pname, "final-gap-mean")], gap_data, prec=5)
+        g_median = _format_row(df_.loc[(pname, "final-gap-median")], gap_data, prec=5)
         tables[0].add_row([pname, "mean"] + g_mean)
         tables[0].add_row(["", "median"] + g_median)
 
         # return (mean and median)
-        return_data = df["stage-reward"].map(lambda r: r.sum(axis=1))
-        r_mean = fmt_row(df_stats.loc[(pname, "r_mean")], return_data, prec=3)
-        r_median = fmt_row(df_stats.loc[(pname, "r_median")], return_data, prec=3)
+        return_data = df["return"]
+        r_mean = _format_row(df_.loc[(pname, "return-mean")], return_data, prec=3)
+        r_median = _format_row(df_.loc[(pname, "return-median")], return_data, prec=3)
         tables[1].add_row([pname, "mean"] + r_mean)
         tables[1].add_row(["", "median"] + r_median)
 
         # time (mean +/- std)
         time_data = df["time"].map(lambda t: t.mean(axis=1))
-        t_mean = fmt_row(df_stats.loc[(pname, "t_mean")], time_data, "min", prec=2)
+        t_mean = _format_row(df_.loc[(pname, "time-mean")], time_data, "min", prec=2)
         t_mean_std = [
-            f"{m} +/- {s:.2f}" for m, s in zip(t_mean, df_stats.loc[(pname, "t_std")])
+            f"{m} +/- {s:.2f}" for m, s in zip(t_mean, df_.loc[(pname, "time-std")])
         ]
         tables[2].add_row([pname] + t_mean_std)
 
@@ -355,8 +376,8 @@ if __name__ == "__main__":
         title = filename if include_title else None
         dataframe = load_data(filename, args.exclude)
         if not args.no_plot:
-            plot(dataframe, title)
-            plot_violins(dataframe, title)
+            plot_converges(dataframe, title)
+            plot_gap_reward_violins(dataframe, title)
         if not args.no_summary:
             summarize(dataframe, title)
     plt.show()
