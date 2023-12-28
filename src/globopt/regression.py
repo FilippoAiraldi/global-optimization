@@ -252,7 +252,23 @@ class BaseRegression(Model, FantasizeMixin):
         return posterior
 
     def transform_inputs(self, X: Tensor, _: Optional[Module] = None) -> Tensor:
-        return X  # do nothing
+        return X  # does nothing
+
+    def _prepare_for_fantasizing(self, X: Tensor, Y: Tensor) -> tuple[Tensor, Tensor]:
+        """Prepares and shapes the training data for fantasizing."""
+        # X:           num_fantasies... x batch_shape x n' x m
+        # Y: samples x num_fantasies... x batch_shape x n' x 1
+        train_X = self.train_X
+        dim_diff = X.ndim - train_X.ndim
+        if dim_diff:
+            train_X = train_X.view(*([1] * dim_diff), *train_X.shape)
+            train_X = train_X.expand(*X.shape[:-2], -1, -1)
+        train_Y = self.train_Y
+        dim_diff = Y.ndim - train_Y.ndim
+        if dim_diff:
+            train_Y = train_Y.view(*([1] * dim_diff), *train_Y.shape)
+            train_Y = train_Y.expand(*Y.shape[:-2], -1, -1)
+        return train_X, train_Y
 
 
 class Idw(BaseRegression):
@@ -281,9 +297,8 @@ class Idw(BaseRegression):
         return _idw_predict(self.train_X, self.train_Y, X)
 
     def condition_on_observations(self, X: Tensor, Y: Tensor, **_: Any) -> "Idw":
-        return Idw(
-            torch.cat((self.train_X, X), dim=-2), torch.cat((self.train_Y, Y), dim=-2)
-        )
+        train_X, train_Y = self._prepare_for_fantasizing(X, Y)
+        return Idw(torch.cat((train_X, X), dim=-2), torch.cat((train_Y, Y), dim=-2))
 
 
 class Rbf(BaseRegression):
@@ -361,10 +376,7 @@ class Rbf(BaseRegression):
         return _rbf_predict(self.train_X, self.train_Y, self.eps, self.coeffs, X)
 
     def condition_on_observations(self, X: Tensor, Y: Tensor, **_: Any) -> "Rbf":
-        return Rbf(
-            torch.cat((self.train_X, X), dim=-2),
-            torch.cat((self.train_Y, Y), dim=-2),
-            self.eps,
-            self.svd_tol,
-            self.Minv_and_coeffs,
-        )
+        train_X, train_Y = self._prepare_for_fantasizing(X, Y)
+        Xnew = torch.cat((train_X, X), dim=-2)
+        Ynew = torch.cat((train_Y, Y), dim=-2)
+        return Rbf(Xnew, Ynew, self.eps, self.svd_tol, self.Minv_and_coeffs)

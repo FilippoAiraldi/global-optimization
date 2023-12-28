@@ -193,7 +193,7 @@ class IdwAcquisitionFunction(AnalyticAcquisitionFunction):
             posterior._W_sum_recipr,  # `b x 1 x 1`
             self.c1,
             self.c2,
-        ).squeeze((1, 2))
+        ).squeeze((-2, -1))
 
 
 class qIdwAcquisitionFunction(MCAcquisitionFunction):
