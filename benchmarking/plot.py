@@ -261,7 +261,7 @@ def _compute_dispersion(row: pd.Series) -> pd.Series:
         mean = val.mean()
         name = col.split("-")[-2]
         out[name] = mean
-        out[f"{name}-err"] = sem(val)
+        out[f"{name}-err"] = sem(val) if val.size > 1 else 0.0
     return pd.Series(out)
 
 
@@ -333,9 +333,12 @@ def _format_row(
     side = "less" if order == "min" else "greater"
     for other_method_idx in (i for i in range(len(strs)) if i != best_method_idx):
         other_method_data = src_data[(problem, methods[other_method_idx])]
-        _, alpha = wilcoxon(best_method_data, other_method_data, alternative=side)
-        if alpha > threshold_alpha:
-            strs[other_method_idx] = f"\033[35m{strs[other_method_idx]}\033[0m"
+        try:
+            _, alpha = wilcoxon(best_method_data, other_method_data, alternative=side)
+            if alpha > threshold_alpha:
+                strs[other_method_idx] = f"\033[35m{strs[other_method_idx]}\033[0m"
+        except ValueError:
+            pass
     return strs
 
 

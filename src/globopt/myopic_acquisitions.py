@@ -9,7 +9,7 @@ References
 """
 
 from math import pi, sqrt
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import torch
@@ -160,6 +160,7 @@ class IdwAcquisitionFunction(AnalyticAcquisitionFunction):
         c1: Union[float, Tensor],
         c2: Union[float, Tensor],
         span_Y_min: float = 1e-3,
+        **_: Any,
     ) -> None:
         """Instantiates the myopic acquisition function.
 
@@ -184,15 +185,15 @@ class IdwAcquisitionFunction(AnalyticAcquisitionFunction):
     @t_batch_mode_transform(expected_q=1)
     def forward(self, X: Tensor) -> Tensor:
         # input of this forward is `b x 1 x d`, and output `b`
-        posterior = self.model.posterior(X.transpose(-3, -2))
+        posterior = self.model.posterior(X)
         return idw_acquisition_function(
-            posterior.mean,  # `1 x n x 1`
-            posterior._scale,  # `1 x n x 1`
-            self.span_Y,  # `1 x 1 x 1` or # `1 x 1`
-            posterior._W_sum_recipr,  # `1 x n x 1`
+            posterior.mean,  # `b x 1 x 1`
+            posterior._scale,  # `b x 1 x 1`
+            self.span_Y,  # `1 x 1 x 1` or `1 x 1`
+            posterior._W_sum_recipr,  # `b x 1 x 1`
             self.c1,
             self.c2,
-        ).squeeze((0, 2))
+        ).squeeze((1, 2))
 
 
 class qIdwAcquisitionFunction(MCAcquisitionFunction):
@@ -220,6 +221,7 @@ class qIdwAcquisitionFunction(MCAcquisitionFunction):
         c2: Union[float, Tensor],
         sampler: Optional[MCSampler],
         span_Y_min: float = 1e-3,
+        **_: Any,
     ) -> None:
         """Instantiates the myopic acquisition function.
 

@@ -6,7 +6,6 @@ import argparse
 import fcntl
 from collections.abc import Iterable
 from datetime import datetime
-from functools import partial
 from itertools import chain, cycle, product
 from pathlib import Path
 from time import perf_counter
@@ -93,9 +92,8 @@ def run_problem(
     c1 = torch.scalar_tensor(1.0 / ndim)
     c2 = torch.scalar_tensor(0.5 / ndim)
     eps = torch.scalar_tensor(1.0 / ndim)
-    num_restarts = 16 * ndim
+    n_restarts = 16 * ndim
     raw_samples = 16 * 8 * ndim
-    gh_sampler = GaussHermiteSampler(sample_shape=torch.Size([16]))
     # mc_samples = 2 ** ceil(log2(256 * horizon))
     # sampler = SobolQMCNormalSampler(mc_samples, seed=mk_seed())
 
@@ -113,9 +111,9 @@ def run_problem(
         def get_mdl(*_, **__) -> None:
             return None
 
-        def get_next_point_and_reward(_) -> tuple[Tensor, float]:
+        def get_next_obs(_, __) -> tuple[Tensor, float, Tensor]:
             X_opt = torch.rand(1, ndim) * (bounds[1] - bounds[0]) + bounds[0]
-            return X_opt, torch.nan
+            return X_opt, torch.nan, torch.nan
 
     elif method == "ei":
 
@@ -128,57 +126,67 @@ def run_problem(
             mdl.train_Y = Y
             return mdl
 
-        def get_next_point_and_reward(model: SingleTaskGP) -> tuple[Tensor, float]:
+        def get_next_obs(model: SingleTaskGP, _) -> tuple[Tensor, float, Tensor]:
             acqfun = ExpectedImprovement(model, model.train_Y.amin(), maximize=False)
             X_opt, _ = optimize_acqf(
-                acqfun, bounds, 1, num_restarts, raw_samples, {"seed": mk_seed()}
+                acqfun, bounds, 1, n_restarts, raw_samples, {"seed": mk_seed()}
             )
-            return X_opt, torch.nan
+            return X_opt, torch.nan, torch.nan
 
-    elif method == "myopic" or method == "s-myopic":
-        # NOTE: the stage reward is slightly different between myopic and s-myopic
-
+    else:
         if regression_type == "rbf":
 
             def get_mdl(X: Tensor, Y: Tensor, prev_mdl: Rbf) -> Rbf:
                 Mc = None if prev_mdl is None else prev_mdl.Minv_and_coeffs
                 return Rbf(X, Y, eps, Minv_and_coeffs=Mc)
 
-        elif regression_type == "idw":
+        else:  # regression_type == "idw":
 
             def get_mdl(X: Tensor, Y: Tensor, _) -> Idw:
                 return Idw(X, Y)
 
+        if method == "myopic":
+
+            def get_next_obs(model: Union[Rbf, Idw], _) -> tuple[Tensor, float, Tensor]:
+                acqfun = IdwAcquisitionFunction(model, c1, c2)
+                X_opt, acq_opt = optimize_acqf(
+                    acqfun, bounds, 1, n_restarts, raw_samples, {"seed": mk_seed()}
+                )
+                return X_opt, acq_opt.item(), torch.nan
+
+        elif method == "s-myopic":
+            # NOTE: the stage reward is slightly different between myopic and s-myopic
+            gh_sampler = GaussHermiteSampler(sample_shape=torch.Size([16]))
+
+            def get_next_obs(model: Union[Rbf, Idw], _) -> tuple[Tensor, float, Tensor]:
+                acqfun = qIdwAcquisitionFunction(model, c1, c2, sampler=gh_sampler)
+                X_opt, acq_opt = optimize_acqf(
+                    acqfun, bounds, 1, n_restarts, raw_samples, {"seed": mk_seed()}
+                )
+                return X_opt, acq_opt.item(), torch.nan
+
+        elif method.startswith("rollout"):
+            raise NotImplementedError
+
         else:
-            raise RuntimeError(f"Unrecognized regression type {regression_type}.")
-
-        acqf_cls = (
-            IdwAcquisitionFunction
-            if method == "myopic"
-            else partial(qIdwAcquisitionFunction, sampler=gh_sampler)
-        )
-
-        def get_next_point_and_reward(model: Union[Rbf, Idw]) -> tuple[Tensor, float]:
-            acqfun = acqf_cls(model, c1, c2)
-            X_opt, acq_opt = optimize_acqf(
-                acqfun, bounds, 1, num_restarts, raw_samples, {"seed": mk_seed()}
-            )
-            return X_opt, acq_opt.item()
-
-    else:
-        raise NotImplementedError
+            raise NotImplementedError
 
     # run optimization loop
+    last_iter_optimizer = None
     prev_mdl = None
     best_so_far: list[float] = [Y.amin().item()]
     stage_reward: list[float] = []
-    iteration_times: list[float] = []
-    for _ in range(maxiter):
-        start_time = perf_counter()
-
+    computation_times: list[float] = []
+    for iteration in range(maxiter):
         # fit model and optimize acquisition function to get the next point to sample
+        start_time = perf_counter()
         mdl = get_mdl(X, Y, prev_mdl)
-        X_opt, acq_opt = get_next_point_and_reward(mdl)
+        options = {
+            "budget": maxiter - iteration,
+            "last_iter_optimizer": last_iter_optimizer,
+        }
+        X_opt, acq_opt, last_iter_optimizer = get_next_obs(mdl, options)
+        computation_times.append(perf_counter() - start_time)
 
         # evaluate objective function at the new point, and append it to training data
         X = torch.cat((X, X_opt))
@@ -188,12 +196,11 @@ def run_problem(
         best_so_far.append(Y.amin().item())
         stage_reward.append(acq_opt)
         prev_mdl = mdl
-        iteration_times.append(perf_counter() - start_time)
 
     # save results, delete references and free memory (at least, try to)
     rewards = ",".join(map(str, stage_reward))
     bests = ",".join(map(str, best_so_far))
-    times = ",".join(map(str, iteration_times))
+    times = ",".join(map(str, computation_times))
     lock_write(csv, f"{problem_name};{method};{rewards};{bests};{times}")
     del problem, mdl, X, Y, X_opt, best_so_far, stage_reward
     if device.startswith("cuda"):

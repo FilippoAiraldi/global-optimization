@@ -45,10 +45,7 @@ References
 # * myopic case:
 #   * `IdwAcquisitionFunction`: in this acquisition function, `q = 1`. Moreover, the
 #     regressor should be unique, i.e., `p = 1`, even though we do not explictly check.
-#     This means that, in practice, the `b` dimension is botorch is automatically
-#     swapped in second place and used as the `m` (usually, we use `n` for prediction
-#     points, and `m` for training). This is done because batching the regressor usually
-#     is numerically poorer than passing `b` points in `m` dimension.
+#     This is the simplest case.
 #   * `qIdwAcquisitionFunction`: here, while `q > 1` is supported, in practice, in
 #     our optimization loops we decide to only compute one candidate per iteration.
 #     Instead, `b` is the number of batches of `q` points. The acquisition function

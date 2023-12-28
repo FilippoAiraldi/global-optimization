@@ -92,8 +92,8 @@ class Step2(SyntheticTestFunction):
     """
 
     _optimal_value = 0.0
-    _optimizers = [(2.0, 0.10578)]
-    _bounds = [(-1.0, 2.0), (-1.0, 1.0)]
+    _optimizers = [(0.0, 0.0)]
+    _bounds = [(-100.0, 100.0), (-100.0, 100.0)]
 
     def __init__(self, dim: int, *args: Any, **kwargs: Any) -> None:
         self.dim = dim
@@ -215,16 +215,6 @@ TESTS: dict[
         ]
     }
 )
-
-
-# NOTE:
-# General observations:
-# - RBF is a bit faster than IDW to simulate
-# - Ackley: with bounds increased, RBF h=1 is bad, whereas IDW is super good (maybe too
-#   good?)
-# - Adjiman: with RBF, too good
-# - Michalewicz: appears to be very difficult
-# - Shekel: with RBF decent, abismal with IDW
 
 
 def get_available_benchmark_problems() -> list[str]:

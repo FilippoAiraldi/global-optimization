@@ -33,7 +33,7 @@ class TestAcquisitionFunction(unittest.TestCase):
 
         out = torch.stack((s.squeeze(), z.squeeze(), a2.squeeze()))
         out_expected = torch.as_tensor(RESULTS["acquisitions"], dtype=a1.dtype)
-        torch.testing.assert_close(a1, a2.squeeze())
+        torch.testing.assert_close(a1, a2.squeeze(), rtol=1e-5, atol=1e-3)
         torch.testing.assert_close(a1, out_expected[-1], rtol=1e-5, atol=1e-3)
         torch.testing.assert_close(out, out_expected, rtol=1e-5, atol=1e-3)
 

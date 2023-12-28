@@ -50,8 +50,8 @@ X = torch.linspace(lb, ub, 1000).view(1, -1, 1)
 y_hat, s, W_sum_recipr, _ = mdl(X)
 
 # compute the overall analytical acquisition function, component by component
-c1 = 1.0
-c2 = 0.5
+c1 = torch.scalar_tensor(1.0)
+c2 = torch.scalar_tensor(0.5)
 y_span = train_Y.amax(-2, keepdim=True) - train_Y.amin(-2, keepdim=True)
 z = _idw_distance(W_sum_recipr)
 a = idw_acquisition_function(y_hat, s, y_span, W_sum_recipr, c1, c2).squeeze()
