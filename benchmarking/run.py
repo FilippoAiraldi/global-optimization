@@ -4,18 +4,21 @@ Benchmarking myopic and non-myopic Global Optimization strategies on benchmark p
 
 import argparse
 import fcntl
+import gc
 from collections.abc import Iterable
 from datetime import datetime
 from itertools import chain, cycle, product
 from pathlib import Path
 from time import perf_counter
-from typing import Union
+from typing import Optional, Union
+from warnings import warn
 
 import numpy as np
 import torch
 from botorch.acquisition import ExpectedImprovement
 from botorch.fit import fit_gpytorch_mll
 from botorch.models import SingleTaskGP
+from botorch.models.model import Model
 from botorch.models.transforms import Normalize
 from botorch.optim import optimize_acqf
 from botorch.utils import standardize
@@ -111,7 +114,7 @@ def run_problem(
         def get_mdl(*_, **__) -> None:
             return None
 
-        def get_next_obs(_, __) -> tuple[Tensor, float, Tensor]:
+        def next_obs(*_, **__) -> tuple[Tensor, float, Tensor]:
             X_opt = torch.rand(1, ndim) * (bounds[1] - bounds[0]) + bounds[0]
             return X_opt, torch.nan, torch.nan
 
@@ -126,7 +129,7 @@ def run_problem(
             mdl.train_Y = Y
             return mdl
 
-        def get_next_obs(model: SingleTaskGP, _) -> tuple[Tensor, float, Tensor]:
+        def next_obs(model: SingleTaskGP, *_, **__) -> tuple[Tensor, float, Tensor]:
             acqfun = ExpectedImprovement(model, model.train_Y.amin(), maximize=False)
             X_opt, _ = optimize_acqf(
                 acqfun, bounds, 1, n_restarts, raw_samples, {"seed": mk_seed()}
@@ -147,7 +150,7 @@ def run_problem(
 
         if method == "myopic":
 
-            def get_next_obs(model: Union[Rbf, Idw], _) -> tuple[Tensor, float, Tensor]:
+            def next_obs(model: Union[Rbf, Idw], *_) -> tuple[Tensor, float, Tensor]:
                 acqfun = IdwAcquisitionFunction(model, c1, c2)
                 X_opt, acq_opt = optimize_acqf(
                     acqfun, bounds, 1, n_restarts, raw_samples, {"seed": mk_seed()}
@@ -158,7 +161,7 @@ def run_problem(
             # NOTE: the stage reward is slightly different between myopic and s-myopic
             gh_sampler = GaussHermiteSampler(sample_shape=torch.Size([16]))
 
-            def get_next_obs(model: Union[Rbf, Idw], _) -> tuple[Tensor, float, Tensor]:
+            def next_obs(model: Union[Rbf, Idw], *_) -> tuple[Tensor, float, Tensor]:
                 acqfun = qIdwAcquisitionFunction(model, c1, c2, sampler=gh_sampler)
                 X_opt, acq_opt = optimize_acqf(
                     acqfun, bounds, 1, n_restarts, raw_samples, {"seed": mk_seed()}
@@ -172,39 +175,46 @@ def run_problem(
             raise NotImplementedError
 
     # run optimization loop
-    last_iter_optimizer = None
-    prev_mdl = None
-    best_so_far: list[float] = [Y.amin().item()]
-    stage_reward: list[float] = []
-    computation_times: list[float] = []
-    for iteration in range(maxiter):
-        # fit model and optimize acquisition function to get the next point to sample
-        start_time = perf_counter()
-        mdl = get_mdl(X, Y, prev_mdl)
-        options = {
-            "budget": maxiter - iteration,
-            "last_iter_optimizer": last_iter_optimizer,
-        }
-        X_opt, acq_opt, last_iter_optimizer = get_next_obs(mdl, options)
-        computation_times.append(perf_counter() - start_time)
+    mdl: Optional[Model] = None
+    obs_opt: Tensor = torch.nan
+    acq_opt: float = float("nan")
+    prev_full_opt: Tensor = torch.nan
+    bests: list[float] = [Y.amin().item()]
+    rewards: list[float] = []
+    timings: list[float] = []
+    try:
+        for iteration in range(maxiter):
+            # fit model and optimize acquisition to get the next point to sample
+            start_time = perf_counter()
+            mdl = get_mdl(X, Y, mdl)
+            obs_opt, acq_opt, prev_full_opt = next_obs(
+                mdl, maxiter - iteration, prev_full_opt
+            )
+            timings.append(perf_counter() - start_time)
 
-        # evaluate objective function at the new point, and append it to training data
-        X = torch.cat((X, X_opt))
-        Y = torch.cat((Y, problem(X_opt)))
+            # evaluate objective function at new point, and append it to training data
+            X = torch.cat((X, obs_opt))
+            Y = torch.cat((Y, problem(obs_opt)))
 
-        # compute and save best-so-far and incurred cost
-        best_so_far.append(Y.amin().item())
-        stage_reward.append(acq_opt)
-        prev_mdl = mdl
+            # compute and save best-so-far and incurred cost
+            bests.append(Y.amin().item())
+            rewards.append(acq_opt)
 
-    # save results, delete references and free memory (at least, try to)
-    rewards = ",".join(map(str, stage_reward))
-    bests = ",".join(map(str, best_so_far))
-    times = ",".join(map(str, computation_times))
-    lock_write(csv, f"{problem_name};{method};{rewards};{bests};{times}")
-    del problem, mdl, X, Y, X_opt, best_so_far, stage_reward
-    if device.startswith("cuda"):
-        torch.cuda.empty_cache()
+        # save results, delete references and free memory (at least, try to)
+        rewards = ",".join(map(str, rewards))
+        bests = ",".join(map(str, bests))
+        timings = ",".join(map(str, timings))
+        lock_write(csv, f"{problem_name};{method};{rewards};{bests};{timings}")
+    except Exception as e:
+        warn(
+            f"Exception raised during `{problem_name}` with `{method}`:\n{e}.",
+            RuntimeWarning,
+        )
+    finally:
+        del problem, X, Y, mdl, obs_opt, acq_opt, prev_full_opt, bests, rewards, timings
+        gc.collect()
+        if device.startswith("cuda"):
+            torch.cuda.empty_cache()
 
 
 def run_benchmarks(

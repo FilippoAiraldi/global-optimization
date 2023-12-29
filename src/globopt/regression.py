@@ -149,14 +149,26 @@ def _rbf_fit(
 @script(
     example_inputs=[
         (
-            torch.rand(2, 5, 3),
-            torch.rand(2, 5, 1),
-            torch.rand(()),
-            torch.rand(2, 3, 3),
-            torch.rand(2, 3, 1),
+            torch.as_tensor(
+                [
+                    [[0.0916, 0.0519], [0.5173, 0.1330], [0.7770, 0.8146]],
+                    [[0.5207, 0.5535], [0.8629, 0.7549], [0.3546, 0.0307]],
+                ]
+            ),
+            torch.as_tensor(
+                [[[0.6884], [0.1132], [0.0883]], [[0.6140], [0.1792], [0.8511]]]
+            ),
+            torch.scalar_tensor(0.9130),
+            torch.as_tensor(
+                [
+                    [[0.6724, 0.9030], [0.9601, 0.6830]],
+                    [[0.4714, 0.7962], [0.3455, 0.8429]],
+                ]
+            ),
+            torch.as_tensor([[[0.5599], [0.7092]], [[0.2246], [0.1549]]]),
         )
     ]
-)  # unable to trace this one
+)  # unable to trace this one; fix inputs to avoid singular S matrix
 def _rbf_partial_fit(
     X: Tensor, Y: Tensor, eps: Tensor, Minv: Tensor, coeffs: Tensor
 ) -> tuple[Tensor, Tensor]:
