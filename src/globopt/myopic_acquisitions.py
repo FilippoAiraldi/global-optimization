@@ -132,7 +132,9 @@ class IdwAcquisitionFunction(AnalyticAcquisitionFunction):
             contribution is null).
         """
         super().__init__(model)
-        Y_min, Y_max = model.train_Y.aminmax(dim=-2, keepdim=True)
+        # Y_min, Y_max = model.train_Y.aminmax(dim=-2, keepdim=True)
+        Y_min = model.train_Y.amin(dim=-2, keepdim=True)
+        Y_max = model.train_Y.amax(dim=-2, keepdim=True)
         self.register_buffer("span_Y", (Y_max - Y_min).clamp_min(span_Y_min))
         self.register_buffer("c1", torch.scalar_tensor(c1))
         self.register_buffer("c2", torch.scalar_tensor(c2))
@@ -195,7 +197,9 @@ class qIdwAcquisitionFunction(MCAcquisitionFunction):
             contribution is null).
         """
         super().__init__(model, sampler)
-        Y_min, Y_max = model.train_Y.aminmax(dim=-2, keepdim=True)
+        # Y_min, Y_max = model.train_Y.aminmax(dim=-2, keepdim=True)
+        Y_min = model.train_Y.amin(dim=-2, keepdim=True)
+        Y_max = model.train_Y.amax(dim=-2, keepdim=True)
         self.register_buffer("span_Y", (Y_max - Y_min).clamp_min(span_Y_min))
         self.register_buffer("c1", torch.scalar_tensor(c1))
         self.register_buffer("c2", torch.scalar_tensor(c2))

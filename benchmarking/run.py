@@ -16,6 +16,7 @@ from warnings import warn
 import numpy as np
 import torch
 from botorch.acquisition import ExpectedImprovement
+from botorch.acquisition.multi_step_lookahead import warmstart_multistep
 from botorch.fit import fit_gpytorch_mll
 from botorch.models import SingleTaskGP
 from botorch.models.model import Model
@@ -28,11 +29,15 @@ from scipy.stats.qmc import LatinHypercube
 from status import filter_tasks_by_status
 from torch import Tensor
 
-from globopt.myopic_acquisitions import (
+from globopt import (
     GaussHermiteSampler,
     IdwAcquisitionFunction,
+    make_idw_acq_factory,
     qIdwAcquisitionFunction,
+    qRollout,
 )
+
+# from globopt.nonmyopic_acquisitions import qRollout
 from globopt.problems import get_available_benchmark_problems, get_benchmark_problem
 from globopt.regression import Idw, Rbf
 
@@ -169,7 +174,51 @@ def run_problem(
                 return X_opt, acq_opt.item(), torch.nan
 
         elif method.startswith("rollout"):
-            raise NotImplementedError
+            horizon = int(method.split(".")[1])
+            n_restarts_ = int(n_restarts * (horizon + 1) / 2)
+            raw_samples_ = int(raw_samples * (horizon + 1) / 2)
+            maxfun = 15_000
+            gh_sampler = GaussHermiteSampler(sample_shape=torch.Size([16]))
+            kwargs_factory = make_idw_acq_factory(c1, c2)
+
+            def next_obs(
+                model: Union[Rbf, Idw], budget: int, prev_full_opt: Tensor
+            ) -> tuple[Tensor, float]:
+                remaining_horizon = min(horizon, budget)
+                if remaining_horizon == 1:
+                    acqfun = qIdwAcquisitionFunction(model, c1, c2, sampler=gh_sampler)
+                    X_opt, acq_opt = optimize_acqf(
+                        acqfun, bounds, 1, n_restarts, raw_samples, {"seed": mk_seed()}
+                    )
+                    return X_opt, acq_opt.item(), torch.nan
+
+                acqfun = qRollout(
+                    model,
+                    horizon,
+                    qIdwAcquisitionFunction,
+                    kwargs_factory,
+                    valfunc_sampler=gh_sampler,
+                )
+                if prev_full_opt is torch.nan:
+                    prev_full_opt = None
+                else:
+                    prev_full_opt = warmstart_multistep(
+                        acqfun, bounds, n_restarts_, raw_samples_, prev_full_opt
+                    )
+                full_opt, tree_vals = optimize_acqf(
+                    acqfun,
+                    bounds,
+                    horizon,  # == acqfun.get_augmented_q_batch_size(1)
+                    n_restarts_,
+                    raw_samples_,
+                    batch_initial_conditions=prev_full_opt,
+                    return_best_only=False,
+                    return_full_tree=True,
+                    options={"seed": mk_seed(), "maxfun": maxfun},
+                )
+                best_tree_idx = tree_vals.argmax()
+                X_opt = acqfun.extract_candidates(full_opt[best_tree_idx])
+                return X_opt, tree_vals[best_tree_idx].item(), full_opt
 
         else:
             raise NotImplementedError
@@ -264,7 +313,7 @@ if __name__ == "__main__":
         " `myopic`. Non-myopic algorithms are `rollout` and `multi-tree`, where the "
         "horizons to simulate can be specified with a dot folloewd by (one or more) "
         "horizons, e.g., `rollout.2.3`. These horizons should be larger than 1. "
-        "Methods are: `random`, `ei`, `myopic`, `s-myopic`.",
+        "Methods are: `random`, `ei`, `myopic`, `s-myopic`, `rollout`.",
         required=True,
     )
     group.add_argument(
