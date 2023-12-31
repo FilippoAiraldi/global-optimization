@@ -175,8 +175,6 @@ def run_problem(
 
         elif method.startswith("rollout"):
             horizon = int(method.split(".")[1])
-            n_restarts_ = int(n_restarts * (horizon + 1) / 2)
-            raw_samples_ = int(raw_samples * (horizon + 1) / 2)
             maxfun = 15_000
             gh_sampler = GaussHermiteSampler(sample_shape=torch.Size([16]))
             kwargs_factory = make_idw_acq_factory(c1, c2)
@@ -192,6 +190,8 @@ def run_problem(
                     )
                     return X_opt, acq_opt.item(), torch.nan
 
+                n_restarts_ = int(n_restarts * (remaining_horizon + 1) / 2)
+                raw_samples_ = int(raw_samples * (remaining_horizon + 1) / 2)
                 acqfun = qRollout(
                     model,
                     horizon,
