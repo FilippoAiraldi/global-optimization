@@ -105,7 +105,10 @@ class Step2(SyntheticTestFunction):
 
 class HyperTuningGridTestFunction(SyntheticTestFunction):
     """Test function for hyperparameter tuning. Given a grid of pre-computed points, it
-    fits a regressor to interpolate function values at new points."""
+    fits a regressor to interpolate function values at new points.
+
+    Inspired by https://github.com/shalijiang/bo's `hyper_tuning_functions_on_grid.py`.
+    """
 
     def __init__(
         self,
