@@ -16,9 +16,8 @@ import torch
 from botorch.optim import optimize_acqf
 from torch import Tensor
 
-from globopt.myopic_acquisitions import IdwAcquisitionFunction
+from globopt import IdwAcquisitionFunction, Rbf
 from globopt.problems import SimpleProblem
-from globopt.regression import Rbf
 
 torch.manual_seed(0)
 torch.use_deterministic_algorithms(True)

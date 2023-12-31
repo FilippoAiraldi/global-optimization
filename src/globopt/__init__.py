@@ -5,12 +5,10 @@ __all__ = [
     "GaussHermiteSampler",
     "Idw",
     "IdwAcquisitionFunction",
+    "PosteriorMeanSampler",
     "Rbf",
 ]
 
-from globopt.myopic_acquisitions import (
-    GaussHermiteSampler,
-    IdwAcquisitionFunction,
-    qIdwAcquisitionFunction,
-)
+from globopt.myopic_acquisitions import IdwAcquisitionFunction, qIdwAcquisitionFunction
 from globopt.regression import Idw, Rbf
+from globopt.sampling import GaussHermiteSampler, PosteriorMeanSampler

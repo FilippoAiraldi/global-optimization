@@ -17,13 +17,8 @@ import torch
 from botorch.optim import optimize_acqf
 from botorch.sampling import SobolQMCNormalSampler
 
-from globopt.myopic_acquisitions import (
-    GaussHermiteSampler,
-    IdwAcquisitionFunction,
-    _idw_distance,
-    idw_acquisition_function,
-    qIdwAcquisitionFunction,
-)
+from globopt import GaussHermiteSampler, IdwAcquisitionFunction, qIdwAcquisitionFunction
+from globopt.myopic_acquisitions import _idw_distance, idw_acquisition_function
 from globopt.problems import SimpleProblem
 from globopt.regression import Rbf
 
@@ -108,7 +103,7 @@ ax.fill_between(
     alpha=0.2,
 )
 ax.plot(X, z.squeeze(), label="$z(x)$", color="C2")
-names = ["Analytical", "Monte Carlo", "Expected"]
+names = ["Analytical", "Monte Carlo", "Gauss-Hermite"]
 data = [(a, x_opt, a_opt), (a_mc, x_opt_mc, a_opt_mc), (a_exp, x_opt_exp, a_opt_exp)]
 for i, (name, (a_, x_opt_, a_opt_)) in enumerate(zip(names, data)):
     c = f"C{i + 3}"

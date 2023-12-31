@@ -8,14 +8,11 @@ References
     functions. Computational Optimization and Applications, 77(2):571–595, 2020
 """
 
-from math import pi, sqrt
 from typing import Any, Optional, Union
 
-import numpy as np
 import torch
 from botorch.acquisition.analytic import AnalyticAcquisitionFunction
 from botorch.acquisition.monte_carlo import MCAcquisitionFunction
-from botorch.posteriors import Posterior
 from botorch.sampling.base import MCSampler
 from botorch.utils import t_batch_mode_transform
 from torch import Tensor
@@ -88,48 +85,6 @@ def idw_acquisition_function(
     """
     distance = _idw_distance(W_sum_recipr)
     return Y_hat.sub(Y_std, alpha=c1).sub(Y_span.mul(distance), alpha=c2).neg()
-
-
-class GaussHermiteSampler(MCSampler):
-    """Sampler for Gauss-Hermite base samples. Supports only a single sample dimension.
-
-    Example
-    -------
-    >>> sampler = GaussHermiteSampler(1000)
-    >>> posterior = model.posterior(test_X)
-    >>> samples = sampler(posterior)
-    """
-
-    def __init__(self, sample_shape: torch.Size) -> None:
-        assert len(sample_shape) == 1, "Only a single dimension is supported."
-        super().__init__(sample_shape)
-        self.register_buffer("base_weights", None)
-
-    def forward(self, posterior: Posterior) -> Tensor:
-        self._construct_base_samples(posterior)
-        base_samples = self.base_samples.expand(
-            self._get_extended_base_sample_shape(posterior)
-        )
-        return posterior.rsample_from_base_samples(self.sample_shape, base_samples)
-
-    def _construct_base_samples(self, posterior: Posterior) -> None:
-        target_shape = self._get_collapsed_shape(posterior)
-        if (
-            self.base_samples is not None
-            and self.base_weights is not None
-            and self.base_samples.shape == target_shape
-        ):
-            return
-        out_dim = target_shape[len(self.sample_shape) :].numel()
-        assert out_dim == 1, f"Only output_dim = 1 is supported, but got {out_dim}."
-        abscissas, weights = np.polynomial.hermite.hermgauss(self.sample_shape.numel())
-        abscissas *= sqrt(2.0)
-        weights /= sqrt(pi)
-        base_samples = torch.from_numpy(abscissas).view(target_shape)
-        base_weights = torch.from_numpy(weights).view(target_shape)
-        self.register_buffer("base_samples", base_samples)
-        self.register_buffer("base_weights", base_weights)
-        self.to(device=posterior.device, dtype=posterior.dtype)
 
 
 class IdwAcquisitionFunction(AnalyticAcquisitionFunction):

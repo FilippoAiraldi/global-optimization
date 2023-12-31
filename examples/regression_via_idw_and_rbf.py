@@ -16,8 +16,8 @@ from typing import Union
 import matplotlib.pyplot as plt
 import torch
 
+from globopt import Idw, Rbf
 from globopt.problems import SimpleProblem
-from globopt.regression import Idw, Rbf
 
 torch.manual_seed(0)
 torch.use_deterministic_algorithms(True)
