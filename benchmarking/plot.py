@@ -24,7 +24,16 @@ from globopt.problems import get_benchmark_problem
 
 plt.style.use("bmh")
 
-METHODS_ORDER = ["random", "ei", "myopic", "myopic-s"]
+
+METHODS_ORDER = ["random", "ei", "myopic", "myopic-s", "rollout"]
+
+
+def _sort_method(method: str) -> int:
+    """computes the sorting rank of given method (takes into account horizon, if any)."""
+    parts = method.split(".")
+    method = parts[0]
+    rank = METHODS_ORDER.index(method)
+    return rank if len(parts) == 1 else rank + int(parts[1])
 
 
 def _compute_all_stats(row: pd.Series) -> pd.Series:
@@ -74,7 +83,7 @@ def load_data(csv_filename: str, exclude: list[str]) -> pd.DataFrame:
     # manually sort problems alphabetically but methods in a custom order
     df.sort_values(
         ["problem", "method"],
-        key=lambda s: s if s.name == "problem" else s.map(METHODS_ORDER.index),
+        key=lambda s: s if s.name == "problem" else s.map(_sort_method),
         ignore_index=True,
         inplace=True,
     )
@@ -293,13 +302,14 @@ def plot_timings(df: pd.DataFrame, figtitle: Optional[str]) -> None:
         "ei": {"ha": "left", "xytext": (5, 5)},
         "myopic": {"ha": "right", "xytext": (-5, 5)},
         "myopic-s": {"ha": "left", "xytext": (5, 5)},
+        "rollout": {"ha": "left", "xytext": (5, 5)},
     }
     for method in df_.index:
         ax.annotate(
             method,
             xy=(df_.loc[method, "time"], df_.loc[method, "gap"]),
             textcoords="offset points",
-            **options[method],
+            **options[method.split(".")[0]],
         )
     ax.set_xscale("log")
     ax.set_xlabel("Seconds per iteration")
