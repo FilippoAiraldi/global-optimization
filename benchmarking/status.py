@@ -85,4 +85,5 @@ if __name__ == "__main__":
 
     # load each result and plot
     for filename in args.filenames:
-        print(filename, "@", datetime.now(), "\n", get_status(filename), "\n")
+        df = get_status(filename).to_string(na_rep="-")
+        print(filename, "@", datetime.now(), "\n", df, "\n")
