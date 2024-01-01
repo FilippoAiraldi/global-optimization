@@ -25,7 +25,6 @@ from botorch.optim import optimize_acqf
 from botorch.utils import standardize
 from gpytorch.mlls import ExactMarginalLogLikelihood
 from joblib import Parallel, delayed
-from scipy.stats.qmc import LatinHypercube
 from status import filter_tasks_by_status
 from torch import Tensor
 
@@ -105,12 +104,14 @@ def run_problem(
     # mc_samples = 2 ** ceil(log2(256 * horizon))
     # sampler = SobolQMCNormalSampler(mc_samples, seed=mk_seed())
 
-    # draw random initial points via LHS
+    # draw random initial points
     np_random = np.random.default_rng(seed)
     mk_seed = lambda: int(np_random.integers(0, 2**32 - 1))
-    lhs = LatinHypercube(ndim, seed=mk_seed())
     bounds: Tensor = problem.bounds
-    X = torch.as_tensor(lhs.random(n_init)) * (bounds[1] - bounds[0]) + bounds[0]
+    X = (
+        torch.as_tensor(np_random.random((n_init, ndim))) * (bounds[1] - bounds[0])
+        + bounds[0]
+    )
     Y = problem(X)
 
     # define mdoel and acquisition function getters
@@ -190,8 +191,8 @@ def run_problem(
                     )
                     return X_opt, acq_opt.item(), torch.nan
 
-                n_restarts_ = int(n_restarts * (remaining_horizon + 1) / 2)
-                raw_samples_ = int(raw_samples * (remaining_horizon + 1) / 2)
+                n_restarts_ = n_restarts * remaining_horizon
+                raw_samples_ = raw_samples * remaining_horizon
                 acqfun = qRollout(
                     model,
                     horizon,
