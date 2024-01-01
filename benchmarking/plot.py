@@ -24,7 +24,7 @@ from globopt.problems import get_benchmark_problem
 
 plt.style.use("bmh")
 
-METHODS_ORDER = ["random", "ei", "myopic", "s-myopic"]
+METHODS_ORDER = ["random", "ei", "myopic", "myopic-s"]
 
 
 def _compute_all_stats(row: pd.Series) -> pd.Series:
@@ -292,7 +292,7 @@ def plot_timings(df: pd.DataFrame, figtitle: Optional[str]) -> None:
         "random": {"ha": "left", "xytext": (5, 5)},
         "ei": {"ha": "left", "xytext": (5, 5)},
         "myopic": {"ha": "right", "xytext": (-5, 5)},
-        "s-myopic": {"ha": "left", "xytext": (5, 5)},
+        "myopic-s": {"ha": "left", "xytext": (5, 5)},
     }
     for method in df_.index:
         ax.annotate(
