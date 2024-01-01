@@ -159,6 +159,7 @@ def _rbf_fit(
                 [[[0.6884], [0.1132], [0.0883]], [[0.6140], [0.1792], [0.8511]]]
             ),
             torch.scalar_tensor(0.9130),
+            torch.scalar_tensor(1e-8),
             torch.as_tensor(
                 [
                     [[0.6724, 0.9030], [0.9601, 0.6830]],
@@ -170,7 +171,7 @@ def _rbf_fit(
     ]
 )  # unable to trace this one; fix inputs to avoid singular S matrix
 def _rbf_partial_fit(
-    X: Tensor, Y: Tensor, eps: Tensor, Minv: Tensor, coeffs: Tensor
+    X: Tensor, Y: Tensor, eps: Tensor, tol: Tensor, Minv: Tensor, coeffs: Tensor
 ) -> tuple[Tensor, Tensor]:
     """Fits the given RBF regression to the new training data."""
     n = coeffs.shape[-2]  # index of the first new data point onwards
@@ -180,6 +181,7 @@ def _rbf_partial_fit(
     phi = Phi_and_phi[..., n:]
     L = Minv.matmul(PhiT.transpose(-2, -1))
     S = phi - PhiT.matmul(L)  # Schur complement
+    S = S.where(S.abs() > tol, tol)  # avoid singular S matrix
     Sinv = torch.linalg.inv(S)
     B = -L.matmul(Sinv)
     A = Minv - B.matmul(L.transpose(-2, -1))
@@ -351,7 +353,7 @@ class Rbf(BaseRegression):
             Minv, coeffs = _rbf_fit(self.train_X, self.train_Y, eps, svd_tol)
         else:
             Minv, coeffs = _rbf_partial_fit(
-                self.train_X, self.train_Y, eps, *Minv_and_coeffs
+                self.train_X, self.train_Y, eps, svd_tol, *Minv_and_coeffs
             )
         self.register_buffer("eps", eps)
         self.register_buffer("svd_tol", svd_tol)
