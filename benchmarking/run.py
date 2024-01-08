@@ -117,35 +117,30 @@ def run_problem(
     # define mdoel and acquisition function getters
     if method == "random":
 
-        def get_mdl(*_, **__) -> None:
-            return None
-
-        def next_obs(*_, **__) -> tuple[Tensor, float, Tensor]:
+        def next_obs(*_, **__) -> tuple[Tensor, Tensor, None]:
             X_opt = torch.rand(1, ndim) * (bounds[1] - bounds[0]) + bounds[0]
-            return X_opt, torch.nan, torch.nan
+            return X_opt, torch.nan, None
 
     elif method == "ei":
 
-        def get_mdl(X: Tensor, Y: Tensor, _) -> SingleTaskGP:
-            Y = Y.unsqueeze(-1)
+        def next_obs(
+            X: Tensor, Y: Tensor, *_, **__
+        ) -> tuple[Tensor, Tensor, SingleTaskGP]:
+            Y_ = Y.unsqueeze(-1)
             mdl = SingleTaskGP(
-                X, standardize(Y), input_transform=Normalize(ndim, bounds=bounds)
+                X, standardize(Y_), input_transform=Normalize(ndim, bounds=bounds)
             )
             fit_gpytorch_mll(ExactMarginalLogLikelihood(mdl.likelihood, mdl))
-            mdl.train_Y = Y
-            return mdl
-
-        def next_obs(model: SingleTaskGP, *_, **__) -> tuple[Tensor, float, Tensor]:
-            acqfun = ExpectedImprovement(model, model.train_Y.amin(), maximize=False)
+            acqfun = ExpectedImprovement(mdl, Y.amin(), maximize=False)
             X_opt, _ = optimize_acqf(
                 acqfun, bounds, 1, n_restarts, raw_samples, {"seed": mk_seed()}
             )
-            return X_opt, torch.nan, torch.nan
+            return X_opt, torch.nan, mdl
 
     else:
         if regression_type == "rbf":
 
-            def get_mdl(X: Tensor, Y: Tensor, prev_mdl: Rbf) -> Rbf:
+            def get_mdl(X: Tensor, Y: Tensor, prev_mdl: Optional[Rbf]) -> Rbf:
                 Mc = None if prev_mdl is None else prev_mdl.Minv_and_coeffs
                 return Rbf(X, Y, eps, Minv_and_coeffs=Mc)
 
@@ -156,23 +151,29 @@ def run_problem(
 
         if method == "myopic":
 
-            def next_obs(model: Union[Rbf, Idw], *_) -> tuple[Tensor, float, Tensor]:
-                acqfun = IdwAcquisitionFunction(model, c1, c2)
-                X_opt, acq_opt = optimize_acqf(
+            def next_obs(
+                X: Tensor, Y: Tensor, prev_mdl: Union[None, Idw, Rbf], *_, **__
+            ) -> tuple[Tensor, Tensor, Union[Idw, Rbf]]:
+                mdl = get_mdl(X, Y, prev_mdl)
+                acqfun = IdwAcquisitionFunction(mdl, c1, c2)
+                X_opt, _ = optimize_acqf(
                     acqfun, bounds, 1, n_restarts, raw_samples, {"seed": mk_seed()}
                 )
-                return X_opt, acq_opt.item(), torch.nan
+                return X_opt, torch.nan, mdl
 
         elif method == "myopic-s":
             # NOTE: the stage reward is slightly different between myopic and myopic-s
             gh_sampler = GaussHermiteSampler(sample_shape=torch.Size([16]))
 
-            def next_obs(model: Union[Rbf, Idw], *_) -> tuple[Tensor, float, Tensor]:
-                acqfun = qIdwAcquisitionFunction(model, c1, c2, sampler=gh_sampler)
-                X_opt, acq_opt = optimize_acqf(
+            def next_obs(
+                X: Tensor, Y: Tensor, prev_mdl: Union[None, Idw, Rbf], *_, **__
+            ) -> tuple[Tensor, Tensor, Union[Idw, Rbf]]:
+                mdl = get_mdl(X, Y, prev_mdl)
+                acqfun = qIdwAcquisitionFunction(mdl, c1, c2, sampler=gh_sampler)
+                X_opt, _ = optimize_acqf(
                     acqfun, bounds, 1, n_restarts, raw_samples, {"seed": mk_seed()}
                 )
-                return X_opt, acq_opt.item(), torch.nan
+                return X_opt, torch.nan, mdl
 
         elif method.startswith("rollout"):
             horizon = int(method.split(".")[1])
@@ -181,20 +182,25 @@ def run_problem(
             kwargs_factory = make_idw_acq_factory(c1, c2)
 
             def next_obs(
-                model: Union[Rbf, Idw], budget: int, prev_full_opt: Tensor
-            ) -> tuple[Tensor, float]:
+                X: Tensor,
+                Y: Tensor,
+                prev_mdl: Union[None, Idw, Rbf],
+                prev_full_opt: Tensor,
+                budget: int,
+            ) -> tuple[Tensor, Tensor, Union[Idw, Rbf]]:
+                mdl = get_mdl(X, Y, prev_mdl)
                 remaining_horizon = min(horizon, budget)
                 if remaining_horizon == 1:
-                    acqfun = qIdwAcquisitionFunction(model, c1, c2, sampler=gh_sampler)
-                    X_opt, acq_opt = optimize_acqf(
+                    acqfun = qIdwAcquisitionFunction(mdl, c1, c2, sampler=gh_sampler)
+                    X_opt, _ = optimize_acqf(
                         acqfun, bounds, 1, n_restarts, raw_samples, {"seed": mk_seed()}
                     )
-                    return X_opt, acq_opt.item(), torch.nan
+                    return X_opt, torch.nan, mdl
 
                 n_restarts_ = n_restarts * remaining_horizon
                 raw_samples_ = raw_samples * remaining_horizon
                 acqfun = qRollout(
-                    model,
+                    mdl,
                     horizon,
                     qIdwAcquisitionFunction,
                     kwargs_factory,
@@ -219,7 +225,7 @@ def run_problem(
                 )
                 best_tree_idx = tree_vals.argmax()
                 X_opt = acqfun.extract_candidates(full_opt[best_tree_idx])
-                return X_opt, tree_vals[best_tree_idx].item(), full_opt
+                return X_opt, full_opt, mdl
 
         else:
             raise NotImplementedError
@@ -228,7 +234,7 @@ def run_problem(
     mdl: Optional[Model] = None
     obs_opt: Tensor = torch.nan
     acq_opt: float = float("nan")
-    prev_full_opt: Tensor = torch.nan
+    full_opt: Tensor = torch.nan
     bests: list[float] = [Y.amin().item()]
     rewards: list[float] = []
     timings: list[float] = []
@@ -236,19 +242,21 @@ def run_problem(
         for iteration in range(maxiter):
             # fit model and optimize acquisition to get the next point to sample
             start_time = perf_counter()
-            mdl = get_mdl(X, Y, mdl)
-            obs_opt, acq_opt, prev_full_opt = next_obs(
-                mdl, maxiter - iteration, prev_full_opt
-            )
+            obs_opt, full_opt, mdl = next_obs(X, Y, mdl, full_opt, maxiter - iteration)
             timings.append(perf_counter() - start_time)
+
+            # compute stage reward (if applicable)
+            if isinstance(mdl, (Idw, Rbf)):
+                stage_cost_acqfun = IdwAcquisitionFunction(mdl, c1, c2)
+                acq_opt = stage_cost_acqfun(obs_opt).item()
+            else:
+                acq_opt = float("nan")
+            rewards.append(acq_opt)
 
             # evaluate objective function at new point, and append it to training data
             X = torch.cat((X, obs_opt))
             Y = torch.cat((Y, problem(obs_opt)))
-
-            # compute and save best-so-far and incurred cost
             bests.append(Y.amin().item())
-            rewards.append(acq_opt)
 
         # save results, delete references and free memory (at least, try to)
         rewards = ",".join(map(str, rewards))
@@ -261,7 +269,7 @@ def run_problem(
             RuntimeWarning,
         )
     finally:
-        del problem, X, Y, mdl, obs_opt, acq_opt, prev_full_opt, bests, rewards, timings
+        del problem, X, Y, mdl, obs_opt, acq_opt, full_opt, bests, rewards, timings
         gc.collect()
         if device.startswith("cuda"):
             torch.cuda.empty_cache()
