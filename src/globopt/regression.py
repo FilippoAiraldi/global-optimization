@@ -181,7 +181,7 @@ def _rbf_partial_fit(
     phi = Phi_and_phi[..., n:]
     L = Minv.matmul(PhiT.transpose(-2, -1))
     S = phi - PhiT.matmul(L)  # Schur complement
-    S = S.where(S.abs() > tol, tol)  # avoid singular S matrix
+    S = S.where(S.abs() > tol, S.sign() * tol)  # avoid singular S matrix
     Sinv = torch.linalg.inv(S)
     B = -L.matmul(Sinv)
     A = Minv - B.matmul(L.transpose(-2, -1))
