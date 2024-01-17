@@ -105,7 +105,7 @@ def _idw_scale(Y: Tensor, train_Y: Tensor, V: Tensor) -> Tensor:
     Tensor
         The standard deviation of shape `(b0 x b1 x ...) x n x 1`.
     """
-    scaled_diff = V.sqrt().mul(train_Y.transpose(-1, -2) - Y)
+    scaled_diff = V.sqrt().mul(train_Y.mT - Y)
     return torch.linalg.vector_norm(scaled_diff, dim=-1, keepdim=True)
 
 
@@ -141,7 +141,7 @@ def _rbf_fit(
     _, M = _cdist_and_inverse_quadratic_kernel(X, X, eps)
     U, S, VT = torch.linalg.svd(M)
     S = S.where(S > svd_tol, torch.inf)
-    Minv = VT.transpose(-2, -1).div(S.unsqueeze(-2)).matmul(U.transpose(-2, -1))
+    Minv = VT.mT.div(S.unsqueeze(-2)).matmul(U.mT)
     coeffs = Minv.matmul(Y)
     return Minv, coeffs
 
@@ -179,15 +179,13 @@ def _rbf_partial_fit(
     _, Phi_and_phi = _cdist_and_inverse_quadratic_kernel(X_new, X, eps)
     PhiT = Phi_and_phi[..., :n]
     phi = Phi_and_phi[..., n:]
-    L = Minv.matmul(PhiT.transpose(-2, -1))
+    L = Minv.matmul(PhiT.mT)
     S = phi - PhiT.matmul(L)  # Schur complement
     S = S.where(S.abs() > tol, S.sign() * tol)  # avoid singular S matrix
     Sinv = torch.linalg.inv(S)
     B = -L.matmul(Sinv)
-    A = Minv - B.matmul(L.transpose(-2, -1))
-    Minv_new = torch.cat(
-        (torch.cat((A, B), -1), torch.cat((B.transpose(-2, -1), Sinv), -1)), -2
-    )
+    A = Minv - B.matmul(L.mT)
+    Minv_new = torch.cat((torch.cat((A, B), -1), torch.cat((B.mT, Sinv), -1)), -2)
     coeffs_new = Minv_new.matmul(Y)
     return Minv_new, coeffs_new
 
