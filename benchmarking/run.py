@@ -11,7 +11,7 @@ from itertools import chain, cycle, product
 from pathlib import Path
 from time import perf_counter
 from typing import Optional, Union
-from warnings import warn
+from warnings import filterwarnings, warn
 
 import numpy as np
 import torch
@@ -88,6 +88,7 @@ def run_problem(
     problem_name: str, method: str, seed: int, csv: str, device: str
 ) -> None:
     """Runs the given problem, with the given horizon, and writes the results to csv."""
+    filterwarnings("ignore", "Optimization failed", RuntimeWarning, "botorch")
     torch.set_default_device(device)
     torch.set_default_dtype(torch.float64)
     torch.manual_seed(seed)
