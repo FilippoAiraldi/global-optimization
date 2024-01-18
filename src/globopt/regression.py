@@ -203,9 +203,6 @@ def _rbf_predict(
     train_X: Tensor, train_Y: Tensor, eps: Tensor, coeffs: Tensor, X: Tensor
 ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
     """Predicts mean and scale for RBF regression."""
-    # NOTE: here, we do not use `KernelLinearOperator` so as to avoid computing the
-    # distance from `X` to `train_X` twice, one in the linear operator and one in the
-    # `idw_weighting` function.
     dist, M = _cdist_and_inverse_quadratic_kernel(X, train_X, eps)
     mean = M.matmul(coeffs)
     W = dist.square().clamp_min(DELTA).reciprocal()
