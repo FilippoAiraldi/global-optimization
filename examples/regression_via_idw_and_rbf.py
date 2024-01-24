@@ -49,7 +49,7 @@ for i in range(len(mdls)):
     #     mdls[i] = Idw(train_X, train_Y)  # easier than RBFs
     # else:
     #     # for RBFs, pass also the previously fitted results
-    #     mdls[i] = Rbf(train_X, train_Y, mdl.eps, mdl.svd_tol, (mdl.Minv, mdl.coeffs))
+    #     mdls[i] = Rbf(train_X, train_Y, mdl.eps, mdl.eig_tol, mdl.state)
 
 # predict values over all domain via the fitted models
 X = torch.linspace(-3, 3, 1000).view(-1, 1, 1)

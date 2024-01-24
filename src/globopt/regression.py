@@ -135,15 +135,15 @@ def _cdist_and_inverse_quadratic_kernel(
 
 @trace((torch.rand(5, 4, 3), torch.rand(5, 4, 1), torch.rand(()), torch.rand(())))
 def _rbf_fit(
-    X: Tensor, Y: Tensor, eps: Tensor, svd_tol: Tensor
-) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    X: Tensor, Y: Tensor, eps: Tensor, eig_tol: Tensor
+) -> tuple[Tensor, Tensor, Tensor]:
     """Fits the RBF regression model to the training data."""
     _, M = _cdist_and_inverse_quadratic_kernel(X, X, eps)
-    V, S, UT = torch.linalg.svd(M.mT)
-    S_thresholded = S.where(S > svd_tol, torch.inf)
-    Minv = V.div(S_thresholded.unsqueeze(-2)).matmul(UT)
+    eigvals, eigvecs = torch.linalg.eigh(M)
+    eigvals_thresholded = eigvals.where(eigvals.abs() > eig_tol, torch.inf)
+    Minv = eigvecs.div(eigvals_thresholded.unsqueeze(-2)).matmul(eigvecs.mT)
     coeffs = Minv.matmul(Y)
-    return UT, S, V, coeffs
+    return eigvals, eigvecs, coeffs
 
 
 @script(  # unable to trace this one
@@ -153,7 +153,6 @@ def _rbf_fit(
             torch.rand(5, 4, 1),
             torch.rand(()),
             torch.rand(()),
-            torch.rand(5, 2, 2),
             torch.rand(5, 2),
             torch.rand(5, 2, 2),
             torch.rand(5, 2, 1),
@@ -164,32 +163,29 @@ def _rbf_partial_fit(
     X: Tensor,
     Y: Tensor,
     eps: Tensor,
-    svd_tol: Tensor,
-    UT: Tensor,
-    S: Tensor,
-    V: Tensor,
+    eig_tol: Tensor,
+    eigvals: Tensor,
+    eigvecs: Tensor,
     coeffs: Tensor,
-) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+) -> tuple[Tensor, Tensor, Tensor]:
     """Fits the given RBF regression to the new training data."""
     n = coeffs.shape[-2]  # index of the first new data point onwards
     X_new = X[..., n:, :]
     _, Phi_and_phi = _cdist_and_inverse_quadratic_kernel(X_new, X, eps)
     PhiT = Phi_and_phi[..., :n]
     phi = Phi_and_phi[..., n:]
+    prod = PhiT.matmul(eigvecs)
     M_proxy_new = torch.cat(
-        (
-            torch.cat((S.diag_embed(), UT.matmul(PhiT.mT)), -1),
-            torch.cat((PhiT.matmul(V), phi), -1),
-        ),
-        -2,
+        (torch.cat((eigvals.diag_embed(), prod.mT), -1), torch.cat((prod, phi), -1)), -2
     )
-    V_tmp, S_new, UT_tmp = torch.linalg.svd(M_proxy_new.mT)
-    UT_new = torch.cat((UT_tmp[..., :n].matmul(UT), UT_tmp[..., n:]), -1)
-    V_new = torch.cat((V.matmul(V_tmp[..., :n, :]), V_tmp[..., n:, :]), -2)
-    S_thresholded = S_new.where(S_new > svd_tol, torch.inf)
-    Minv_new = V_new.div(S_thresholded.unsqueeze(-2)).matmul(UT_new)
+    eigvals_new, eigvecs_tmp = torch.linalg.eigh(M_proxy_new)
+    eigvecs_new = torch.cat(
+        (eigvecs.matmul(eigvecs_tmp[..., :n, :]), eigvecs_tmp[..., n:, :]), -2
+    )
+    eigvals_thresholded = eigvals_new.where(eigvals_new.abs() > eig_tol, torch.inf)
+    Minv_new = eigvecs_new.div(eigvals_thresholded.unsqueeze(-2)).matmul(eigvecs_new.mT)
     coeffs_new = Minv_new.matmul(Y)
-    return UT_new, S_new, V_new, coeffs_new
+    return eigvals_new, eigvecs_new, coeffs_new
 
 
 @trace(
@@ -320,7 +316,7 @@ class Rbf(BaseRegression):
         train_X: Tensor,
         train_Y: Tensor,
         eps: Union[float, Tensor] = 1.0,
-        svd_tol: Union[float, Tensor] = 1e-8,
+        eig_tol: Union[float, Tensor] = 1e-8,
         init_state: Optional[tuple[Tensor, Tensor]] = None,
     ) -> None:
         """Instantiates an RBF regression model for Global Optimization.
@@ -336,43 +332,41 @@ class Rbf(BaseRegression):
             `train_X` points.
         eps : float, optional
             Distance-scaling parameter for the RBF kernel, by default `1.0`.
-        svd_tol : float, optional
+        eig_tol : float, optional
             Tolerance for singular value decomposition for inversion, by default `1e-8`.
         init_state : tuple of 3 Tensors, optional
             Initial state of the regressor, in case of previous partial fitting, made up
-            of the SVD of the previous kernel distance matrix. This is a tuple of 3
-            Tensors:
-                - `UT (b0 x b1 x ...) x m' x m'`: the transpose of the left singular
-                vectors of the kernel matrix
-                - `S (b0 x b1 x ...) x m'`: the singular values of the kernel matrix
-                - `V (b0 x b1 x ...) x m' x m'`: the right singular vectors of the
-                kernel matrix
+            of the eigendecomposition of the previous kernel distance matrix. This is a
+            tuple of
+                - `vals (b0 x b1 x ...) x m'`: the eigenvalues of the kernel matrix
+                - `vec (b0 x b1 x ...) x m' x m'`: the eigenvectors of the kernel matrix
             where `m'` are the number of training points in the previous fitting.
             By default `None`, in which case the model is fit anew to the training data.
         """
         super().__init__(train_X, train_Y)
         eps = torch.scalar_tensor(eps)
-        svd_tol = torch.scalar_tensor(svd_tol)
+        eig_tol = torch.scalar_tensor(eig_tol)
         if init_state is None:
-            UT, S, V, coeffs = _rbf_fit(self.train_X, self.train_Y, eps, svd_tol)
+            eigvals, eigvecs, coeffs = _rbf_fit(
+                self.train_X, self.train_Y, eps, eig_tol
+            )
         else:
-            UT, S, V, coeffs = _rbf_partial_fit(
-                self.train_X, self.train_Y, eps, svd_tol, *init_state
+            eigvals, eigvecs, coeffs = _rbf_partial_fit(
+                self.train_X, self.train_Y, eps, eig_tol, *init_state
             )
         self.register_buffer("eps", eps)
-        self.register_buffer("svd_tol", svd_tol)
-        self.register_buffer("UT", UT)
-        self.register_buffer("S", S)
-        self.register_buffer("V", V)
+        self.register_buffer("eig_tol", eig_tol)
+        self.register_buffer("eigvals", eigvals)
+        self.register_buffer("eigvecs", eigvecs)
         self.register_buffer("coeffs", coeffs)
         self.to(train_X)
 
     @property
-    def state(self) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        """State of a fitted RBF regressor, i.e., the products of the SVD of the kernel
-        matrix and coefficients. Use this to partially fit a new regressor
+    def state(self) -> tuple[Tensor, Tensor, Tensor]:
+        """State of a fitted RBF regressor, i.e., the products of the eigendecomposition
+        of the kernel matrix and coefficients. Use this to partially fit a new regressor
         (see `__init__`)"""
-        return self.UT, self.S, self.V, self.coeffs
+        return self.eigvals, self.eigvecs, self.coeffs
 
     def forward(self, X: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         """Computes the RBF regression model.
@@ -400,4 +394,4 @@ class Rbf(BaseRegression):
         train_X, train_Y = self._prepare_for_fantasizing(X, Y)
         Xnew = torch.cat((train_X, X), dim=-2)
         Ynew = torch.cat((train_Y, Y), dim=-2)
-        return Rbf(Xnew, Ynew, self.eps, self.svd_tol, self.state)
+        return Rbf(Xnew, Ynew, self.eps, self.eig_tol, self.state)
