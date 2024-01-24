@@ -35,7 +35,7 @@ train_Y = problem(train_X)
 eps, c1, c2 = 0.5, 1.0, 0.5
 
 # start regressor state as None
-Minv_and_coeffs = None
+rbf_state = None
 
 # auxiliary quantities for plotting
 x_plot = torch.linspace(lb, ub, 300).view(-1, 1, 1)
@@ -44,7 +44,7 @@ history: list[tuple[Tensor, ...]] = []
 # run optimization loop
 for iteration in range(N_ITERS):
     # instantiate model and acquisition function
-    mdl = Rbf(train_X, train_Y, eps, Minv_and_coeffs=Minv_and_coeffs)
+    mdl = Rbf(train_X, train_Y, eps, init_state=rbf_state)
     MAF = IdwAcquisitionFunction(mdl, c1, c2)
 
     # minimize acquisition function
@@ -61,7 +61,7 @@ for iteration in range(N_ITERS):
     Y_opt = problem(X_opt)
     train_X = torch.cat((train_X, X_opt))
     train_Y = torch.cat((train_Y, Y_opt))
-    Minv_and_coeffs = mdl.Minv_and_coeffs
+    rbf_state = mdl.state
 
     # compute quantities for plotting purposes
     historic_item = (mdl(x_plot.transpose(0, 1))[0], MAF(x_plot), X_opt, Y_opt, acq_opt)

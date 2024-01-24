@@ -142,8 +142,8 @@ def run_problem(
         if regression_type == "rbf":
 
             def get_mdl(X: Tensor, Y: Tensor, prev_mdl: Optional[Rbf]) -> Rbf:
-                Mc = None if prev_mdl is None else prev_mdl.Minv_and_coeffs
-                return Rbf(X, Y, eps, Minv_and_coeffs=Mc)
+                state = None if prev_mdl is None else prev_mdl.state
+                return Rbf(X, Y, eps, init_state=state)
 
         else:  # regression_type == "idw":
 

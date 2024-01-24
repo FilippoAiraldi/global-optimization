@@ -136,58 +136,60 @@ def _cdist_and_inverse_quadratic_kernel(
 @trace((torch.rand(5, 4, 3), torch.rand(5, 4, 1), torch.rand(()), torch.rand(())))
 def _rbf_fit(
     X: Tensor, Y: Tensor, eps: Tensor, svd_tol: Tensor
-) -> tuple[Tensor, Tensor]:
+) -> tuple[Tensor, Tensor, Tensor, Tensor]:
     """Fits the RBF regression model to the training data."""
     _, M = _cdist_and_inverse_quadratic_kernel(X, X, eps)
-    U, S, VT = torch.linalg.svd(M)
-    S = S.where(S > svd_tol, torch.inf)
-    Minv = VT.mT.div(S.unsqueeze(-2)).matmul(U.mT)
+    V, S, UT = torch.linalg.svd(M.mT)
+    S_thresholded = S.where(S > svd_tol, torch.inf)
+    Minv = V.div(S_thresholded.unsqueeze(-2)).matmul(UT)
     coeffs = Minv.matmul(Y)
-    return Minv, coeffs
+    return UT, S, V, coeffs
 
 
-@script(
+@script(  # unable to trace this one
     example_inputs=[
         (
-            torch.as_tensor(
-                [
-                    [[0.0916, 0.0519], [0.5173, 0.1330], [0.7770, 0.8146]],
-                    [[0.5207, 0.5535], [0.8629, 0.7549], [0.3546, 0.0307]],
-                ]
-            ),
-            torch.as_tensor(
-                [[[0.6884], [0.1132], [0.0883]], [[0.6140], [0.1792], [0.8511]]]
-            ),
-            torch.scalar_tensor(0.9130),
-            torch.scalar_tensor(1e-8),
-            torch.as_tensor(
-                [
-                    [[0.6724, 0.9030], [0.9601, 0.6830]],
-                    [[0.4714, 0.7962], [0.3455, 0.8429]],
-                ]
-            ),
-            torch.as_tensor([[[0.5599], [0.7092]], [[0.2246], [0.1549]]]),
+            torch.rand(5, 4, 3),
+            torch.rand(5, 4, 1),
+            torch.rand(()),
+            torch.rand(()),
+            torch.rand(5, 2, 2),
+            torch.rand(5, 2),
+            torch.rand(5, 2, 2),
+            torch.rand(5, 2, 1),
         )
     ]
-)  # unable to trace this one; fix inputs to avoid singular S matrix
+)
 def _rbf_partial_fit(
-    X: Tensor, Y: Tensor, eps: Tensor, tol: Tensor, Minv: Tensor, coeffs: Tensor
-) -> tuple[Tensor, Tensor]:
+    X: Tensor,
+    Y: Tensor,
+    eps: Tensor,
+    svd_tol: Tensor,
+    UT: Tensor,
+    S: Tensor,
+    V: Tensor,
+    coeffs: Tensor,
+) -> tuple[Tensor, Tensor, Tensor, Tensor]:
     """Fits the given RBF regression to the new training data."""
     n = coeffs.shape[-2]  # index of the first new data point onwards
     X_new = X[..., n:, :]
     _, Phi_and_phi = _cdist_and_inverse_quadratic_kernel(X_new, X, eps)
     PhiT = Phi_and_phi[..., :n]
     phi = Phi_and_phi[..., n:]
-    L = Minv.matmul(PhiT.mT)
-    S = phi - PhiT.matmul(L)  # Schur complement
-    S = S.where(S.abs() > tol, S.sign() * tol)  # avoid singular S matrix
-    Sinv = torch.linalg.inv(S)
-    B = -L.matmul(Sinv)
-    A = Minv - B.matmul(L.mT)
-    Minv_new = torch.cat((torch.cat((A, B), -1), torch.cat((B.mT, Sinv), -1)), -2)
+    M_proxy_new = torch.cat(
+        (
+            torch.cat((S.diag_embed(), UT.matmul(PhiT.mT)), -1),
+            torch.cat((PhiT.matmul(V), phi), -1),
+        ),
+        -2,
+    )
+    V_tmp, S_new, UT_tmp = torch.linalg.svd(M_proxy_new.mT)
+    UT_new = torch.cat((UT_tmp[..., :n].matmul(UT), UT_tmp[..., n:]), -1)
+    V_new = torch.cat((V.matmul(V_tmp[..., :n, :]), V_tmp[..., n:, :]), -2)
+    S_thresholded = S_new.where(S_new > svd_tol, torch.inf)
+    Minv_new = V_new.div(S_thresholded.unsqueeze(-2)).matmul(UT_new)
     coeffs_new = Minv_new.matmul(Y)
-    return Minv_new, coeffs_new
+    return UT_new, S_new, V_new, coeffs_new
 
 
 @trace(
@@ -319,7 +321,7 @@ class Rbf(BaseRegression):
         train_Y: Tensor,
         eps: Union[float, Tensor] = 1.0,
         svd_tol: Union[float, Tensor] = 1e-8,
-        Minv_and_coeffs: Optional[tuple[Tensor, Tensor]] = None,
+        init_state: Optional[tuple[Tensor, Tensor]] = None,
     ) -> None:
         """Instantiates an RBF regression model for Global Optimization.
 
@@ -336,31 +338,41 @@ class Rbf(BaseRegression):
             Distance-scaling parameter for the RBF kernel, by default `1.0`.
         svd_tol : float, optional
             Tolerance for singular value decomposition for inversion, by default `1e-8`.
-        Minv_and_coeffs : tuple of 2 Tensors, optional
-            Precomputed inverse of the RBF kernel matrix and coefficients. By default
-            `None`, in which case the model is fit anew to the training data. If
-            provided, the model is only partially fit to the new data.
+        init_state : tuple of 3 Tensors, optional
+            Initial state of the regressor, in case of previous partial fitting, made up
+            of the SVD of the previous kernel distance matrix. This is a tuple of 3
+            Tensors:
+                - `UT (b0 x b1 x ...) x m' x m'`: the transpose of the left singular
+                vectors of the kernel matrix
+                - `S (b0 x b1 x ...) x m'`: the singular values of the kernel matrix
+                - `V (b0 x b1 x ...) x m' x m'`: the right singular vectors of the
+                kernel matrix
+            where `m'` are the number of training points in the previous fitting.
+            By default `None`, in which case the model is fit anew to the training data.
         """
         super().__init__(train_X, train_Y)
         eps = torch.scalar_tensor(eps)
         svd_tol = torch.scalar_tensor(svd_tol)
-        if Minv_and_coeffs is None:
-            Minv, coeffs = _rbf_fit(self.train_X, self.train_Y, eps, svd_tol)
+        if init_state is None:
+            UT, S, V, coeffs = _rbf_fit(self.train_X, self.train_Y, eps, svd_tol)
         else:
-            Minv, coeffs = _rbf_partial_fit(
-                self.train_X, self.train_Y, eps, svd_tol, *Minv_and_coeffs
+            UT, S, V, coeffs = _rbf_partial_fit(
+                self.train_X, self.train_Y, eps, svd_tol, *init_state
             )
         self.register_buffer("eps", eps)
         self.register_buffer("svd_tol", svd_tol)
-        self.register_buffer("Minv", Minv)
+        self.register_buffer("UT", UT)
+        self.register_buffer("S", S)
+        self.register_buffer("V", V)
         self.register_buffer("coeffs", coeffs)
         self.to(train_X)
 
     @property
-    def Minv_and_coeffs(self) -> tuple[Tensor, Tensor]:
-        """States of a fitted RBF regressor, i.e., the inverse of the kernel matrix and
-        coefficients. Use this to partially fit a new regressor (see `__init__`)"""
-        return self.Minv, self.coeffs
+    def state(self) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        """State of a fitted RBF regressor, i.e., the products of the SVD of the kernel
+        matrix and coefficients. Use this to partially fit a new regressor
+        (see `__init__`)"""
+        return self.UT, self.S, self.V, self.coeffs
 
     def forward(self, X: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         """Computes the RBF regression model.
@@ -388,4 +400,4 @@ class Rbf(BaseRegression):
         train_X, train_Y = self._prepare_for_fantasizing(X, Y)
         Xnew = torch.cat((train_X, X), dim=-2)
         Ynew = torch.cat((train_Y, Y), dim=-2)
-        return Rbf(Xnew, Ynew, self.eps, self.svd_tol, self.Minv_and_coeffs)
+        return Rbf(Xnew, Ynew, self.eps, self.svd_tol, self.state)
