@@ -67,7 +67,7 @@ class Adjiman(SyntheticTestFunction):
 
         f(x) = cos(x) sin(y) - x / (y^2 + 1).
 
-    x is bounded [-1,2], y in [-1,1]. f in has a global minimum at
+    x is bounded [-1,2], y in [-1,1]. f has a global minimum at
     `x_opt = (2, 0.10578)` with `f_opt = -2.02181`.
     """
 
@@ -83,11 +83,11 @@ class Adjiman(SyntheticTestFunction):
 
 
 class Step2(SyntheticTestFunction):
-    r"""Step 2 function, a m-dimensional synthetic test function given by:
+    r"""Step 2 function, an m-dimensional synthetic test function given by:
 
         f(x) = sum( floor(x + 0.5)^2 ).
 
-    x is bounded [-100,100] in each dimension. f in has infinitely many global minima at
+    x is bounded [-100,100] in each dimension. f has infinitely many global minima at
     `[-0.5,0.5]`, with `f_opt = 0`.
     """
 
@@ -97,7 +97,7 @@ class Step2(SyntheticTestFunction):
 
     def __init__(self, dim: int, *args: Any, **kwargs: Any) -> None:
         self.dim = dim
-        super().__init__(bounds=[(-100.0, 100.0) for _ in range(dim)], *args, **kwargs)
+        super().__init__(bounds=[self._bounds[0] for _ in range(dim)], *args, **kwargs)
 
     def evaluate_true(self, X: Tensor) -> Tensor:
         return (X + 0.5).floor().square().sum(-1)
