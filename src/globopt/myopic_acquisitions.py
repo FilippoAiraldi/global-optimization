@@ -36,7 +36,7 @@ def _idw_distance(W_sum_recipr: Tensor) -> Tensor:
     Tensor
         The standard deviation of shape `(b0 x b1 x ...) x n x 1`.
     """
-    return W_sum_recipr.arctan().mul(2 / torch.pi)
+    return (2 / torch.pi) * W_sum_recipr.arctan()
 
 
 @trace(
@@ -84,7 +84,7 @@ def idw_acquisition_function(
         Acquisition function of shape `(b0 x b1 x ...) x n x 1`.
     """
     distance = _idw_distance(W_sum_recipr)
-    return Y_hat.sub(Y_std, alpha=c1).sub(Y_span.mul(distance), alpha=c2).neg()
+    return c1 * Y_std + c2 * Y_span * distance - Y_hat
 
 
 class IdwAcquisitionFunction(AnalyticAcquisitionFunction):

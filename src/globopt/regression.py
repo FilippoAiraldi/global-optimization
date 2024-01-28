@@ -9,52 +9,6 @@ References
 """
 
 
-# NOTE: Batching
-# --------
-# Here is discussed the batching methods used by botorch and in our regression
-# implementations, and how the two are interfaced.
-# See also: https://botorch.org/docs/batching
-#
-# Conventions
-# ------------
-# botorch uses the convention `b0 x b1 x ... x q x d`, where
-# * `b-i` is the number of batches of candidates to evaluate in parallel; the
-#   minimization of the acquisition function consists in minimizing its sum over the
-#   batches, and taking the best one at last
-# * `q` is the number of candidates to consider jointly per batch; often, the best is
-#   taken out of these per batch (in other words, at each optimization iteration, the
-#   acquisition function minimization yields `q` next candidates to observe)
-# * `d` is the dimension of the design space of each `q`-th candidate.
-# Note that while there might be more than one batch dimension, usually we need just one
-# in important methods.
-# On the other side, the implementation of the regression models uses a slightly
-# different convention, which is motivated by how pytorch treats and broadcasts linear
-# algebra operations. In particular, it uses `p x m x d`, where
-# * `p` is the number of parallel regression models (this is only useful in the
-#   non-myopic, where we need to progress many different models in parallel. This is
-#   akin to the `b` dimension in botorch)
-# * `m` is the number of training points. In case of prediction, we prefer to denote
-#   this same dimension as `n`.
-# Note that the use of `p` parallel regressors is only useful in the non-myopic case,
-# where we need to progress many different models in parallel, by exploring different
-# acquisition points. Instead, in the myopic case, we expect `p = 1`.
-#
-# Interfacing
-# -----------
-# We make here the distinction between the myopic and non-myopic case.
-# * myopic case:
-#   * `IdwAcquisitionFunction`: in this acquisition function, `q = 1`. Moreover, the
-#     regressor should be unique, i.e., `p = 1`, even though we do not explictly check.
-#     This is the simplest case.
-#   * `qIdwAcquisitionFunction`: here, while `q > 1` is supported, in practice, in
-#     our optimization loops we decide to only compute one candidate per iteration.
-#     Instead, `b` is the number of batches of `q` points. The acquisition function
-#     is minimized over the sum of its batches, and for each the best candidate out of
-#     `q` is taken.
-# * non-myopic case:
-#   TODO: would `b x q x 1 x d` work for regressors as repeated as `b x q x m x d`?
-
-
 from typing import Any, Optional, Union
 
 import torch
@@ -105,7 +59,7 @@ def _idw_scale(Y: Tensor, train_Y: Tensor, V: Tensor) -> Tensor:
     Tensor
         The standard deviation of shape `(b0 x b1 x ...) x n x 1`.
     """
-    scaled_diff = V.sqrt().mul(train_Y.mT - Y)
+    scaled_diff = V.sqrt() * (train_Y.mT - Y)
     return torch.linalg.vector_norm(scaled_diff, dim=-1, keepdim=True)
 
 
@@ -116,8 +70,8 @@ def _idw_predict(
     """Mean and scale for IDW regression."""
     W = torch.cdist(X, train_X).square().clamp_min(DELTA).reciprocal()
     W_sum_recipr = W.sum(-1, keepdim=True).reciprocal()
-    V = W.mul(W_sum_recipr)
-    mean = V.matmul(train_Y)
+    V = W * W_sum_recipr
+    mean = V @ train_Y
     std = _idw_scale(mean, train_Y, V)
     return mean, std, W_sum_recipr, V
 
@@ -141,7 +95,7 @@ def _rbf_fit(
     _, M = _cdist_and_inverse_quadratic_kernel(X, X, eps)
     eigvals, eigvecs = torch.linalg.eigh(M)
     eigvals_thresholded = eigvals.where(eigvals.abs() > eig_tol, torch.inf)
-    Minv = eigvecs.div(eigvals_thresholded.unsqueeze(-2)).matmul(eigvecs.mT)
+    Minv = (eigvecs / eigvals_thresholded.unsqueeze(-2)) @ eigvecs.mT
     coeffs = Minv.matmul(Y)
     return eigvals, eigvecs, coeffs
 
@@ -174,17 +128,17 @@ def _rbf_partial_fit(
     _, Phi_and_phi = _cdist_and_inverse_quadratic_kernel(X_new, X, eps)
     PhiT = Phi_and_phi[..., :n]
     phi = Phi_and_phi[..., n:]
-    prod = PhiT.matmul(eigvecs)
+    prod = PhiT @ eigvecs
     M_proxy_new = torch.cat(
         (torch.cat((eigvals.diag_embed(), prod.mT), -1), torch.cat((prod, phi), -1)), -2
     )
     eigvals_new, eigvecs_tmp = torch.linalg.eigh(M_proxy_new)
     eigvecs_new = torch.cat(
-        (eigvecs.matmul(eigvecs_tmp[..., :n, :]), eigvecs_tmp[..., n:, :]), -2
+        (eigvecs @ eigvecs_tmp[..., :n, :], eigvecs_tmp[..., n:, :]), -2
     )
     eigvals_thresholded = eigvals_new.where(eigvals_new.abs() > eig_tol, torch.inf)
-    Minv_new = eigvecs_new.div(eigvals_thresholded.unsqueeze(-2)).matmul(eigvecs_new.mT)
-    coeffs_new = Minv_new.matmul(Y)
+    Minv_new = (eigvecs_new / eigvals_thresholded.unsqueeze(-2)) @ eigvecs_new.mT
+    coeffs_new = Minv_new @ Y
     return eigvals_new, eigvecs_new, coeffs_new
 
 
@@ -202,10 +156,10 @@ def _rbf_predict(
 ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
     """Predicts mean and scale for RBF regression."""
     dist, M = _cdist_and_inverse_quadratic_kernel(X, train_X, eps)
-    mean = M.matmul(coeffs)
+    mean = M @ coeffs
     W = dist.square().clamp_min(DELTA).reciprocal()
     W_sum_recipr = W.sum(-1, keepdim=True).reciprocal()
-    V = W.mul(W_sum_recipr)
+    V = W * W_sum_recipr
     std = _idw_scale(mean, train_Y, V)
     return mean, std, W_sum_recipr, V
 

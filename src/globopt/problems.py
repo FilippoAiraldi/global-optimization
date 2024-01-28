@@ -62,7 +62,7 @@ class SimpleProblem(SyntheticTestFunction):
     def evaluate_true(self, X: Tensor) -> Tensor:
         X2 = X.square()
         return (
-            (1 + X * torch.sin(2 * X) * torch.cos(3 * X) / (1 + X2)).square()
+            (1 + X * (2 * X).sin() * (3 * X).cos() / (1 + X2)).square()
             + X2 / 12
             + X / 10
         )
@@ -85,7 +85,7 @@ class Adjiman(SyntheticTestFunction):
     def evaluate_true(self, X: Tensor) -> Tensor:
         x = X[..., 0]
         y = X[..., 1]
-        return x.cos().mul(y.sin()).addcdiv(x, y.square() + 1.0, value=-1)
+        return x.cos() * y.sin() - x / (y.square() + 1.0)
 
 
 class Step2(SyntheticTestFunction):
@@ -163,7 +163,7 @@ class Brochu(SyntheticTestFunction):
 
     def evaluate_true(self, X: Tensor) -> Tensor:
         g = (X.sin() + X / 3 + (12 * X).sin()).sum(dim=-1)
-        return -torch.fmax(g - 1.0, torch.scalar_tensor(0.0)) if self.dim == 2 else -g
+        return (g - 1.0).clamp_min(0.0).neg() if self.dim == 2 else g.neg()
 
 
 class GoldsteinPrice(SyntheticTestFunction):
