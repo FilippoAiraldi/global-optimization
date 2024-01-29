@@ -129,8 +129,9 @@ def _rbf_partial_fit(
     PhiT = Phi_and_phi[..., :n]
     phi = Phi_and_phi[..., n:]
     prod = PhiT @ eigvecs
+    eigvals_mat = eigvals.expand(prod.mT.shape[:-1]).diag_embed()
     M_proxy_new = torch.cat(
-        (torch.cat((eigvals.diag_embed(), prod.mT), -1), torch.cat((prod, phi), -1)), -2
+        (torch.cat((eigvals_mat, prod.mT), -1), torch.cat((prod, phi), -1)), -2
     )
     eigvals_new, eigvecs_tmp = torch.linalg.eigh(M_proxy_new)
     eigvecs_new = torch.cat(
