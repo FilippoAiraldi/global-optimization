@@ -374,23 +374,23 @@ class Svm(HyperTuningGridTestFunction):
 
 
 Ackley2 = partial(Ackley, dim=2)
-Ackley2.__name__ = Ackley.__name__ + "2"
+setattr(Ackley2, "__name__", Ackley.__name__ + "2")
 Ackley5 = partial(Ackley, dim=5)
-Ackley5.__name__ = Ackley.__name__ + "5"
+setattr(Ackley5, "__name__", Ackley.__name__ + "5")
 Brochu2 = partial(Brochu, dim=2)
-Brochu2.__name__ = Brochu.__name__ + "2"
+setattr(Brochu2, "__name__", Brochu.__name__ + "2")
 Brochu4 = partial(Brochu, dim=4)
-Brochu4.__name__ = Brochu.__name__ + "4"
+setattr(Brochu4, "__name__", Brochu.__name__ + "4")
 Brochu6 = partial(Brochu, dim=6)
-Brochu6.__name__ = Brochu.__name__ + "6"
+setattr(Brochu6, "__name__", Brochu.__name__ + "6")
 Hartmann3 = partial(Hartmann, dim=3)
-Hartmann3.__name__ = Hartmann.__name__ + "3"
+setattr(Hartmann3, "__name__", Hartmann.__name__ + "3")
 Hartmann6 = partial(Hartmann, dim=6)
-Hartmann6.__name__ = Hartmann.__name__ + "6"
+setattr(Hartmann6, "__name__", Hartmann.__name__ + "6")
 Shekel5 = partial(Shekel, m=5)
-Shekel5.__name__ = Shekel.__name__ + "5"
+setattr(Shekel5, "__name__", Shekel.__name__ + "5")
 Shekel7 = partial(Shekel, m=7)
-Shekel7.__name__ = Shekel.__name__ + "7"
+setattr(Shekel7, "__name__", Shekel.__name__ + "7")
 
 
 TESTS: dict[

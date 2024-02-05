@@ -69,7 +69,9 @@ def _compute_all_stats(row: pd.Series) -> pd.Series:
     )
 
 
-def load_data(csv_filename: str, exclude: list[str]) -> pd.DataFrame:
+def load_data(
+    csv_filename: str, include: list[str], exclude: list[str]
+) -> pd.DataFrame:
     """Loads the data from the given file into a dataframe."""
     converter = partial(np.fromstring, sep=",")
     df = pd.read_csv(
@@ -78,7 +80,10 @@ def load_data(csv_filename: str, exclude: list[str]) -> pd.DataFrame:
         dtype={"problem": pd.StringDtype(), "method": pd.StringDtype()},
         converters={s: converter for s in ["stage-reward", "best-so-far", "time"]},
     )
-    df = df[~(df["method"].isin(exclude) | df["problem"].isin(exclude))]
+    if include:
+        df = df[(df["method"].isin(include) | df["problem"].isin(include))]
+    elif exclude:
+        df = df[~(df["method"].isin(exclude) | df["problem"].isin(exclude))]
 
     # manually sort problems alphabetically but methods in a custom order
     df.sort_values(
@@ -125,12 +130,12 @@ def plot_converges(df: pd.DataFrame, figtitle: Optional[str]) -> None:
                 avg = data.mean(axis=0)
                 scale = sem(data, axis=0) + 1e-12
                 ci_lb, ci_ub = t.interval(0.95, data.shape[0] - 1, loc=avg, scale=scale)
-                h = ax.plot(evals, avg, lw=1.0, color=color)
+                h = ax.step(evals, avg, lw=1.0, color=color)
                 if color is None:
                     color = h[0].get_color()
-                ax.fill_between(evals, ci_lb, ci_ub, alpha=0.2, color=color)
-                ax.plot(evals, ci_lb, color=color, lw=0.1)
-                ax.plot(evals, ci_ub, color=color, lw=0.1)
+                ax.fill_between(evals, ci_lb, ci_ub, alpha=0.2, color=color, step="pre")
+                ax.step(evals, ci_lb, color=color, lw=0.1)
+                ax.step(evals, ci_ub, color=color, lw=0.1)
             plotted_methods[method] = color
 
         # plot also the optimal point in background
@@ -399,6 +404,7 @@ def summarize(df: pd.DataFrame, tabletitle: Optional[str]) -> None:
             f"{m} +/- {s:.2f}" for m, s in zip(t_mean, df_.loc[(pname, "time-std")])
         ]
         tables[2].add_row([pname] + t_mean_std)
+        tables[2].add_row([""] * (len(field_names) - 1))
 
     # finally, print the tables side by side
     if tabletitle is not None:
@@ -419,19 +425,28 @@ if __name__ == "__main__":
         nargs="+",
         help="Filenames of the results to be visualized.",
     )
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--include",
+        type=str,
+        nargs="+",
+        default=[],
+        help="List of methods and/or benchmarks to include in the visualization.",
+    )
+    group.add_argument(
         "--exclude",
         type=str,
         nargs="+",
         default=[],
         help="List of methods and/or benchmarks to exclude from the visualization.",
     )
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
         "--no-plot",
         action="store_true",
         help="Only print the summary and do not show the plots.",
     )
-    parser.add_argument(
+    group.add_argument(
         "--no-summary",
         action="store_true",
         help="Only show the plot and do not print the summary.",
@@ -442,7 +457,7 @@ if __name__ == "__main__":
     include_title = len(args.filenames) > 1
     for filename in args.filenames:
         title = filename if include_title else None
-        dataframe = load_data(filename, args.exclude)
+        dataframe = load_data(filename, args.include, args.exclude)
         if not args.no_plot:
             plot_converges(dataframe, title)
             plot_gap_reward_violins(dataframe, title)
