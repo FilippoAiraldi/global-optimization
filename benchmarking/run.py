@@ -35,8 +35,6 @@ from globopt import (
     qIdwAcquisitionFunction,
     qRollout,
 )
-
-# from globopt.nonmyopic_acquisitions import qRollout
 from globopt.problems import get_available_benchmark_problems, get_benchmark_problem
 from globopt.regression import Idw, Rbf
 
