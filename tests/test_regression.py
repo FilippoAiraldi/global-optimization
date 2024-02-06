@@ -15,13 +15,13 @@ class TestRegression(unittest.TestCase):
         X = torch.as_tensor([-2.61, -1.92, -0.63, 0.38, 2], device="cpu").unsqueeze(-1)
         Y = problem(X)
         n = 3
-        mdls = [Idw(X[:n], Y[:n]), Rbf(X[:n], Y[:n], eps=0.5, eig_tol=0.0)]
+        mdls = [Idw(X[:n], Y[:n]), Rbf(X[:n], Y[:n], eps=0.5, svd_tol=0.0)]
         for i in range(len(mdls)):
             mdl = mdls[i]
             if isinstance(mdl, Idw):
                 mdls[i] = Idw(X, Y)
             else:
-                mdls[i] = Rbf(X, Y, mdl.eps, mdl.eig_tol, mdl.state)
+                mdls[i] = Rbf(X, Y, mdl.eps, mdl.svd_tol, mdl.state)
         x_hat = torch.linspace(-3, 3, 100, dtype=X.dtype).view(1, -1, 1)
         y_hat = torch.stack([mdl.posterior(x_hat).mean.squeeze() for mdl in mdls])
         y_hat_expected = torch.as_tensor(RESULTS["y_hat"][:2], dtype=y_hat.dtype)

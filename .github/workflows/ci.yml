@@ -12,12 +12,11 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.9", "3.10", "3.11"]
-        DISABLE_JIT: [0, 1]
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
@@ -29,12 +28,9 @@ jobs:
       - name: Test with unittest
         run: |
           coverage run -m unittest discover ./tests 'test_*.py'
-        env:
-          NUMBA_DISABLE_JIT: ${{ matrix.DISABLE_JIT }}
       # - name: Coverage with Code Climate
       #   uses: paambaati/codeclimate-action@v4.0.0
       #   # send report only when jit is disabled, and for python 3.11
-      #   if: ${{ matrix.DISABLE_JIT == 1 }}
       #   env:
       #     CC_TEST_REPORTER_ID: ${{ secrets.CODECLIMATE_REPORTER_ID }}
       #   with:
