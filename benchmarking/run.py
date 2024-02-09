@@ -10,6 +10,7 @@ from datetime import datetime
 from itertools import chain, cycle, product
 from pathlib import Path
 from time import perf_counter
+from traceback import format_exc
 from typing import Optional, Union
 from warnings import filterwarnings, warn
 
@@ -262,9 +263,9 @@ def run_problem(
         bests = ",".join(map(str, bests))
         timings = ",".join(map(str, timings))
         lock_write(csv, f"{problem_name};{method};{rewards};{bests};{timings}")
-    except Exception as e:
+    except Exception:
         warn(
-            f"Exception raised during `{problem_name}` with `{method}`:\n{e}.",
+            f"Exception raised in `{problem_name}`, `{method}`:\n{format_exc()}",
             RuntimeWarning,
         )
     finally:
