@@ -11,12 +11,6 @@ from botorch.sampling.base import MCSampler
 
 from globopt.sampling import PosteriorMeanSampler
 
-# per se, this should support `q > 1`; however, it behaves like an analyical
-# acquisition function because in practice:
-#   - we fix the batch sizes to 1, so the `q`'s in the horizon are fix to 1
-#   - we couple `qIdwAcquisitionFunction` with `PosteriorMeanSampler`, meaning the
-#   number of fantasies does not exponentially grow
-
 
 def make_idw_acq_factory(
     c1: float, c2: float, span_Y_min: float = 1e-3

@@ -22,7 +22,7 @@ class GaussHermiteSampler(MCSampler):
 
     Example
     -------
-    >>> sampler = GaussHermiteSampler(1000)
+    >>> sampler = GaussHermiteSampler(torch.Size([1000]))
     >>> posterior = model.posterior(test_X)
     >>> samples = sampler(posterior)
     """

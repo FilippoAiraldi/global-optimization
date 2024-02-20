@@ -101,8 +101,6 @@ def run_problem(
     eps = torch.scalar_tensor(1.0 / ndim)
     n_restarts = 16 * ndim
     raw_samples = 16 * 8 * ndim
-    # mc_samples = 2 ** ceil(log2(256 * horizon))
-    # sampler = SobolQMCNormalSampler(mc_samples, seed=mk_seed())
 
     # draw random initial points
     np_random = np.random.default_rng(seed)
@@ -178,7 +176,7 @@ def run_problem(
         elif method.startswith("rollout"):
             horizon = int(method.split(".")[1])
             maxfun = 15_000
-            gh_sampler = GaussHermiteSampler(sample_shape=torch.Size([16]))
+            valfunc_sampler = GaussHermiteSampler(torch.Size([16]))
             kwargs_factory = make_idw_acq_factory(c1, c2)
 
             def next_obs(
@@ -191,7 +189,7 @@ def run_problem(
                 mdl = get_mdl(X, Y, prev_mdl)
                 remaining_horizon = min(horizon, budget)
                 if remaining_horizon == 1:
-                    acqfun = qIdwAcquisitionFunction(mdl, c1, c2, sampler=gh_sampler)
+                    acqfun = qIdwAcquisitionFunction(mdl, c1, c2, valfunc_sampler)
                     X_opt, _ = optimize_acqf(
                         acqfun, bounds, 1, n_restarts, raw_samples, {"seed": mk_seed()}
                     )
@@ -204,7 +202,7 @@ def run_problem(
                     horizon,
                     qIdwAcquisitionFunction,
                     kwargs_factory,
-                    valfunc_sampler=gh_sampler,
+                    valfunc_sampler=valfunc_sampler,
                 )
                 if prev_full_opt is torch.nan:
                     prev_full_opt = None
@@ -215,7 +213,7 @@ def run_problem(
                 full_opt, tree_vals = optimize_acqf(
                     acqfun,
                     bounds,
-                    horizon,  # == acqfun.get_augmented_q_batch_size(1)
+                    acqfun.get_augmented_q_batch_size(1),
                     n_restarts_,
                     raw_samples_,
                     batch_initial_conditions=prev_full_opt,
