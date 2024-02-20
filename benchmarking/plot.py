@@ -4,6 +4,7 @@ Optimization strategies on various problems.
 """
 
 import argparse
+import re
 from functools import partial
 from itertools import zip_longest
 from math import ceil
@@ -28,8 +29,13 @@ plt.style.use("bmh")
 METHODS_ORDER = ["random", "ei", "myopic", "myopic-s", "rollout"]
 
 
+def _matches_any_pattern(s: str, patterns: list[str]) -> bool:
+    """Returns True if the given string matches any of the given patterns."""
+    return any(re.search(p, s) for p in patterns)
+
+
 def _sort_method(method: str) -> int:
-    """computes the sorting rank of given method (takes into account horizon, if any)."""
+    """Computes sorting rank of given method (takes into account horizon, if any)."""
     parts = method.split(".")
     method = parts[0]
     rank = METHODS_ORDER.index(method)
@@ -37,6 +43,7 @@ def _sort_method(method: str) -> int:
 
 
 def _compute_all_stats(row: pd.Series) -> pd.Series:
+    """Computes all the statistics for the given row of the dataframe."""
     # optimality gaps and final gap
     problem_name = row.name[0]
     f_opt = get_benchmark_problem(problem_name)[0].optimal_value
@@ -81,9 +88,17 @@ def load_data(
         converters={s: converter for s in ["stage-reward", "best-so-far", "time"]},
     )
     if include:
-        df = df[(df["method"].isin(include) | df["problem"].isin(include))]
+        df = df[
+            df["method"].apply(_matches_any_pattern, patterns=include)
+            | df["problem"].apply(_matches_any_pattern, patterns=include)
+        ]
     elif exclude:
-        df = df[~(df["method"].isin(exclude) | df["problem"].isin(exclude))]
+        df = df[
+            ~(
+                df["method"].apply(_matches_any_pattern, patterns=exclude)
+                | df["problem"].apply(_matches_any_pattern, patterns=exclude)
+            )
+        ]
 
     # manually sort problems alphabetically but methods in a custom order
     df.sort_values(
@@ -431,14 +446,14 @@ if __name__ == "__main__":
         type=str,
         nargs="+",
         default=[],
-        help="List of methods and/or benchmarks to include in the visualization.",
+        help="List of methods and/or benchmark patterns to plot.",
     )
     group.add_argument(
         "--exclude",
         type=str,
         nargs="+",
         default=[],
-        help="List of methods and/or benchmarks to exclude from the visualization.",
+        help="List of methods and/or benchmark patterns not to plot.",
     )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
