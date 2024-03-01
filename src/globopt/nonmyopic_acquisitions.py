@@ -1,3 +1,4 @@
+from collections.abc import Collection
 from typing import Any, Optional
 
 import torch
@@ -8,8 +9,6 @@ from botorch.acquisition.multi_step_lookahead import (
 )
 from botorch.models.model import Model
 from botorch.sampling.base import MCSampler
-
-from globopt.sampling import PosteriorMeanSampler
 
 
 def make_idw_acq_factory(
@@ -24,56 +23,48 @@ def make_idw_acq_factory(
     return _inner
 
 
-class qRollout(qMultiStepLookahead):
-    """Rollout nonmyopic acquisition function based on `qMultiStepLookahead`.
+class Ms(qMultiStepLookahead):
+    """Multi-step nonmyopic acquisition function based on `qMultiStepLookahead`.
 
     This acquisition function rolls out the base acquisition function along the given
-    horizon, and returns the sum of the values of the base acquisition function at each
-    stage. Rollout is known to always outperform greedy selection, and is a good tool
-    for improving the performance of myopic base acquisition functions.
-    """
+    horizon and with the provided number of fantasies, and returns the sum of the values
+    of the base acquisition function at each stage and fantasy. Rollout is known to
+    always outperform greedy selection, and is a good tool for improving the performance
+    of myopic base acquisition functions."""
 
     def __init__(
         self,
         model: Model,
-        horizon: int,
+        fantasies_samplers: Collection[MCSampler],
         valfunc_cls: type[AcquisitionFunction],  # base policy
         valfunc_argfactory: Optional[TAcqfArgConstructor] = None,
-        batch_sizes: Optional[list[int]] = None,  # value of `q` at each stage
-        fantasies_sampler: Optional[MCSampler] = None,
         valfunc_sampler: Optional[MCSampler] = None,
     ) -> None:
-        """Instantiates the rollout acquisition function.
+        """Instantiates the multi-step acquisition function.
 
         Parameters
         ----------
         model : Model
             A fitted model.
-        horizon : int
-            Length of the rollout horizon. Must be at least 2.
+        fantasies_samplers : collection of MCSampler
+            A collection of samplers, one for each stage of the lookahead. Each sampler
+            is used to sample the fantasies for the corresponding stage. The horizon is
+            determined by the length of this collection plus one.
         valfunc_cls : type[AcquisitionFunction]
             The type of the base acquisition function class.
         valfunc_argfactory: TAcqfArgConstructor, optional
             A callable that takes the current model and observatiosn and returns
             the kwargs to pass to the base acquisition function constructor.
-        batch_sizes : list[int], optional
-            A list `[q_1, ..., q_k]` containing the batch sizes for the `k` look-ahead
-            steps. By default, all batch sizes are set to 1 along the horizon.
-        fantasies_sampler : MCSampler, optional
-            Sampler used to sample the fantasies. By default, `PosterionMeanSampler` is
-            used, i.e., a sampler that always takes the posterior mean as the single
-            sample.
         valfunc_sampler : MCSampler, optional
             A custom sampler to override the sampling of the base acquisition function
-            values.
+            values (different from sampling the fantasies).
         """
-        # prepare and check inputs
+        horizon = len(fantasies_samplers) + 1
         if horizon < 2:
             raise ValueError("horizon must be at least 2")
-        if batch_sizes is None:
-            batch_sizes = [1] * (horizon - 1)
-        if fantasies_sampler is None:  # by default, sample the posterior mean
-            fantasies_sampler = PosteriorMeanSampler()
+
+        # this arg allows to override the default Sobol MC samplers that are used to
+        # sample the base acquisition function values, NOT the fantasies
         no_valfunc_sampler = valfunc_sampler is None
         if no_valfunc_sampler:
             inner_mc_sample = None
@@ -85,8 +76,8 @@ class qRollout(qMultiStepLookahead):
         # construct base
         super().__init__(
             model=model,
-            batch_sizes=batch_sizes,
-            samplers=[fantasies_sampler] * (horizon - 1),
+            batch_sizes=[1] * (horizon - 1),
+            samplers=fantasies_samplers,
             valfunc_cls=[valfunc_cls] * horizon,
             valfunc_argfacs=[valfunc_argfactory] * horizon,
             inner_mc_samples=[inner_mc_sample] * horizon,

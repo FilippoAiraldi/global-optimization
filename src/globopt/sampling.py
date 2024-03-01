@@ -57,18 +57,3 @@ class GaussHermiteSampler(MCSampler):
         self.register_buffer("base_samples", base_samples)
         self.register_buffer("base_weights", base_weights)
         self.to(device=posterior.device, dtype=posterior.dtype)
-
-
-class PosteriorMeanSampler(MCSampler):
-    """Sampler that takes one sample, i.e., the posterior's mean.
-
-    Note: technically speaking, this is not a sampler, nor it's Monte Carlo, but it is
-    convenient to have it in this form. Deterministic samplers exist but require an
-    `EnsemblePosterior` posterion.
-    """
-
-    def __init__(self) -> None:
-        super().__init__(torch.Size([1]))
-
-    def forward(self, posterior: Posterior) -> Tensor:
-        return posterior.mean.unsqueeze(0)

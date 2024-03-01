@@ -7,7 +7,7 @@ import fcntl
 import gc
 from collections.abc import Iterable
 from datetime import datetime
-from itertools import chain, cycle, product
+from itertools import cycle, product
 from pathlib import Path
 from time import perf_counter
 from traceback import format_exc
@@ -23,6 +23,7 @@ from botorch.models import SingleTaskGP
 from botorch.models.model import Model
 from botorch.models.transforms import Normalize
 from botorch.optim import optimize_acqf
+from botorch.sampling import SobolQMCNormalSampler
 from botorch.utils import standardize
 from gpytorch.mlls import ExactMarginalLogLikelihood
 from joblib import Parallel, delayed
@@ -32,9 +33,9 @@ from torch import Tensor
 from globopt import (
     GaussHermiteSampler,
     IdwAcquisitionFunction,
+    Ms,
     make_idw_acq_factory,
     qIdwAcquisitionFunction,
-    qRollout,
 )
 from globopt.problems import get_available_benchmark_problems, get_benchmark_problem
 from globopt.regression import Idw, Rbf
@@ -44,21 +45,25 @@ FNV_OFFSET = 0xCBF29CE484222325
 FNV_PRIME = 0x100000001B3
 
 
-def convert_methods_arg(method: str) -> Iterable[str]:
-    """Given a `method` argument, decodes the horizon values from it, and returns an
-    iterable of (method, horizon)-strings (if the method is myopic, the horizon is not
-    included in the string)."""
+def check_methods_arg(method: str) -> str:
+    """Given a `method` argument, check its value."""
     if method in ["random", "ei", "myopic", "myopic-s"]:
-        yield method
-    elif method.startswith("rollout") or method.startswith("multi-tree"):
-        method, *horizons = method.split(".")
-        for horizon in horizons:
-            if int(horizon) < 2:
-                raise argparse.ArgumentTypeError(
-                    "Horizons for non-myopic methods must be greater than 1; got "
-                    f"{method} with horizon {horizon} instead."
-                )
-            yield f"{method}.{horizon}"
+        return method
+    elif method.startswith("ms"):
+        sampler_type, *fantasies = method[3:].split(".")
+        if sampler_type != "gh" and sampler_type != "mc":
+            raise argparse.ArgumentTypeError(
+                f"Sampler type must be either `gh` or `mc`; got {sampler_type} instead."
+            )
+        if len(fantasies) == 0:
+            raise argparse.ArgumentTypeError(
+                "Multi-step methods must have at least one fantasy."
+            )
+        if not all(f.isdigit() and int(f) > 0 for f in fantasies):
+            raise argparse.ArgumentTypeError(
+                "Fantasies must be integers (greater than or equal to 0)."
+            )
+        return method
     else:
         raise argparse.ArgumentTypeError(f"Unrecognized method {method}.")
 
@@ -173,11 +178,24 @@ def run_problem(
                 )
                 return X_opt, torch.nan, mdl
 
-        elif method.startswith("rollout"):
-            horizon = int(method.split(".")[1])
+        elif method.startswith("ms"):
+            sampler_type, *fantasies_str = method[3:].split(".")
+            fantasies = list(map(int, fantasies_str))
+
+            horizon = len(fantasies) + 1
             maxfun = 15_000
             valfunc_sampler = GaussHermiteSampler(torch.Size([16]))
             kwargs_factory = make_idw_acq_factory(c1, c2)
+
+            if sampler_type == "gh":
+                fantasies_samplers = [
+                    GaussHermiteSampler(torch.Size([f])) for f in fantasies
+                ]
+            else:
+                fantasies_samplers = [
+                    SobolQMCNormalSampler(torch.Size([f]), seed=mk_seed())
+                    for f in fantasies
+                ]
 
             def next_obs(
                 X: Tensor,
@@ -197,9 +215,9 @@ def run_problem(
 
                 n_restarts_ = n_restarts * remaining_horizon
                 raw_samples_ = raw_samples * remaining_horizon
-                acqfun = qRollout(
+                acqfun = Ms(
                     mdl,
-                    horizon,
+                    fantasies_samplers,
                     qIdwAcquisitionFunction,
                     kwargs_factory,
                     valfunc_sampler=valfunc_sampler,
@@ -226,7 +244,7 @@ def run_problem(
                 return X_opt, full_opt, mdl
 
         else:
-            raise NotImplementedError
+            raise NotImplementedError(f"Method {method} not implemented.")
 
     # run optimization loop
     mdl: Optional[Model] = None
@@ -274,7 +292,7 @@ def run_problem(
 
 
 def run_benchmarks(
-    methods_and_horizons: Iterable[str],
+    methods: Iterable[str],
     problems: list[str],
     n_trials: int,
     seed: int,
@@ -295,12 +313,10 @@ def run_benchmarks(
         p: np.random.SeedSequence(fnv1a_64(p, seed)).generate_state(n_trials)
         for p in problems
     }
-    tasks = filter_tasks_by_status(
-        product(range(n_trials), problems, methods_and_horizons), csv
-    )
+    tasks = filter_tasks_by_status(product(range(n_trials), problems, methods), csv)
     Parallel(n_jobs=n_jobs, verbose=100, backend="loky")(
-        delayed(run_problem)(prob, methodhor, seeds[prob][trial], csv, device)
-        for (trial, prob, methodhor), device in zip(tasks, cycle(devices))
+        delayed(run_problem)(prob, method, seeds[prob][trial], csv, device)
+        for (trial, prob, method), device in zip(tasks, cycle(devices))
     )
 
 
@@ -314,13 +330,14 @@ if __name__ == "__main__":
     group = parser.add_argument_group("Benchmarking options")
     group.add_argument(
         "--methods",
-        type=convert_methods_arg,
+        type=check_methods_arg,
         nargs="+",
         help="Methods to run the benchmarking on. Greedy algorithms include `ei` and "
-        " `myopic`. Non-myopic algorithms are `rollout` and `multi-tree`, where the "
-        "horizons to simulate can be specified with a dot folloewd by (one or more) "
-        "horizons, e.g., `rollout.2.3`. These horizons should be larger than 1. "
-        "Methods are: `random`, `ei`, `myopic`, `myopic-s`, `rollout`.",
+        " `myopic`. Non-myopic multi-step algorithms have the following semantic: "
+        "`ms-sampler.m1.m2. ...`, where `ms` stands for multi-step, `sampler` is either"
+        "`gh` or `mc` (for Gauss Hermite and Monte Carlo, respectively), while `m1`, "
+        "`m2` and so on are the number of fantasies at each stage. The overall horizon "
+        "of an `ms` method is the number of fantasies plus one.",
         required=True,
     )
     group.add_argument(
@@ -358,7 +375,7 @@ if __name__ == "__main__":
 
     # run the benchmarks
     run_benchmarks(
-        chain.from_iterable(args.methods),
+        args.methods,
         args.problems,
         args.n_trials,
         args.seed,
