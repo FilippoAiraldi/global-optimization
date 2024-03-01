@@ -26,7 +26,7 @@ from globopt.problems import get_benchmark_problem
 plt.style.use("bmh")
 
 
-METHODS_ORDER = ["random", "ei", "myopic", "myopic-s", "rollout"]
+METHODS_ORDER = ["random", "ei", "myopic", "myopic-s", "rollout", "ms"]
 
 
 def _matches_any_pattern(s: str, patterns: list[str]) -> bool:
@@ -38,8 +38,10 @@ def _sort_method(method: str) -> int:
     """Computes sorting rank of given method (takes into account horizon, if any)."""
     parts = method.split(".")
     method = parts[0]
+    if method.startswith("ms"):
+        method = "ms"
     rank = METHODS_ORDER.index(method)
-    return rank if len(parts) == 1 else rank + int(parts[1])
+    return rank if len(parts) == 1 else rank + sum(int(p) for p in parts[1:])
 
 
 def _compute_all_stats(row: pd.Series) -> pd.Series:
@@ -323,13 +325,17 @@ def plot_timings(df: pd.DataFrame, figtitle: Optional[str]) -> None:
         "myopic": {"ha": "right", "xytext": (-5, 5)},
         "myopic-s": {"ha": "left", "xytext": (5, 5)},
         "rollout": {"ha": "left", "xytext": (5, 5)},
+        "ms": {"ha": "left", "xytext": (5, 5)},
     }
     for method in df_.index:
+        opts = (
+            options["ms"] if method.startswith("ms") else options[method.split(".")[0]]
+        )
         ax.annotate(
             method,
             xy=(df_.loc[method, "time"], df_.loc[method, "gap"]),
             textcoords="offset points",
-            **options[method.split(".")[0]],
+            **opts,
         )
     ax.set_xscale("log")
     ax.set_xlabel("Seconds per iteration")
