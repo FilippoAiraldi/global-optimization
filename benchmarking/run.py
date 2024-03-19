@@ -288,7 +288,8 @@ def run_problem(
         del problem, X, Y, mdl, obs_opt, acq_opt, full_opt, bests, rewards, timings
         gc.collect()
         if device.startswith("cuda"):
-            torch.cuda.empty_cache()
+            with torch.no_grad():
+                torch.cuda.empty_cache()
 
 
 def run_benchmarks(
