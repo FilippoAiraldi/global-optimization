@@ -3,7 +3,6 @@ Benchmarking myopic and non-myopic Global Optimization strategies on benchmark p
 """
 
 import argparse
-import fcntl
 import gc
 from collections.abc import Iterable
 from datetime import datetime
@@ -43,6 +42,12 @@ from globopt.regression import Idw, Rbf
 BENCHMARK_PROBLEMS = get_available_benchmark_problems()
 FNV_OFFSET = 0xCBF29CE484222325
 FNV_PRIME = 0x100000001B3
+FCNTL_LOADED = True
+try:
+    import fcntl
+except ImportError:
+    FCNTL_LOADED = False
+    warn("fcntl is unavailable; locking file for writing is impossible", ImportWarning)
 
 
 def check_methods_arg(method: str) -> str:
@@ -79,13 +84,16 @@ def fnv1a_64(s: str, base_seed: int = 0) -> int:
 
 
 def lock_write(filename: str, data: str) -> None:
-    """Appends data to file, locking it to prevent concurrent writes."""
+    """Appends data to file while locking it to prevent concurrency (only for Linux)."""
     with open(filename, "a", encoding="utf-8") as f:
-        try:
-            fcntl.lockf(f, fcntl.LOCK_EX)
+        if FCNTL_LOADED:
+            try:
+                fcntl.lockf(f, fcntl.LOCK_EX)
+                f.write(data + "\n")
+            finally:
+                fcntl.lockf(f, fcntl.LOCK_UN)
+        else:
             f.write(data + "\n")
-        finally:
-            fcntl.lockf(f, fcntl.LOCK_UN)
 
 
 def run_problem(
