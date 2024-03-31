@@ -10,7 +10,7 @@ from itertools import cycle, product
 from pathlib import Path
 from time import perf_counter
 from traceback import format_exc
-from typing import Optional, Union
+from typing import Literal, Optional, Union
 from warnings import filterwarnings, warn
 
 import numpy as np
@@ -23,6 +23,7 @@ from botorch.models.model import Model
 from botorch.models.transforms import Normalize
 from botorch.optim import optimize_acqf
 from botorch.sampling import SobolQMCNormalSampler
+from botorch.test_functions.synthetic import SyntheticTestFunction
 from botorch.utils import standardize
 from gpytorch.mlls import ExactMarginalLogLikelihood
 from joblib import Parallel, delayed
@@ -97,15 +98,16 @@ def lock_write(filename: str, data: str) -> None:
 
 
 def run_problem(
-    problem_name: str, method: str, seed: int, csv: str, device: str
+    problem_name: str,
+    problem: SyntheticTestFunction,
+    regression_type: Literal["rbf", "idw"],
+    method: str,
+    maxiter: int,
+    seed: int,
+    csv: str,
+    device: str,
 ) -> None:
-    """Runs the given problem, with the given horizon, and writes the results to csv."""
-    filterwarnings("ignore", "Optimization failed", RuntimeWarning, "botorch")
-    torch.set_default_device(device)
-    torch.set_default_dtype(torch.float64)
-    torch.manual_seed(seed)
-    problem, maxiter, regression_type = get_benchmark_problem(problem_name)
-
+    """Solves the given problem with the given method, and writes the results to csv."""
     # set hyperparameters
     ndim = problem.dim
     n_init = ndim * 2
@@ -300,6 +302,20 @@ def run_problem(
                 torch.cuda.empty_cache()
 
 
+def run_benchmark(
+    problem_name: str, method: str, seed: int, csv: str, device: str
+) -> None:
+    """Sets default values and then runs the given benchmarks"""
+    filterwarnings("ignore", "Optimization failed", RuntimeWarning, "botorch")
+    torch.set_default_device(device)
+    torch.set_default_dtype(torch.float64)
+    torch.manual_seed(seed)
+    problem, maxiter, regression_type = get_benchmark_problem(problem_name)
+    run_problem(
+        problem_name, problem, regression_type, method, maxiter, seed, csv, device
+    )
+
+
 def run_benchmarks(
     methods: Iterable[str],
     problems: list[str],
@@ -324,7 +340,7 @@ def run_benchmarks(
     }
     tasks = filter_tasks_by_status(product(range(n_trials), problems, methods), csv)
     Parallel(n_jobs=n_jobs, verbose=100, backend="loky")(
-        delayed(run_problem)(prob, method, seeds[prob][trial], csv, device)
+        delayed(run_benchmark)(prob, method, seeds[prob][trial], csv, device)
         for (trial, prob, method), device in zip(tasks, cycle(devices))
     )
 
