@@ -4,6 +4,7 @@ import sys
 from collections.abc import Iterable
 from datetime import datetime
 from itertools import cycle, product
+from math import prod
 from pathlib import Path
 from typing import Any, Optional
 from warnings import filterwarnings
@@ -24,7 +25,8 @@ from gymnasium import Env, ObservationWrapper
 from gymnasium.spaces import Box
 from gymnasium.wrappers import TimeLimit
 from joblib import Parallel, delayed
-from mpcrl import Agent, WarmStartStrategy
+from mpcrl import Agent, MpcSolverWarning, WarmStartStrategy
+from mpcrl.wrappers.envs import MonitorEpisodes
 from numpy import typing as npt
 from torch import Tensor
 
@@ -36,7 +38,7 @@ from run import check_methods_arg, fnv1a_64, lock_write, run_problem
 from status import filter_tasks_by_status
 
 PROBLEM = "cstr-mpc-tuning"
-MAX_ITER = 20
+MAX_ITER = 40
 REGRESSION_TYPE = "rbf"
 TUNABLE_PARS = ("narx_weights", "backoff")
 
@@ -106,15 +108,8 @@ class CstrEnv(Env[npt.NDArray[np.floating], float]):
         """
         super().__init__()
         self.constraint_violation_penalty = constraint_violation_penalty
-        # self.observation_space = Box(
-        #     np.array([0.0, 0.0, -273.15, -273.15]), np.inf, (self.ns,), np.float64
-        # )
-        # TODO: remove, just for DEBUG
         self.observation_space = Box(
-            np.array([0.0, 0.0, -273.15, -273.15]),
-            np.array([1e2, 1e2, 1e3, 1e3]),
-            (self.ns,),
-            np.float64,
+            np.array([0.0, 0.0, -273.15, -273.15]), np.inf, (self.ns,), np.float64
         )
         self.action_space = Box(*self.inflow_bound, (self.na,), np.float64)
 
@@ -323,10 +318,11 @@ class CstrMpcControllerTuning(SyntheticTestFunction):
 
         # create the env
         measurable_states = [1, 2]
+        env = CstrEnv(env_constraint_violation_penalty)
         env = NoisyFilterObservation(
-            TimeLimit(CstrEnv(env_constraint_violation_penalty), max_episode_steps=40),
+            MonitorEpisodes(TimeLimit(env, max_episode_steps=40)),
             measurable_states=measurable_states,
-            measurement_noise_std=env_measurement_noise_std,  # TODO: with or without?
+            measurement_noise_std=env_measurement_noise_std,
         )
 
         # create the mpc and the dict of adjustable parameters - the initial values we
@@ -378,7 +374,7 @@ class CstrMpcControllerTuning(SyntheticTestFunction):
         self._sizes: list[int] = []
         for par in TUNABLE_PARS:
             par_bounds = bounds_dict[par]
-            par_size = np.prod(mpc.parameters[par].shape)
+            par_size = prod(mpc.parameters[par].shape)
             bounds.extend(par_bounds for _ in range(par_size))
             self._sizes.append(par_size)
         self.dim = sum(self._sizes)
@@ -412,14 +408,36 @@ class CstrMpcControllerTuning(SyntheticTestFunction):
         return J
 
 
+def callback(problem: CstrMpcControllerTuning) -> str:
+    """A callback that gets called at the end of the optimization for saving additional
+    custom information to the csv."""
+    env: MonitorEpisodes = problem._env.env
+    states = ",".join(map(str, np.asarray(env.observations).flat))
+    actions = ",".join(map(str, np.asarray(env.actions).flat))
+    rewards = ",".join(map(str, np.asarray(env.rewards).flat))
+    return f"{states};{actions};{rewards}"
+
+
 def run_benchmark(method: str, seed: int, csv: str, device: str) -> None:
     """See `benchmarking/run.py/run_benchmark`."""
     filterwarnings("ignore", "Optimization failed", RuntimeWarning, "botorch")
+    filterwarnings("ignore", "Mpc failure", MpcSolverWarning, "mpcrl")
     torch.set_default_device(device)
     torch.set_default_dtype(torch.float64)
     torch.manual_seed(seed)
     problem = CstrMpcControllerTuning(seed=seed)
-    run_problem(PROBLEM, problem, REGRESSION_TYPE, method, MAX_ITER, seed, csv, device)
+    run_problem(
+        problem_name=PROBLEM,
+        problem=problem,
+        regression_type=REGRESSION_TYPE,
+        method=method,
+        maxiter=MAX_ITER,
+        seed=seed,
+        csv=csv,
+        device=device,
+        n_init=2,
+        callback=callback,
+    )
 
 
 def run_benchmarks(
@@ -483,7 +501,10 @@ if __name__ == "__main__":
     elif not args.csv.endswith(".csv"):
         args.csv += ".csv"
     if not Path(args.csv).is_file():
-        lock_write(args.csv, "problem;method;stage-reward;best-so-far;time")
+        lock_write(
+            args.csv,
+            "problem;method;stage-reward;best-so-far;time;states;actions;rewards",
+        )
 
     # run the benchmarks
     run_benchmarks(

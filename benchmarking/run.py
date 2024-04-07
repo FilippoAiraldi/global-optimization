@@ -10,7 +10,7 @@ from itertools import cycle, product
 from pathlib import Path
 from time import perf_counter
 from traceback import format_exc
-from typing import Literal, Optional, Union
+from typing import Callable, Literal, Optional, Union
 from warnings import filterwarnings, warn
 
 import numpy as np
@@ -106,11 +106,14 @@ def run_problem(
     seed: int,
     csv: str,
     device: str,
+    n_init: int | None = None,
+    callback: Callable[[SyntheticTestFunction], str] | None = None,
 ) -> None:
     """Solves the given problem with the given method, and writes the results to csv."""
     # set hyperparameters
     ndim = problem.dim
-    n_init = ndim * 2
+    if n_init is None:
+        n_init = ndim * 2
     c1 = torch.scalar_tensor(1.0 / ndim)
     c2 = torch.scalar_tensor(0.5 / ndim)
     eps = torch.scalar_tensor(1.0 / ndim)
@@ -284,11 +287,15 @@ def run_problem(
             Y = torch.cat((Y, problem(obs_opt)))
             bests.append(Y.amin().item())
 
-        # save results, delete references and free memory (at least, try to)
+        # save results, delete references and free memory (at least, try to) - call also
+        # the callback for (optional) additional data to be saved
         rewards = ",".join(map(str, rewards))
         bests = ",".join(map(str, bests))
         timings = ",".join(map(str, timings))
-        lock_write(csv, f"{problem_name};{method};{rewards};{bests};{timings}")
+        data = f"{problem_name};{method};{rewards};{bests};{timings}"
+        if callback is not None:
+            data += f";{callback(problem)}"
+        lock_write(csv, data)
     except Exception:
         warn(
             f"Exception raised in `{problem_name}`, `{method}`:\n{format_exc()}",
