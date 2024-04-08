@@ -6,6 +6,7 @@ from datetime import datetime
 from math import prod
 from pathlib import Path
 from typing import Any, Optional
+from warnings import filterwarnings
 
 import casadi as cs
 import numpy as np
@@ -35,7 +36,8 @@ from run import check_methods_arg, lock_write, run_benchmarks
 
 PROBLEM_NAME = "cstr-mpc-tuning"
 INIT_ITER = 5
-MAX_ITER = 40  # might not be enough for non-myopic methods to outshine the others
+MAX_ITER = 40
+TIME_STEPS = 40
 REGRESSION_TYPE = "idw"
 TUNABLE_PARS = ("narx_weights", "backoff")
 
@@ -319,9 +321,9 @@ class CstrMpcControllerTuning(SyntheticTestFunction):
         measurable_states = [1, 2]
         env = CstrEnv(env_constraint_violation_penalty)
         env = NoisyFilterObservation(
-            MonitorEpisodes(TimeLimit(env, max_episode_steps=40)),
+            MonitorEpisodes(TimeLimit(env, max_episode_steps=TIME_STEPS)),
             measurable_states=measurable_states,
-            measurement_noise_std=env_measurement_noise_std,
+            measurement_noise_std=env_measurement_noise_std,  # TODO: check if it works
         )
 
         # create the mpc and the dict of adjustable parameters - the initial values we
@@ -407,15 +409,17 @@ class CstrMpcControllerTuning(SyntheticTestFunction):
         return J
 
 
-def hotpatch_benchmarks() -> None:
-    """Adds the CSTR MPC tuning problem to the benchmarking tests."""
+def setup_mpc_tuning() -> None:
+    """Adds the CSTR MPC tuning to the benchmarking tests and a warning filter."""
+    filterwarnings("ignore", "Mpc failure", module="mpcrl")
+
     from globopt.problems import TESTS
 
     assert PROBLEM_NAME not in TESTS, f"{PROBLEM_NAME} already in TESTS!"
     TESTS[PROBLEM_NAME] = (CstrMpcControllerTuning, {}, MAX_ITER, REGRESSION_TYPE)
 
 
-def callback(problem: CstrMpcControllerTuning) -> str:
+def saving_callback(problem: CstrMpcControllerTuning) -> str:
     """A callback that gets called at the end of the optimization for saving additional
     custom information to the csv."""
     env: MonitorEpisodes = problem._env.env
@@ -469,13 +473,13 @@ if __name__ == "__main__":
     elif not args.csv.endswith(".csv"):
         args.csv += ".csv"
     if not Path(args.csv).is_file():
-        lock_write(
-            args.csv,
-            "problem;method;stage-reward;best-so-far;time;states;actions;rewards",
+        header = (
+            "problem;method;stage-reward;best-so-far;time;"
+            "env-states;env-actions;env-rewards"
         )
+        lock_write(args.csv, header)
 
     # run the benchmarks
-    hotpatch_benchmarks()
     run_benchmarks(
         args.methods,
         [PROBLEM_NAME],
@@ -485,5 +489,6 @@ if __name__ == "__main__":
         args.csv,
         args.devices,
         n_init=INIT_ITER,
-        callback=callback,
+        setup_callback=setup_mpc_tuning,
+        end_callback=saving_callback,
     )

@@ -316,14 +316,15 @@ def run_benchmark(
     csv: str,
     device: str,
     n_init: int | None = None,
-    callback: Callable[[SyntheticTestFunction], str] | None = None,
+    setup_callback: Callable[[], None] | None = None,
+    save_callback: Callable[[SyntheticTestFunction], str] | None = None,
 ) -> None:
     """Sets default values and then runs the given benchmarks"""
     filterwarnings("ignore", "Optimization failed", module="botorch")
-    filterwarnings("ignore", "Mpc failure", module="mpcrl")
     torch.set_default_device(device)
     torch.set_default_dtype(torch.float64)
     torch.manual_seed(seed)
+    setup_callback()
     problem, maxiter, regression_type = get_benchmark_problem(problem_name)
     run_problem(
         problem_name,
@@ -335,7 +336,7 @@ def run_benchmark(
         csv,
         device,
         n_init,
-        callback,
+        save_callback,
     )
 
 
@@ -348,7 +349,8 @@ def run_benchmarks(
     csv: str,
     devices: list[torch.device],
     n_init: int | None = None,
-    callback: Callable[[SyntheticTestFunction], str] | None = None,
+    setup_callback: Callable[[], None] | None = None,
+    save_callback: Callable[[SyntheticTestFunction], str] | None = None,
 ) -> None:
     """Runs the benchmarks for the given problems, methods and horizons, repeated per
     the number of trials, distributively across the given devices."""
@@ -366,7 +368,14 @@ def run_benchmarks(
     tasks = filter_tasks_by_status(product(range(n_trials), problems, methods), csv)
     Parallel(n_jobs=n_jobs, verbose=100, backend="loky")(
         delayed(run_benchmark)(
-            prob, method, seeds[prob][trial], csv, device, n_init, callback
+            prob,
+            method,
+            seeds[prob][trial],
+            csv,
+            device,
+            n_init,
+            setup_callback,
+            save_callback,
         )
         for (trial, prob, method), device in zip(tasks, cycle(devices))
     )
