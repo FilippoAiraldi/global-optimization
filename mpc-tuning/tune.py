@@ -3,11 +3,9 @@ import os
 import sys
 from collections.abc import Iterable
 from datetime import datetime
-from itertools import cycle, product
 from math import prod
 from pathlib import Path
 from typing import Any, Optional
-from warnings import filterwarnings
 
 import casadi as cs
 import numpy as np
@@ -24,8 +22,7 @@ from csnlp.wrappers import Mpc
 from gymnasium import Env, ObservationWrapper
 from gymnasium.spaces import Box
 from gymnasium.wrappers import TimeLimit
-from joblib import Parallel, delayed
-from mpcrl import Agent, MpcSolverWarning, WarmStartStrategy
+from mpcrl import Agent, WarmStartStrategy
 from mpcrl.wrappers.envs import MonitorEpisodes
 from numpy import typing as npt
 from torch import Tensor
@@ -34,12 +31,12 @@ sys.path.append(os.path.join(os.getcwd(), "benchmarking"))
 
 # I am lazy so let's import all the helpful functions defined in benchmarking/run.py
 # instead of coding them again here
-from run import check_methods_arg, fnv1a_64, lock_write, run_problem
-from status import filter_tasks_by_status
+from run import check_methods_arg, lock_write, run_benchmarks
 
-PROBLEM = "cstr-mpc-tuning"
-MAX_ITER = 40
-REGRESSION_TYPE = "rbf"
+PROBLEM_NAME = "cstr-mpc-tuning"
+INIT_ITER = 5
+MAX_ITER = 40  # might not be enough for non-myopic methods to outshine the others
+REGRESSION_TYPE = "idw"
 TUNABLE_PARS = ("narx_weights", "backoff")
 
 
@@ -300,6 +297,8 @@ def get_cstr_mpc(
 
 
 class CstrMpcControllerTuning(SyntheticTestFunction):
+    _optimal_value = 20.0  # found empirically
+
     def __init__(
         self,
         negate: bool = True,  # because the inner env returns rewards instead of costs
@@ -408,6 +407,14 @@ class CstrMpcControllerTuning(SyntheticTestFunction):
         return J
 
 
+def hotpatch_benchmarks() -> None:
+    """Adds the CSTR MPC tuning problem to the benchmarking tests."""
+    from globopt.problems import TESTS
+
+    assert PROBLEM_NAME not in TESTS, f"{PROBLEM_NAME} already in TESTS!"
+    TESTS[PROBLEM_NAME] = (CstrMpcControllerTuning, {}, MAX_ITER, REGRESSION_TYPE)
+
+
 def callback(problem: CstrMpcControllerTuning) -> str:
     """A callback that gets called at the end of the optimization for saving additional
     custom information to the csv."""
@@ -416,45 +423,6 @@ def callback(problem: CstrMpcControllerTuning) -> str:
     actions = ",".join(map(str, np.asarray(env.actions).flat))
     rewards = ",".join(map(str, np.asarray(env.rewards).flat))
     return f"{states};{actions};{rewards}"
-
-
-def run_benchmark(method: str, seed: int, csv: str, device: str) -> None:
-    """See `benchmarking/run.py/run_benchmark`."""
-    filterwarnings("ignore", "Optimization failed", RuntimeWarning, "botorch")
-    filterwarnings("ignore", "Mpc failure", MpcSolverWarning, "mpcrl")
-    torch.set_default_device(device)
-    torch.set_default_dtype(torch.float64)
-    torch.manual_seed(seed)
-    problem = CstrMpcControllerTuning(seed=seed)
-    run_problem(
-        problem_name=PROBLEM,
-        problem=problem,
-        regression_type=REGRESSION_TYPE,
-        method=method,
-        maxiter=MAX_ITER,
-        seed=seed,
-        csv=csv,
-        device=device,
-        n_init=2,
-        callback=callback,
-    )
-
-
-def run_benchmarks(
-    methods: Iterable[str],
-    n_trials: int,
-    seed: int,
-    n_jobs: int,
-    csv: str,
-    devices: list[torch.device],
-) -> None:
-    """See `benchmarking/run.py/run_benchmarks`."""
-    seeds = np.random.SeedSequence(fnv1a_64(PROBLEM, seed)).generate_state(n_trials)
-    tasks = filter_tasks_by_status(product(range(n_trials), (PROBLEM,), methods), csv)
-    Parallel(n_jobs=n_jobs, verbose=100, backend="loky")(
-        delayed(run_benchmark)(method, seeds[trial], csv, device)
-        for (trial, _, method), device in zip(tasks, cycle(devices))
-    )
 
 
 if __name__ == "__main__":
@@ -507,11 +475,15 @@ if __name__ == "__main__":
         )
 
     # run the benchmarks
+    hotpatch_benchmarks()
     run_benchmarks(
         args.methods,
+        [PROBLEM_NAME],
         args.n_trials,
         args.seed,
         args.n_jobs,
         args.csv,
         args.devices,
+        n_init=INIT_ITER,
+        callback=callback,
     )

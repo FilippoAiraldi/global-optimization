@@ -21,7 +21,6 @@ References
 
 from functools import partial
 from pathlib import Path
-from types import MappingProxyType
 from typing import Any, Literal, Union
 
 import numpy as np
@@ -395,44 +394,42 @@ setattr(Shekel7, "__name__", Shekel.__name__ + "7")
 
 TESTS: dict[
     str, tuple[type[SyntheticTestFunction], dict[str, Any], int, Literal["rbf", "idw"]]
-] = MappingProxyType(
-    {
-        problem.__name__.lower(): (problem, kwargs, max_evals, regressor_type)
-        for problem, kwargs, max_evals, regressor_type in [
-            (Ackley2, {}, 55, "rbf"),
-            (Ackley5, {}, 80, "idw"),
-            (Adjiman, {}, 25, "idw"),
-            (Bohachevsky, {}, 35, "rbf"),
-            (Branin, {}, 35, "idw"),
-            (Brochu2, {}, 50, "idw"),
-            (Brochu4, {}, 80, "idw"),
-            (Brochu6, {}, 80, "idw"),
-            (Bukin, {}, 25, "idw"),
-            (DropWave, {}, 80, "idw"),
-            (EggHolder, {}, 50, "idw"),
-            (GoldsteinPrice, {}, 50, "idw"),
-            (Griewank, {"dim": 3}, 80, "idw"),
-            (Hartmann3, {}, 50, "idw"),
-            (Hartmann6, {}, 80, "rbf"),
-            (Himmelblau, {}, 40, "idw"),
-            (Lda, {}, 30, "idw"),
-            (LogReg, {}, 25, "rbf"),
-            (NnBoston, {}, 100, "idw"),
-            (NnCancer, {}, 50, "idw"),
-            (Rastrigin, {"dim": 4}, 60, "idw"),
-            (RobotPush3, {}, 90, "idw"),
-            (RobotPush4, {}, 100, "idw"),
-            (Rosenbrock, {"dim": 8}, 50, "rbf"),
-            (Shekel5, {}, 80, "idw"),
-            (Shekel7, {}, 100, "idw"),
-            (Shubert, {}, 50, "idw"),
-            (SixHumpCamel, {"bounds": [(-5.0, 5.0), (-5.0, 5.0)]}, 50, "idw"),
-            (Step2, {"dim": 5}, 60, "idw"),
-            (StyblinskiTang, {"dim": 5}, 60, "idw"),
-            (Svm, {}, 20, "idw"),
-        ]
-    }
-)
+] = {
+    problem.__name__.lower(): (problem, kwargs, max_evals, regressor_type)
+    for problem, kwargs, max_evals, regressor_type in [
+        (Ackley2, {}, 55, "rbf"),
+        (Ackley5, {}, 80, "idw"),
+        (Adjiman, {}, 25, "idw"),
+        (Bohachevsky, {}, 35, "rbf"),
+        (Branin, {}, 35, "idw"),
+        (Brochu2, {}, 50, "idw"),
+        (Brochu4, {}, 80, "idw"),
+        (Brochu6, {}, 80, "idw"),
+        (Bukin, {}, 25, "idw"),
+        (DropWave, {}, 80, "idw"),
+        (EggHolder, {}, 50, "idw"),
+        (GoldsteinPrice, {}, 50, "idw"),
+        (Griewank, {"dim": 3}, 80, "idw"),
+        (Hartmann3, {}, 50, "idw"),
+        (Hartmann6, {}, 80, "rbf"),
+        (Himmelblau, {}, 40, "idw"),
+        (Lda, {}, 30, "idw"),
+        (LogReg, {}, 25, "rbf"),
+        (NnBoston, {}, 100, "idw"),
+        (NnCancer, {}, 50, "idw"),
+        (Rastrigin, {"dim": 4}, 60, "idw"),
+        (RobotPush3, {}, 90, "idw"),
+        (RobotPush4, {}, 100, "idw"),
+        (Rosenbrock, {"dim": 8}, 50, "rbf"),
+        (Shekel5, {}, 80, "idw"),
+        (Shekel7, {}, 100, "idw"),
+        (Shubert, {}, 50, "idw"),
+        (SixHumpCamel, {"bounds": [(-5.0, 5.0), (-5.0, 5.0)]}, 50, "idw"),
+        (Step2, {"dim": 5}, 60, "idw"),
+        (StyblinskiTang, {"dim": 5}, 60, "idw"),
+        (Svm, {}, 20, "idw"),
+    ]
+}
 
 
 def get_available_benchmark_problems() -> list[str]:
