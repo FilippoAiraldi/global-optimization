@@ -117,12 +117,11 @@ def load_data(
     return df.apply(_compute_all_stats, axis=1)
 
 
-def plot_converges(df: pd.DataFrame, figtitle: Optional[str]) -> None:
+def plot_converges(df: pd.DataFrame, figtitle: Optional[str], n_cols: int = 5) -> None:
     """Plots the results in the given dataframe. In particular, it plots the
     convergence to the optimum, and the evolution of the optimality gap."""
     # create figure
     problem_names = df.index.unique(level="problem")
-    n_cols = 5
     n_rows = ceil(len(problem_names) / n_cols)
     fig = plt.figure(figsize=(n_cols * 3.5, n_rows * 2.5))
 
@@ -306,19 +305,6 @@ def plot_timings(df: pd.DataFrame, figtitle: Optional[str]) -> None:
         .apply(_compute_dispersion, axis=1)
     )
     fig, ax = plt.subplots(1, 1, constrained_layout=True)
-    ax.errorbar(
-        x=df_["time"],
-        xerr=df_["time-err"],
-        y=df_["gap"],
-        yerr=df_["gap-err"],
-        ls="none",
-        lw=1.5,
-        capsize=3,
-        capthick=1.5,
-        marker="o",
-        markersize=8,
-        markeredgecolor="white",
-    )
     options = {
         "random": {"ha": "left", "xytext": (5, 5)},
         "ei": {"ha": "left", "xytext": (5, 5)},
@@ -326,9 +312,34 @@ def plot_timings(df: pd.DataFrame, figtitle: Optional[str]) -> None:
         "myopic-s": {"ha": "left", "xytext": (5, 5)},
         "ms": {"ha": "left", "xytext": (5, 5)},
     }
-    for method in df_.index:
+    for method, row in df_.iterrows():
+        if re.fullmatch(r"ms-mc(\.1)+", method):  # rollout with MC sampling
+            color = "C0"
+        elif re.fullmatch(r"ms-gh(\.1)+", method):  # rollout with GH sampling
+            color = "C1"
+        elif method.startswith("ms-mc"):  # multistep with MC sampling
+            color = "C2"
+        elif method.startswith("ms-gh"):  # multistep with GH sampling
+            color = "C3"
+        else:  # myopic strategies
+            color = "C4"
         opts = (
             options["ms"] if method.startswith("ms") else options[method.split(".")[0]]
+        )
+        ax.errorbar(
+            x=row["time"],
+            xerr=row["time-err"],
+            y=row["gap"],
+            yerr=row["gap-err"],
+            ls="none",
+            lw=1.5,
+            capsize=3,
+            capthick=1.5,
+            ecolor=color,
+            marker="o",
+            markersize=8,
+            markerfacecolor=color,
+            markeredgecolor="white",
         )
         ax.annotate(
             method,
