@@ -26,7 +26,7 @@ from globopt.problems import get_benchmark_problem
 plt.style.use("bmh")
 
 
-METHODS_ORDER = ["random", "ei", "myopic", "myopic-s", "rollout", "ms"]
+METHODS_ORDER = ["random", "ei", "myopic", "myopic-s", "ms"]
 
 
 def _matches_any_pattern(s: str, patterns: list[str]) -> bool:
@@ -324,7 +324,6 @@ def plot_timings(df: pd.DataFrame, figtitle: Optional[str]) -> None:
         "ei": {"ha": "left", "xytext": (5, 5)},
         "myopic": {"ha": "right", "xytext": (-5, 5)},
         "myopic-s": {"ha": "left", "xytext": (5, 5)},
-        "rollout": {"ha": "left", "xytext": (5, 5)},
         "ms": {"ha": "left", "xytext": (5, 5)},
     }
     for method in df_.index:
