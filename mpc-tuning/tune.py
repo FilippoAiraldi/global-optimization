@@ -419,7 +419,7 @@ def setup_mpc_tuning() -> None:
     TESTS[PROBLEM_NAME] = (CstrMpcControllerTuning, {}, MAX_ITER, REGRESSION_TYPE)
 
 
-def saving_callback(problem: CstrMpcControllerTuning) -> str:
+def save_callback(problem: CstrMpcControllerTuning) -> str:
     """A callback that gets called at the end of the optimization for saving additional
     custom information to the csv."""
     env: MonitorEpisodes = problem._env.env
@@ -490,5 +490,5 @@ if __name__ == "__main__":
         args.devices,
         n_init=INIT_ITER,
         setup_callback=setup_mpc_tuning,
-        end_callback=saving_callback,
+        save_callback=save_callback,
     )
