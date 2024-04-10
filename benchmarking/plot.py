@@ -61,6 +61,10 @@ def _compute_all_stats(row: pd.Series) -> pd.Series:
     time = row["time"]
     time_avg = time.mean()
     time_std = time.std()
+
+    # pass on data that was not used
+    columns_used = ["best-so-far", "stage-reward", "time"]
+    other_data = {n: row[n] for n in row.index if n not in columns_used}
     return pd.Series(
         {
             "best-so-far": bests_so_far,
@@ -74,6 +78,7 @@ def _compute_all_stats(row: pd.Series) -> pd.Series:
             "time": time,
             "time-mean": time_avg,
             "time-std": time_std,
+            **other_data,
         }
     )
 
@@ -284,26 +289,39 @@ def plot_gap_reward_violins(df: pd.DataFrame, figtitle: Optional[str]) -> None:
 
 def _compute_dispersion(row: pd.Series) -> pd.Series:
     """Computes the dispersion of the given row of the dataframe."""
-    # compute the mean and std of the time per iteration
+    # compute the mean and sem of the time per iteration - CI intervals would be too big
     out = {}
     for col in ("final-gap-mean", "time-mean"):
+        name = col.split("-")[-2]
         val = np.asarray(row[col])
         mean = val.mean()
-        name = col.split("-")[-2]
         out[name] = mean
         out[f"{name}-err"] = sem(val) if val.size > 1 else 0.0
     return pd.Series(out)
 
 
-def plot_timings(df: pd.DataFrame, figtitle: Optional[str]) -> None:
+def plot_timings(
+    df: pd.DataFrame, figtitle: Optional[str], single_problem: bool = False
+) -> None:
     """Plots the average time per iteration versus the optimality gap."""
-    df_ = (
-        df[["final-gap-mean", "time-mean"]]
-        .droplevel("problem")
-        .groupby("method", sort=False)
-        .aggregate(list)
-        .apply(_compute_dispersion, axis=1)
-    )
+    if single_problem:
+        assert len(df.index.unique(level="problem")) == 1, (
+            "Only one problem detected, inter-problem dispersion will be calculated"
+            " instead of intra-problem."
+        )
+        data = {
+            "final-gap-mean": df["final-gap"],
+            "time-mean": df["time"].apply(partial(np.mean, axis=1), axis=1),
+        }
+        df_ = pd.DataFrame(data).droplevel("problem").apply(_compute_dispersion, axis=1)
+    else:
+        df_ = (
+            df[["final-gap-mean", "time-mean"]]
+            .droplevel("problem")
+            .groupby("method", sort=False)
+            .aggregate(list)
+            .apply(_compute_dispersion, axis=1)
+        )
     fig, ax = plt.subplots(1, 1, constrained_layout=True)
     options = {
         "random": {"ha": "left", "xytext": (5, 5)},
