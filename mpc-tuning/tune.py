@@ -36,7 +36,7 @@ from run import check_methods_arg, lock_write, run_benchmarks
 
 PROBLEM_NAME = "cstr-mpc-tuning"
 INIT_ITER = 5
-MAX_ITER = 40
+MAX_ITER = 50
 TIME_STEPS = 40
 REGRESSION_TYPE = "idw"
 TUNABLE_PARS = ("narx_weights", "backoff")
