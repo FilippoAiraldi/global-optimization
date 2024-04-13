@@ -299,6 +299,9 @@ def get_cstr_mpc(
 
 
 class CstrMpcControllerTuning(SyntheticTestFunction):
+    """Synthetic benchmark problem for tuning the parameters of an MPC controller for
+    a CSTR environment."""
+
     _optimal_value = 20.0  # found empirically
 
     def __init__(
