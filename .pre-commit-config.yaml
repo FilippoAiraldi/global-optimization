@@ -15,7 +15,7 @@ repos:
     -   id: check-yaml
     -   id: check-toml
     -   id: check-added-large-files
-        args: [--maxkb=25000]
+        args: [--maxkb=50000]
 
 -   repo: https://github.com/asottile/pyupgrade
     rev: v3.15.0
