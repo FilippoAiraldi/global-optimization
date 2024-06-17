@@ -106,8 +106,8 @@ def run_problem(
     seed: int,
     csv: str,
     device: str,
-    n_init: int | None = None,
-    callback: Callable[[SyntheticTestFunction], str] | None = None,
+    n_init: Optional[int] = None,
+    callback: Optional[Callable[[SyntheticTestFunction], str]] = None,
 ) -> None:
     """Solves the given problem with the given method, and writes the results to csv."""
     # set hyperparameters
@@ -315,9 +315,9 @@ def run_benchmark(
     seed: int,
     csv: str,
     device: str,
-    n_init: int | None = None,
-    setup_callback: Callable[[], None] | None = None,
-    save_callback: Callable[[SyntheticTestFunction], str] | None = None,
+    n_init: Optional[int] = None,
+    setup_callback: Optional[Callable[[], None]] = None,
+    save_callback: Optional[Callable[[SyntheticTestFunction], str]] = None,
 ) -> None:
     """Sets default values and then runs the given benchmarks"""
     filterwarnings("ignore", "Optimization failed", module="botorch")
@@ -348,9 +348,9 @@ def run_benchmarks(
     n_jobs: int,
     csv: str,
     devices: list[torch.device],
-    n_init: int | None = None,
-    setup_callback: Callable[[], None] | None = None,
-    save_callback: Callable[[SyntheticTestFunction], str] | None = None,
+    n_init: Optional[int] = None,
+    setup_callback: Optional[Callable[[], None]] = None,
+    save_callback: Optional[Callable[[SyntheticTestFunction], str]] = None,
 ) -> None:
     """Runs the benchmarks for the given problems, methods and horizons, repeated per
     the number of trials, distributively across the given devices."""
