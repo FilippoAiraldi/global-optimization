@@ -31,6 +31,7 @@ keywords = [
     "optimization",
     "derivative-free-optimization",
     "rollout",
+    "multi-step optimization",
     "radial-basis-function",
     "inverse-distance-weighting",
 ]
