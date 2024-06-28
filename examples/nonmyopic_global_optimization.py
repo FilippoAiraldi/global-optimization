@@ -1,5 +1,5 @@
 """
-Example of application of the GO myopic algorithm. This example attempts to reproduce
+Example of application of the GO nonmyopic algorithm. This example attempts to reproduce
 Fig. 7 of [1], but with a different RBF kernel.
 
 References
@@ -10,18 +10,29 @@ References
 
 
 from math import ceil
+from random import seed
 
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
+from botorch.acquisition.multi_step_lookahead import warmstart_multistep
 from botorch.optim import optimize_acqf
 from torch import Tensor
 
-from globopt import IdwAcquisitionFunction, Rbf
+from globopt import (
+    GaussHermiteSampler,
+    IdwAcquisitionFunction,
+    Ms,
+    Rbf,
+    make_idw_acq_factory,
+)
 from globopt.problems import SimpleProblem
 
+seed(0)
+np.random.seed(0)
 torch.manual_seed(0)
 torch.use_deterministic_algorithms(True)
-torch.set_default_dtype(torch.float32)  # with RBF regressor, float32 may not be enough
+torch.set_default_dtype(torch.float64)  # with RBF regressor, float32 may not be enough
 torch.set_default_device(torch.device("cpu"))
 plt.style.use("bmh")
 
@@ -34,31 +45,67 @@ bounds = torch.as_tensor([[lb], [ub]])
 train_X = torch.as_tensor([[-2.62, -1.2, 0.14, 1.1, 2.82]]).T
 train_Y = problem(train_X)
 eps, c1, c2 = 0.5, 1.0, 0.5
+fantasies = [1, 1]
+horizon = len(fantasies) + 1
+n_restarts = 16 * horizon
+raw_samples = 16 * 8 * horizon
 
-# start regressor state as None
-rbf_state = None
+# start regressor state and the previous full optimizer as None
+rbf_state = full_opt = None
 
 # auxiliary quantities for plotting
-x_plot = torch.linspace(lb, ub, 300).view(-1, 1, 1)
+x_plot = torch.linspace(lb, ub, 100)
+trajectories = torch.stack(
+    torch.meshgrid(*(x_plot for _ in range(horizon)), indexing="ij"), axis=-1
+)
+trajectories[..., 1:] += torch.randn_like(trajectories[..., 1:]) * 1e-3
+trajectories_ = trajectories.view(-1, horizon, 1)
+x_plot = x_plot.view(-1, 1, 1)
 history: list[tuple[Tensor, ...]] = []
+
 
 # run optimization loop
 for iteration in range(N_ITERS):
     # instantiate model and acquisition function
     mdl = Rbf(train_X, train_Y, eps, init_state=rbf_state)
-    MAF = IdwAcquisitionFunction(mdl, c1, c2)
+    # remaining_horizon = min(horizon, N_ITERS - iteration)
+    NMAF = Ms(
+        model=mdl,
+        fantasies_samplers=[GaussHermiteSampler(torch.Size([f])) for f in fantasies],
+        valfunc_cls=IdwAcquisitionFunction,
+        valfunc_argfactory=make_idw_acq_factory(c1, c2),
+    )
 
     # minimize acquisition function
-    X_opt, acq_opt = optimize_acqf(MAF, bounds, 1, 8, 16, options={"seed": iteration})
+    q = NMAF.get_augmented_q_batch_size(1)
+    if full_opt is not None:
+        full_opt = warmstart_multistep(NMAF, bounds, n_restarts, raw_samples, full_opt)
+    full_opt, tree_vals = optimize_acqf(
+        NMAF,
+        bounds,
+        q,
+        n_restarts,
+        raw_samples,
+        batch_initial_conditions=full_opt,
+        return_best_only=False,
+        return_full_tree=True,
+        options={"seed": iteration, "maxfun": 15_000},
+    )
+    best_tree_idx = tree_vals.argmax()
+    acq_opt = tree_vals[best_tree_idx]
+    X_opt = NMAF.extract_candidates(full_opt[best_tree_idx])
 
     # evaluate objective function at the new point, and append it to training data
     Y_opt = problem(X_opt)
     train_X = torch.cat((train_X, X_opt))
     train_Y = torch.cat((train_Y, Y_opt))
     rbf_state = mdl.state
+    prev_full_opt = full_opt
 
     # compute quantities for plotting purposes
-    historic_item = (mdl(x_plot.transpose(0, 1))[0], MAF(x_plot), X_opt, Y_opt, acq_opt)
+    a_all_values = NMAF(trajectories_).view(trajectories.shape[:-1])
+    a = a_all_values.amax(dim=tuple(range(1, a_all_values.ndim)))
+    historic_item = (mdl(x_plot.transpose(0, 1))[0], a, X_opt, Y_opt, acq_opt)
     history.append(tuple(map(torch.squeeze, historic_item)))
 
 # do plotting

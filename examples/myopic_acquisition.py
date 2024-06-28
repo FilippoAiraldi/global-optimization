@@ -1,5 +1,5 @@
 """
-Example of computation and minimization of the myopic acquisition function on a simple
+Example of computation and minimization of myopic acquisition functions on a simple
 scalar function. These include the vanilla myopic acquisition function from [1], and its
 stochastic version (i.e., with expectation over the posterior distribution) computed via
 both Monte Carlo (MC) and Gauss-Hermite (GH) quadrature. This example is inspired by
@@ -20,10 +20,14 @@ import torch
 from botorch.optim import optimize_acqf
 from botorch.sampling import SobolQMCNormalSampler
 
-from globopt import GaussHermiteSampler, IdwAcquisitionFunction, qIdwAcquisitionFunction
+from globopt import (
+    GaussHermiteSampler,
+    IdwAcquisitionFunction,
+    Rbf,
+    qIdwAcquisitionFunction,
+)
 from globopt.myopic_acquisitions import _idw_distance, idw_acquisition_function
 from globopt.problems import SimpleProblem
-from globopt.regression import Rbf
 
 torch.manual_seed(0)
 torch.use_deterministic_algorithms(True)
@@ -96,15 +100,8 @@ _, ax = plt.subplots(1, 1, constrained_layout=True, figsize=(6, 2.5))
 X = X.squeeze()
 ax.plot(X, problem(X), label="Unknown objective $f(x)$", color="C0")
 ax.plot(train_X.squeeze(), train_Y.squeeze(), "o", label=None, color="C0")
-ax.plot(X, y_hat.squeeze(), label=None, color="C1")
-ax.fill_between(
-    X,
-    (y_hat - s).squeeze(),
-    (y_hat + s).squeeze(),
-    label=r"Surrogate model $\hat{f}(x) \pm s(x)$",
-    color="C1",
-    alpha=0.2,
-)
+ax.plot(X, y_hat.squeeze(), label=r"Surrogate model $\hat{f}(x) \pm s(x)$", color="C1")
+ax.fill_between(X, (y_hat - s).squeeze(), (y_hat + s).squeeze(), color="C1", alpha=0.2)
 ax.plot(X, z.squeeze(), label="Distance function $z(x)$", color="C2")
 names = [
     r"Vanilla acquisition $\Lambda$",
