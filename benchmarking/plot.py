@@ -6,18 +6,15 @@ Optimization strategies on various problems.
 import argparse
 import re
 from functools import partial
-from itertools import zip_longest
 from math import ceil
-from typing import Any, Literal, Optional
+from typing import Literal, Optional
 
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib.axes import Axes
 from matplotlib.lines import Line2D
 from matplotlib.ticker import MaxNLocator
-from numpy.typing import ArrayLike
 from prettytable import PrettyTable
 from scipy.stats import sem, t, wilcoxon
 
@@ -179,111 +176,6 @@ def plot_converges(df: pd.DataFrame, figtitle: Optional[str], n_cols: int = 5) -
     # create legend manually
     handles = [Line2D([], [], label=m, color=c) for m, c in plotted_methods.items()]
     fig.legend(handles=handles, loc="outside lower center", ncol=len(handles))
-    fig.suptitle(figtitle, fontsize=12)
-
-
-def _custom_violin(
-    ax: Axes,
-    data: ArrayLike,
-    pos: float,
-    fc: str = "b",
-    ec: str = "k",
-    alpha: float = 0.7,
-    percentiles: ArrayLike = (25, 50, 75),
-    side: Literal["left", "right", "both"] = "both",
-    scatter_kwargs: dict[str, Any] = {},
-    violin_kwargs: dict[str, Any] = {},
-) -> None:
-    """Customized violin plot.
-    Many thanks to https://stackoverflow.com/a/76184694/19648688."""
-    parts = ax.violinplot(data, [pos], **violin_kwargs)
-    for pc in parts["bodies"]:
-        m = np.mean(pc.get_paths()[0].vertices[:, 0])
-        if side == "left":
-            x_offset, clip_min, clip_max = -0.02, -np.inf, m
-        elif side == "right":
-            x_offset, clip_min, clip_max = 0.02, m, np.inf
-        else:
-            x_offset, clip_min, clip_max = 0, -np.inf, np.inf
-        points_x = pos + x_offset
-        pc.get_paths()[0].vertices[:, 0] = np.clip(
-            pc.get_paths()[0].vertices[:, 0], clip_min, clip_max
-        )
-        pc.set_facecolor(fc)
-        pc.set_edgecolor(ec)
-        pc.set_alpha(alpha)
-    perc = np.percentile(data, percentiles)
-    for p in perc:
-        ax.scatter(points_x, p, color=ec, zorder=3, **scatter_kwargs)
-
-
-def plot_gap_reward_violins(df: pd.DataFrame, figtitle: Optional[str]) -> None:
-    """Plots the results in the given dataframe. In particular, it plots the
-    distribution of the (final) optimality gap versus the cumulative rewards as violins.
-    """
-    df_ = df[["final-gap", "return"]].stack(0, False).unstack("method", pd.NA)
-
-    # create figure
-    problem_names = df.index.unique(level="problem")
-    methods = df_.columns.to_list()
-    methods_ticks = np.arange(len(methods))
-    n_rows = len(problem_names)
-    fig, axs = plt.subplots(
-        n_rows, 1, constrained_layout=True, figsize=(6, n_rows * 2.5), sharex=True
-    )
-    if n_rows == 1:
-        axs = [axs]
-
-    # for each problem, create two violin plots - one for the optimality gap's
-    # distribution and one for the cumulative rewards' distribution
-    s_kwargs = {"s": 40, "marker": "_"}
-    v_kwargs = {
-        "showextrema": False,
-        "showmedians": False,
-        "showmeans": False,
-        "widths": 0.5,
-    }
-    for ax, problem_name in zip(axs, problem_names):
-        ax_twin = ax.twinx()
-        for method in methods:
-            # plot the two violins
-            pos = methods.index(method)
-            _custom_violin(
-                ax,
-                df_.loc[(problem_name, "final-gap")][method],
-                pos,
-                "C0",
-                "C0",
-                side="left",
-                scatter_kwargs=s_kwargs,
-                violin_kwargs=v_kwargs,
-            )
-            return_ = df_.loc[(problem_name, "return")][method]
-            if np.logical_not(np.isnan(return_)).any():
-                _custom_violin(
-                    ax_twin,
-                    return_,
-                    pos,
-                    "C1",
-                    "C1",
-                    side="right",
-                    scatter_kwargs=s_kwargs,
-                    violin_kwargs=v_kwargs,
-                )
-
-        # embellish axes
-        ax.set_xticks(methods_ticks)
-        ax.set_xticklabels(methods)
-        ax.set_title(problem_name, fontsize=11)
-        ax.set_ylabel(r"$G$")
-        ax_twin.set_ylabel(r"$R$")
-        ax.tick_params(axis="y", labelcolor="C0")
-        ax_twin.tick_params(axis="y", labelcolor="C1")
-        ax.grid(which="major", visible=False)
-        ax_twin.grid(which="major", visible=False)
-
-    # last embellishments
-    ax.set_xlabel("Method")
     fig.suptitle(figtitle, fontsize=12)
 
 
@@ -509,7 +401,6 @@ if __name__ == "__main__":
         dataframe = load_data(filename, args.include, args.exclude)
         if not args.no_plot:
             plot_converges(dataframe, title)
-            plot_gap_reward_violins(dataframe, title)
             plot_timings(dataframe, title)
         if not args.no_summary:
             summarize(dataframe, title)

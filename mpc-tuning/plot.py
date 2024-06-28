@@ -17,13 +17,7 @@ from tune import (
 
 sys.path.append(os.getcwd())
 
-from benchmarking.plot import (
-    load_data,
-    plot_converges,
-    plot_gap_reward_violins,
-    plot_timings,
-    summarize,
-)
+from benchmarking.plot import load_data, plot_converges, plot_timings, summarize
 
 
 def _extract_envdata(row: pd.Series) -> pd.Series:
@@ -130,7 +124,6 @@ if __name__ == "__main__":
         dataframe = load_data(filename, args.include, args.exclude)
         if not args.no_plot:
             plot_converges(dataframe, title, n_cols=1)
-            plot_gap_reward_violins(dataframe, title)
             plot_timings(dataframe, title, single_problem=True)
             plot_envdata(dataframe, title)
         if not args.no_summary:
