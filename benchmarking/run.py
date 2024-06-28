@@ -324,7 +324,8 @@ def run_benchmark(
     torch.set_default_device(device)
     torch.set_default_dtype(torch.float64)
     torch.manual_seed(seed)
-    setup_callback()
+    if setup_callback is not None:
+        setup_callback()
     problem, maxiter, regression_type = get_benchmark_problem(problem_name)
     run_problem(
         problem_name,
