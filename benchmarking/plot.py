@@ -26,11 +26,6 @@ plt.style.use("bmh")
 METHODS_ORDER = ["random", "ei", "myopic", "myopic-s", "ms"]
 
 
-def _matches_any_pattern(s: str, patterns: list[str]) -> bool:
-    """Returns True if the given string matches any of the given patterns."""
-    return any(re.search(p, s) for p in patterns)
-
-
 def _sort_method(method: str) -> int:
     """Computes sorting rank of given method (takes into account horizon, if any)."""
     parts = method.split(".")
@@ -81,7 +76,11 @@ def _compute_all_stats(row: pd.Series) -> pd.Series:
 
 
 def load_data(
-    csv_filename: str, include: list[str], exclude: list[str]
+    csv_filename: str,
+    include_methods: list[str],
+    include_problems: list[str],
+    exclude_methods: list[str],
+    exclude_problems: list[str],
 ) -> pd.DataFrame:
     """Loads the data from the given file into a dataframe."""
     converter = partial(np.fromstring, sep=",")
@@ -91,18 +90,12 @@ def load_data(
         dtype={"problem": pd.StringDtype(), "method": pd.StringDtype()},
         converters={s: converter for s in ["stage-reward", "best-so-far", "time"]},
     )
-    if include:
-        df = df[
-            df["method"].apply(_matches_any_pattern, patterns=include)
-            | df["problem"].apply(_matches_any_pattern, patterns=include)
-        ]
-    elif exclude:
-        df = df[
-            ~(
-                df["method"].apply(_matches_any_pattern, patterns=exclude)
-                | df["problem"].apply(_matches_any_pattern, patterns=exclude)
-            )
-        ]
+    for col, include in (("method", include_methods), ("problem", include_problems)):
+        if include:
+            df = df[df[col].apply(lambda s: any(re.search(p, s) for p in include))]
+    for col, exclude in (("method", exclude_methods), ("problem", exclude_problems)):
+        if exclude:
+            df = df[~df[col].apply(lambda s: any(re.search(p, s) for p in exclude))]
 
     # manually sort problems alphabetically but methods in a custom order
     df.sort_values(
@@ -366,20 +359,34 @@ if __name__ == "__main__":
         nargs="+",
         help="Filenames of the results to be visualized.",
     )
-    group = parser.add_mutually_exclusive_group()
+    group = parser.add_argument_group("Include/Exclude options")
     group.add_argument(
-        "--include",
+        "--include-methods",
         type=str,
         nargs="+",
         default=[],
-        help="List of methods and/or benchmark patterns to plot.",
+        help="List of methods patterns to plot.",
     )
     group.add_argument(
-        "--exclude",
+        "--include-problems",
         type=str,
         nargs="+",
         default=[],
-        help="List of methods and/or benchmark patterns not to plot.",
+        help="List of benchmark problems patterns to plot.",
+    )
+    group.add_argument(
+        "--exclude-methods",
+        type=str,
+        nargs="+",
+        default=[],
+        help="List of methods patterns not to plot.",
+    )
+    group.add_argument(
+        "--exclude-problems",
+        type=str,
+        nargs="+",
+        default=[],
+        help="List of benchmark problems patterns not to plot.",
     )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -398,7 +405,13 @@ if __name__ == "__main__":
     include_title = len(args.filenames) > 1
     for filename in args.filenames:
         title = filename if include_title else None
-        dataframe = load_data(filename, args.include, args.exclude)
+        dataframe = load_data(
+            filename,
+            args.include_methods,
+            args.include_problems,
+            args.exclude_methods,
+            args.exclude_problems,
+        )
         if not args.no_plot:
             plot_converges(dataframe, title)
             plot_timings(dataframe, title)
