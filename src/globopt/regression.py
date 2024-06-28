@@ -285,6 +285,9 @@ class Idw(BaseRegression):
         train_X, train_Y = self._prepare_for_fantasizing(X, Y)
         return Idw(torch.cat((train_X, X), dim=-2), torch.cat((train_Y, Y), dim=-2))
 
+    def __str__(self) -> str:
+        return self.__class__.__name__
+
 
 class Rbf(BaseRegression):
     """Radial Basis Function regression model in Global Optimization."""
@@ -369,3 +372,6 @@ class Rbf(BaseRegression):
         Xnew = torch.cat((train_X, X), dim=-2)
         Ynew = torch.cat((train_Y, Y), dim=-2)
         return Rbf(Xnew, Ynew, self.eps, self.svd_tol, self.state)
+
+    def __str__(self) -> str:
+        return f"{self.__class__.__name__}(eps={self.eps})"

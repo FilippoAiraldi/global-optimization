@@ -1,9 +1,12 @@
 """
 Example of computation and minimization of the myopic acquisition function on a simple
-scalar function. This example attempts to reproduce Fig. 3 and 6 of [1].
+scalar function. These include the vanilla myopic acquisition function from [1], and its
+stochastic version (i.e., with expectation over the posterior distribution) computed via
+both Monte Carlo (MC) and Gauss-Hermite (GH) quadrature. This example is inspired by
+Fig. 3 and 6 of [1].
 
-These functionalities are used in the implementation of the myopic and non-myopic
-solvers and are not intended to be used directly by the user.
+Most of these functionalities are used in the implementation of the myopic and
+non-myopic solvers and are not intended to be used directly by the user.
 
 References
 ----------
@@ -44,7 +47,7 @@ mdl = Rbf(train_X, train_Y, 0.5)
 X = torch.linspace(lb, ub, 1000).view(1, -1, 1)
 y_hat, s, W_sum_recipr, _ = mdl(X)
 
-# compute the overall analytical acquisition function, component by component
+# compute the overall myopic vanilla acquisition function, component by component
 c1 = torch.scalar_tensor(1.0)
 c2 = torch.scalar_tensor(0.5)
 y_span = train_Y.amax(-2, keepdim=True) - train_Y.amin(-2, keepdim=True)
@@ -62,7 +65,7 @@ x_opt, a_opt = optimize_acqf(
 )
 
 # for the monte carlo version, we can directly use the forward method
-sampler = SobolQMCNormalSampler(sample_shape=torch.Size([2**8]), seed=0)
+sampler = SobolQMCNormalSampler(sample_shape=torch.Size([2**5]), seed=0)
 MCAF = qIdwAcquisitionFunction(mdl, c1, c2, sampler)
 a_mc = MCAF(X.view(-1, 1, 1))
 x_opt_mc, a_opt_mc = optimize_acqf(
@@ -76,7 +79,7 @@ x_opt_mc, a_opt_mc = optimize_acqf(
 
 # instead of the quasi-monte carlo approach, we can also use a version that approximates
 # the expected value via Gauss-Hermite quadrature
-sampler = GaussHermiteSampler(sample_shape=torch.Size([2**3]))
+sampler = GaussHermiteSampler(sample_shape=torch.Size([2**2]))
 GHAF = qIdwAcquisitionFunction(mdl, c1, c2, sampler)
 a_exp = GHAF(X.view(-1, 1, 1))
 x_opt_exp, a_opt_exp = optimize_acqf(
@@ -91,24 +94,28 @@ x_opt_exp, a_opt_exp = optimize_acqf(
 # plot
 _, ax = plt.subplots(1, 1, constrained_layout=True, figsize=(6, 2.5))
 X = X.squeeze()
-ax.plot(X, problem(X), label="$f(x)$", color="C0")
+ax.plot(X, problem(X), label="Unknown objective $f(x)$", color="C0")
 ax.plot(train_X.squeeze(), train_Y.squeeze(), "o", label=None, color="C0")
 ax.plot(X, y_hat.squeeze(), label=None, color="C1")
 ax.fill_between(
     X,
     (y_hat - s).squeeze(),
     (y_hat + s).squeeze(),
-    label=r"$\hat{f}(x) \pm s(x)$",
+    label=r"Surrogate model $\hat{f}(x) \pm s(x)$",
     color="C1",
     alpha=0.2,
 )
-ax.plot(X, z.squeeze(), label="$z(x)$", color="C2")
-names = ["Analytical", "Monte Carlo", "Gauss-Hermite"]
+ax.plot(X, z.squeeze(), label="Distance function $z(x)$", color="C2")
+names = [
+    r"Vanilla acquisition $\Lambda$",
+    r"Stochastic acquisition $\Lambda^\text{s}$ (MC)",
+    r"Stochastic acquisition $\Lambda^\text{s}$ (GH)",
+]
 data = [(a, x_opt, a_opt), (a_mc, x_opt_mc, a_opt_mc), (a_exp, x_opt_exp, a_opt_exp)]
 for i, (name, (a_, x_opt_, a_opt_)) in enumerate(zip(names, data)):
     c = f"C{i + 3}"
     a_min = a_.amin()
-    ax.plot(X, (a_ - a_min).squeeze(), "--", lw=1, label=f"{name} $a(x)$", color=c)
+    ax.plot(X, (a_ - a_min).squeeze(), "--", lw=1, label=name, color=c)
     ax.plot(
         x_opt_.squeeze(),
         (a_opt_ - a_min).squeeze(),

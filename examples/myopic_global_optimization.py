@@ -30,6 +30,7 @@ plt.style.use("bmh")
 N_ITERS = 6
 problem = SimpleProblem()
 lb, ub = problem._bounds[0]
+bounds = torch.as_tensor([[lb], [ub]])
 train_X = torch.as_tensor([[-2.62, -1.2, 0.14, 1.1, 2.82]]).T
 train_Y = problem(train_X)
 eps, c1, c2 = 0.5, 1.0, 0.5
@@ -50,7 +51,7 @@ for iteration in range(N_ITERS):
     # minimize acquisition function
     X_opt, acq_opt = optimize_acqf(
         acq_function=IdwAcquisitionFunction(mdl, c1, c2),
-        bounds=torch.as_tensor([[lb], [ub]]),
+        bounds=bounds,
         q=1,
         num_restarts=8,
         raw_samples=16,

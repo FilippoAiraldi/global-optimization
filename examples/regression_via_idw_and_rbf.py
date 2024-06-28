@@ -48,7 +48,7 @@ for i in range(len(mdls)):
     # if isinstance(mdl, Idw):
     #     mdls[i] = Idw(train_X, train_Y)  # easier than RBFs
     # else:
-    #     # for RBFs, pass also the previously fitted results
+    #     # for RBFs, pass also the previously fitted results (state)
     #     mdls[i] = Rbf(train_X, train_Y, mdl.eps, mdl.eig_tol, mdl.state)
 
 # predict values over all domain via the fitted models
@@ -60,7 +60,7 @@ _, ax = plt.subplots(constrained_layout=True, figsize=(7, 3))
 ax.plot(train_X.squeeze(), train_Y.squeeze(), "o", markersize=9, color="C0")
 ax.plot(X.squeeze(), problem(X).squeeze(), "--", label="f(x)", lw=3)
 for mdl, Y_hat_ in zip(mdls, Y_hat):
-    ax.plot(X.squeeze(), Y_hat_.squeeze(), label=mdl.__class__.__name__)
+    ax.plot(X.squeeze(), Y_hat_.squeeze(), label=mdl)
 ax.set_xlabel("x")
 ax.set_xlim(*problem._bounds[0])
 ax.set_ylim(0, 2.5)
