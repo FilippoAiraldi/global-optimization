@@ -13,25 +13,24 @@ import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import prettytable as pt
 from matplotlib.lines import Line2D
 from matplotlib.ticker import MaxNLocator
-from prettytable import PrettyTable
 from scipy.stats import sem, t, wilcoxon
 
 from globopt.problems import get_benchmark_problem
 
-plt.style.use("bmh")
+pd.options.mode.copy_on_write = True
 
 
-METHODS_ORDER = ["random", "ei", "myopic", "myopic-s", "ms"]
+ALPHA = 0.95
+METHODS_ORDER = ["random", "ei", "myopic", "myopic-s", "ms-gh", "ms-mc"]
 
 
 def _sort_method(method: str) -> int:
     """Computes sorting rank of given method (takes into account horizon, if any)."""
     parts = method.split(".")
     method = parts[0]
-    if method.startswith("ms"):
-        method = "ms"
     rank = METHODS_ORDER.index(method)
     return rank if len(parts) == 1 else rank + sum(int(p) for p in parts[1:])
 
@@ -139,8 +138,8 @@ def plot_converges(df: pd.DataFrame, figtitle: Optional[str], n_cols: int = 5) -
             for ax, col in zip((ax_opt, ax_gap), ("best-so-far", "gap")):
                 data = row_data[col]
                 avg = data.mean(axis=0)
-                scale = sem(data, axis=0) + 1e-12
-                ci_lb, ci_ub = t.interval(0.95, data.shape[0] - 1, loc=avg, scale=scale)
+                scl = sem(data, axis=0) + 1e-12
+                ci_lb, ci_ub = t.interval(ALPHA, data.shape[0] - 1, loc=avg, scale=scl)
                 h = ax.step(evals, avg, lw=1.0, color=color)
                 if color is None:
                     color = h[0].get_color()
@@ -176,12 +175,11 @@ def _compute_dispersion(row: pd.Series) -> pd.Series:
     """Computes the dispersion of the given row of the dataframe."""
     # compute the mean and sem of the time per iteration - CI intervals would be too big
     out = {}
-    for col in ("final-gap-mean", "time-mean"):
-        name = col.split("-")[-2]
-        val = np.asarray(row[col])
-        mean = val.mean()
-        out[name] = mean
-        out[f"{name}-err"] = sem(val) if val.size > 1 else 0.0
+    for col in row.index:
+        data = np.asarray(row[col])
+        mean = data.mean()
+        out[col] = mean
+        out[f"{col}-err"] = sem(data) if data.size > 1 else 0.0
     return pd.Series(out)
 
 
@@ -202,6 +200,7 @@ def plot_timings(
     else:
         df_ = (
             df[["final-gap-mean", "time-mean"]]
+            .rename(columns={"final-gap-mean": "gap", "time-mean": "time"})
             .droplevel("problem")
             .groupby("method", sort=False)
             .aggregate(list)
@@ -245,10 +244,7 @@ def plot_timings(
             markeredgecolor="white",
         )
         ax.annotate(
-            method,
-            xy=(df_.loc[method, "time"], df_.loc[method, "gap"]),
-            textcoords="offset points",
-            **opts,
+            method, xy=(row["time"], row["gap"]), textcoords="offset points", **opts
         )
     ax.set_xscale("log")
     ax.set_xlabel("Seconds per iteration")
@@ -280,14 +276,14 @@ def _format_row(
     # of the best method being better than the other method cannot be rejected,
     # highlight the other method in italic violet
     side = "less" if order == "min" else "greater"
-    for other_method_idx in (i for i in range(len(strs)) if i != best_method_idx):
-        other_method_data = src_data[(problem, methods[other_method_idx])]
+    for i in filter(lambda i: i != best_method_idx, range(len(strs))):
+        other_method_data = src_data[(problem, methods[i])]
         try:
             _, alpha = wilcoxon(best_method_data, other_method_data, alternative=side)
-            if alpha > threshold_alpha:
-                strs[other_method_idx] = f"\033[35m{strs[other_method_idx]}\033[0m"
         except ValueError:
-            pass
+            alpha = float("nan")
+        if alpha > threshold_alpha:
+            strs[i] = f"\033[35m{strs[i]}\033[0m"
     return strs
 
 
@@ -308,19 +304,19 @@ def summarize(df: pd.DataFrame, tabletitle: Optional[str]) -> None:
     df_ = df[cols].stack(0, False).unstack("method", pd.NA)
 
     # then, instantiate the pretty tables to be filled with the statistics
-    field_names = ["Function name", ""] + df.index.unique(level="method").to_list()
+    field_names = ["Name", ""] + df.index.unique(level="method").to_list()
     tables = (
-        PrettyTable(field_names, title="gap"),
-        PrettyTable(field_names, title="return"),
-        PrettyTable(field_names[:1] + field_names[2:], title="time"),
+        pt.PrettyTable(field_names, title="gap"),
+        pt.PrettyTable(field_names, title="return"),
+        pt.PrettyTable(field_names[:1] + field_names[2:], title="time"),
     )
 
     # loop over every problem and fill the pretty tables
     for pname in df_.index.get_level_values("problem").unique():
         # gap (mean and median)
         gap_data = df["final-gap"]
-        g_mean = _format_row(df_.loc[(pname, "final-gap-mean")], gap_data, prec=5)
-        g_median = _format_row(df_.loc[(pname, "final-gap-median")], gap_data, prec=5)
+        g_mean = _format_row(df_.loc[(pname, "final-gap-mean")], gap_data, prec=6)
+        g_median = _format_row(df_.loc[(pname, "final-gap-median")], gap_data, prec=6)
         tables[0].add_row([pname, "mean"] + g_mean)
         tables[0].add_row(["", "median"] + g_median)
 
@@ -343,8 +339,8 @@ def summarize(df: pd.DataFrame, tabletitle: Optional[str]) -> None:
     # finally, print the tables side by side
     if tabletitle is not None:
         print(tabletitle)
-    rows = zip_longest(*(t.get_string().splitlines() for t in tables), fillvalue="")
-    print("\n".join("\t".join(group_of_rows) for group_of_rows in rows))
+    for table in tables:
+        print(table.get_string())
 
 
 if __name__ == "__main__":
