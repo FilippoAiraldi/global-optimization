@@ -25,6 +25,8 @@ pd.options.mode.copy_on_write = True
 
 ALPHA = 0.95
 METHODS_ORDER = ["random", "ei", "myopic", "myopic-s", "ms-gh", "ms-mc"]
+METHOD_PATTER = re.compile(r"ms-(mc|gh)((?:\.\d+)+)")
+VALID_PATTERN = re.compile(r"[^a-zA-Z0-9]+")
 
 
 def _sort_method(method: str) -> int:
@@ -72,6 +74,32 @@ def _compute_all_stats(row: pd.Series) -> pd.Series:
             **other_data,
         }
     )
+
+
+def official_method_name_and_type(
+    method: str, no_spaces: bool = False, for_filename: bool = False
+) -> tuple[str, int]:
+    """Utility to get the official name of the method."""
+    match = METHOD_PATTER.fullmatch(method)
+    if match is not None:  # rollout/multi-step with MC/GH
+        sampler = match.group(1).upper()
+        fantasies = match.group(2).split(".")[1:]
+        horizon = len(fantasies) + 1
+        prefix = "R" if all(f == "1" for f in fantasies) else "MS"
+        name = f"{prefix}-{horizon} ({sampler})"
+        if prefix == "R":
+            type_ = 0 if sampler == "MC" else 1
+        else:
+            type_ = 2 if sampler == "MC" else 3
+    else:
+        name = method.title()
+        type_ = 4
+    if no_spaces:
+        name = name.replace(" ", r"\,")
+    if for_filename:
+        name = VALID_PATTERN.sub("", name)
+        assert name.isalnum(), f"Invalid file name: {name}"
+    return name, type_
 
 
 def load_data(
@@ -183,73 +211,78 @@ def _compute_dispersion(row: pd.Series) -> pd.Series:
     return pd.Series(out)
 
 
-def plot_timings(
-    df: pd.DataFrame, figtitle: Optional[str], single_problem: bool = False
+def _compute_official_name_and_type(row: pd.Series) -> pd.Series:
+    """Computes the official name and type of the given row of the dataframe."""
+    new_row = row.copy()
+    new_row["method"], new_row["type"] = official_method_name_and_type(
+        row["method"], no_spaces=True
+    )
+    return new_row
+
+
+def itertime_vs_gap(
+    df: pd.DataFrame, plot: bool, pgfplotstables: bool, title: Optional[str] = None
 ) -> None:
-    """Plots the average time per iteration versus the optimality gap."""
-    if single_problem:
-        assert len(df.index.unique(level="problem")) == 1, (
-            "Only one problem detected, inter-problem dispersion will be calculated"
-            " instead of intra-problem."
-        )
-        data = {
-            "final-gap-mean": df["final-gap"],
-            "time-mean": df["time"].apply(partial(np.mean, axis=1), axis=1),
+    """Plots/saves the average time per iteration versus the optimality gap."""
+    df_ = (
+        df[["final-gap-mean", "time-mean"]]
+        .rename(columns={"final-gap-mean": "gap", "time-mean": "time"})
+        .droplevel("problem")
+        .groupby("method", sort=False)
+        .aggregate(list)
+        .apply(_compute_dispersion, axis=1)
+    )
+
+    if plot:
+        fig, ax = plt.subplots(1, 1, constrained_layout=True)
+        opts = {
+            "random": {"ha": "left", "xytext": (5, 5)},
+            "ei": {"ha": "left", "xytext": (5, 5)},
+            "myopic": {"ha": "right", "xytext": (-5, 5)},
+            "myopic-s": {"ha": "left", "xytext": (5, 5)},
+            "ms": {"ha": "left", "xytext": (5, 5)},
         }
-        df_ = pd.DataFrame(data).droplevel("problem").apply(_compute_dispersion, axis=1)
-    else:
-        df_ = (
-            df[["final-gap-mean", "time-mean"]]
-            .rename(columns={"final-gap-mean": "gap", "time-mean": "time"})
-            .droplevel("problem")
-            .groupby("method", sort=False)
-            .aggregate(list)
-            .apply(_compute_dispersion, axis=1)
+        for method, row in df_.iterrows():
+            if re.fullmatch(r"ms-mc(\.1)+", method):  # rollout with MC sampling
+                color = "C0"
+            elif re.fullmatch(r"ms-gh(\.1)+", method):  # rollout with GH sampling
+                color = "C1"
+            elif method.startswith("ms-mc"):  # multistep with MC sampling
+                color = "C2"
+            elif method.startswith("ms-gh"):  # multistep with GH sampling
+                color = "C3"
+            else:  # myopic strategies
+                color = "C4"
+            opt = opts["ms"] if method.startswith("ms") else opts[method.split(".")[0]]
+            ax.errorbar(
+                x=row["time"],
+                xerr=row["time-err"],
+                y=row["gap"],
+                yerr=row["gap-err"],
+                ls="none",
+                lw=1.5,
+                capsize=3,
+                capthick=1.5,
+                ecolor=color,
+                marker="o",
+                markersize=8,
+                markerfacecolor=color,
+                markeredgecolor="white",
+            )
+            ax.annotate(
+                method, xy=(row["time"], row["gap"]), textcoords="offset points", **opt
+            )
+        ax.set_xscale("log")
+        ax.set_xlabel("Seconds per iteration")
+        ax.set_ylabel("Optimality gap")
+        fig.suptitle(title, fontsize=12)
+
+    if pgfplotstables:
+        fn = "pgfplotstables/itertime-vs-gap"
+        fn += f"_{title}.dat" if title is not None else ".dat"
+        df_.reset_index().apply(_compute_official_name_and_type, axis=1).to_string(
+            fn, index=False
         )
-    fig, ax = plt.subplots(1, 1, constrained_layout=True)
-    options = {
-        "random": {"ha": "left", "xytext": (5, 5)},
-        "ei": {"ha": "left", "xytext": (5, 5)},
-        "myopic": {"ha": "right", "xytext": (-5, 5)},
-        "myopic-s": {"ha": "left", "xytext": (5, 5)},
-        "ms": {"ha": "left", "xytext": (5, 5)},
-    }
-    for method, row in df_.iterrows():
-        if re.fullmatch(r"ms-mc(\.1)+", method):  # rollout with MC sampling
-            color = "C0"
-        elif re.fullmatch(r"ms-gh(\.1)+", method):  # rollout with GH sampling
-            color = "C1"
-        elif method.startswith("ms-mc"):  # multistep with MC sampling
-            color = "C2"
-        elif method.startswith("ms-gh"):  # multistep with GH sampling
-            color = "C3"
-        else:  # myopic strategies
-            color = "C4"
-        opts = (
-            options["ms"] if method.startswith("ms") else options[method.split(".")[0]]
-        )
-        ax.errorbar(
-            x=row["time"],
-            xerr=row["time-err"],
-            y=row["gap"],
-            yerr=row["gap-err"],
-            ls="none",
-            lw=1.5,
-            capsize=3,
-            capthick=1.5,
-            ecolor=color,
-            marker="o",
-            markersize=8,
-            markerfacecolor=color,
-            markeredgecolor="white",
-        )
-        ax.annotate(
-            method, xy=(row["time"], row["gap"]), textcoords="offset points", **opts
-        )
-    ax.set_xscale("log")
-    ax.set_xlabel("Seconds per iteration")
-    ax.set_ylabel("Optimality gap")
-    fig.suptitle(figtitle, fontsize=12)
 
 
 def _format_row(
@@ -287,9 +320,11 @@ def _format_row(
     return strs
 
 
-def summarize(df: pd.DataFrame, tabletitle: Optional[str]) -> None:
-    """Prints the summary of the results in the given dataframe as three tables, one
-    containing the (final) optimality gap, one the cumulative rewards, and the last
+def summary_tables(
+    df: pd.DataFrame, summary: bool, pgfplotstables: bool, title: Optional[str] = None
+) -> None:
+    """Prints/saves the summary of the results in the given dataframe as three tables,
+    one containing the (final) optimality gap, one the cumulative rewards, and the last
     the time per iteration."""
 
     # first, build the dataframe with the statistics for gap, returns, and time
@@ -337,10 +372,39 @@ def summarize(df: pd.DataFrame, tabletitle: Optional[str]) -> None:
         tables[2].add_row([""] * (len(field_names) - 1))
 
     # finally, print the tables side by side
-    if tabletitle is not None:
-        print(tabletitle)
-    for table in tables:
-        print(table.get_string())
+    if summary:
+        if title is not None:
+            print(title)
+        for table in tables:
+            print(table.get_string())
+
+    # save the first table to a latex-friendly format
+    if pgfplotstables:
+        table = tables[0].copy()
+        table.align = "l"
+        table._title = None
+        for row in table.rows:
+            if problem_name := row[0]:
+                row[0] = rf"\multirow{{2}}*{{{problem_name}}}"
+            for i, entry in enumerate(row):
+                match = re.search(r"0\.\d+", entry)
+                if match is not None:
+                    num = f"{float(match.group()):.3f}"
+                    if entry.startswith("\033[1;34m"):
+                        num = rf"{{\color{{blue}}\textbf{{{num}}}}}"
+                    elif entry.startswith("\033[35m"):
+                        num = rf"{{\color{{purple}}\textit{{{num}}}}}"
+                    row[i] = num
+        latex = table.get_string(
+            border=False, preserve_internal_border=True, hrules=pt.NONE
+        )
+        latex = latex.replace("|", "&")
+        latex = "\n".join(line[:-1] + r"\\" for line in latex.split("\n"))
+
+        fn = "pgfplotstables/summary"
+        fn += f"_{title}.tex" if title is not None else ".tex"
+        with open(fn, "w", encoding="utf-8") as f:
+            f.write(latex)
 
 
 if __name__ == "__main__":
@@ -386,21 +450,27 @@ if __name__ == "__main__":
     )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
-        "--no-plot",
+        "--plot",
         action="store_true",
         help="Only print the summary and do not show the plots.",
     )
     group.add_argument(
-        "--no-summary",
+        "--summary",
         action="store_true",
         help="Only show the plot and do not print the summary.",
     )
+    group.add_argument(
+        "--pgfplotstables",
+        action="store_true",
+        help="Generates the data files for PGFPLOTS.",
+    )
     args = parser.parse_args()
+    fplot, fsummary, fpgfplotstables = args.plot, args.summary, args.pgfplotstables
 
     # load each result and plot
     include_title = len(args.filenames) > 1
     for filename in args.filenames:
-        title = filename if include_title else None
+        stitle = filename if include_title else None
         dataframe = load_data(
             filename,
             args.include_methods,
@@ -408,9 +478,10 @@ if __name__ == "__main__":
             args.exclude_methods,
             args.exclude_problems,
         )
-        if not args.no_plot:
-            plot_converges(dataframe, title)
-            plot_timings(dataframe, title)
-        if not args.no_summary:
-            summarize(dataframe, title)
+        # if not args.no_plot:
+        #     plot_converges(dataframe, title)
+        if fplot or fpgfplotstables:
+            itertime_vs_gap(dataframe, fplot, fpgfplotstables, stitle)
+        if fsummary or fpgfplotstables:
+            summary_tables(dataframe, fsummary, fpgfplotstables, stitle)
     plt.show()
