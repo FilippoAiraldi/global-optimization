@@ -9,7 +9,6 @@ from functools import partial
 from math import ceil
 from typing import Literal, Optional
 
-import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -139,64 +138,83 @@ def load_data(
     return df.apply(_compute_all_stats, axis=1)
 
 
-def plot_converges(df: pd.DataFrame, figtitle: Optional[str], n_cols: int = 5) -> None:
-    """Plots the results in the given dataframe. In particular, it plots the
-    convergence to the optimum, and the evolution of the optimality gap."""
-    # create figure
-    problem_names = df.index.unique(level="problem")
-    n_rows = ceil(len(problem_names) / n_cols)
-    fig = plt.figure(figsize=(n_cols * 3.5, n_rows * 2.5))
+def _compute_avg_and_ci(row: pd.Series, column: str) -> pd.Series:
+    """Computes the average and conf. interval of the given row of the dataframe."""
+    data = row[column]
+    avg = data.mean(axis=0)
+    scale = sem(data, axis=0) + 1e-12
+    ci_lb, ci_ub = t.interval(ALPHA, data.shape[0] - 1, loc=avg, scale=scale)
+    return pd.Series({"avg": avg, "lb": ci_lb, "ub": ci_ub})
 
-    # create main grid of plots
-    plotted_methods = {}
-    main_grid = gridspec.GridSpec(n_rows, n_cols, figure=fig, hspace=0.3)
-    for i, problem_name in enumerate(problem_names):
-        row, col = i // n_cols, i % n_cols
-        df_problem = df.loc[problem_name]
 
-        # in this quadrant, create a subgrid for the convergence plot and the gap plot
-        subgrid = main_grid[row, col].subgridspec(2, 1, hspace=0.1)
-        ax_opt = fig.add_subplot(subgrid[0])
-        ax_gap = fig.add_subplot(subgrid[1], sharex=ax_opt)
+def optimiser_convergences(
+    df: pd.DataFrame,
+    plot: bool,
+    pgfplotstables: bool,
+    column: Literal["best-so-far", "gap"] = "gap",
+    title: Optional[str] = None,
+    ncols: int = 4,
+) -> None:
+    """Plots/saves the results in the given dataframe. In particular, it plots the
+    convergence to the optimum or the evolution of the optimality gap."""
+    df_ = df.apply(_compute_avg_and_ci, args=(column,), axis=1)
+    problem_names = df_.index.unique(level="problem")
 
-        for method, row_data in df_problem.iterrows():
-            # plot the best convergence and the optimality gap evolution
-            color = None
-            evals = np.arange(row_data["best-so-far"].shape[1])
-            for ax, col in zip((ax_opt, ax_gap), ("best-so-far", "gap")):
-                data = row_data[col]
-                avg = data.mean(axis=0)
-                scl = sem(data, axis=0) + 1e-12
-                ci_lb, ci_ub = t.interval(ALPHA, data.shape[0] - 1, loc=avg, scale=scl)
-                h = ax.step(evals, avg, lw=1.0, color=color)
+    if plot:
+        nrows = ceil(len(problem_names) / ncols)
+        fig, axs = plt.subplots(nrows, ncols, constrained_layout=True)
+        plotted_methods = {}
+        for i, problem_name in enumerate(problem_names):
+            row, col = i // ncols, i % ncols
+            ax = axs[row, col]
+            df_problem = df_.loc[problem_name]
+            for method, row in df_problem.iterrows():
+                color = None
+                avg = row["avg"]
+                lb = row["lb"]
+                ub = row["ub"]
+                iters = np.arange(avg.size)
+                h = ax.step(iters, avg, lw=1.0, color=color)
                 if color is None:
                     color = h[0].get_color()
-                ax.fill_between(evals, ci_lb, ci_ub, alpha=0.2, color=color, step="pre")
-                ax.step(evals, ci_lb, color=color, lw=0.1)
-                ax.step(evals, ci_ub, color=color, lw=0.1)
-            plotted_methods[method] = color
+                ax.fill_between(iters, lb, ub, alpha=0.2, color=color, step="pre")
+                ax.step(iters, lb, color=color, lw=0.1)
+                ax.step(iters, ub, color=color, lw=0.1)
+                plotted_methods[method] = color
 
-        # plot also the optimal point in background
-        f_opt = get_benchmark_problem(problem_name)[0].optimal_value
-        fmin = np.full(evals.size, f_opt)
-        ax_opt.plot(evals, fmin, "--", color="grey", zorder=-10000)
+            # plot also the optimal point in background
+            if column == "best-so-far":
+                f_opt = get_benchmark_problem(problem_name)[0].optimal_value
+                fmin = np.full(iters.size, f_opt)
+                ax.plot(iters, fmin, "--", color="grey", zorder=-10000)
 
-        # make axes pretty
-        if col == 0:
-            ax_opt.set_ylabel(r"$f^\star$")
-            ax_gap.set_ylabel(r"$G$")
-        if row == n_rows - 1:
-            ax_gap.set_xlabel("Evaluations")
-        ax_opt.set_title(problem_name, fontsize=11)
-        ax_opt.tick_params(labelbottom=False)
-        ax_opt.set_xlim(0, evals[-1])
-        ax_gap.set_ylim(-0.05, 1.05)
-        ax_gap.xaxis.set_major_locator(MaxNLocator(nbins=5, integer=True))
+            # make axes pretty
+            if col == 0:
+                ax.set_ylabel(r"$G$" if column == "gap" else r"$f^\star$")
+            if row == nrows - 1:
+                ax.set_xlabel("Evaluations")
+            ax.set_xlim(0, iters[-1])
+            if column == "gap":
+                ax.set_ylim(-0.05, 1.05)
+            ax.tick_params(labelbottom=False)
+            ax.set_title(problem_name, fontsize=11)
+            ax.xaxis.set_major_locator(MaxNLocator(nbins=5, integer=True))
+        for j in range(i + 1, nrows * ncols):
+            axs[j // ncols, j % ncols].set_axis_off()
 
-    # create legend manually
-    handles = [Line2D([], [], label=m, color=c) for m, c in plotted_methods.items()]
-    fig.legend(handles=handles, loc="outside lower center", ncol=len(handles))
-    fig.suptitle(figtitle, fontsize=12)
+        # create legend manually
+        handles = [Line2D([], [], label=m, color=c) for m, c in plotted_methods.items()]
+        fig.legend(handles=handles, loc="outside lower center", ncol=len(handles))
+        fig.suptitle(title, fontsize=12)
+
+    if pgfplotstables:
+        column = column.replace("-", "")
+        for problem in problem_names:
+            for method, row in df_.loc[problem].iterrows():
+                method, _ = official_method_name_and_type(method, for_filename=True)
+                fn = f"pgfplotstables/{column}_{problem}_{method.lower()}"
+                fn += f"_{title}.dat" if title is not None else ".dat"
+                pd.DataFrame(row.to_dict()).to_string(fn, index=False)
 
 
 def _compute_dispersion(row: pd.Series) -> pd.Series:
@@ -478,9 +496,8 @@ if __name__ == "__main__":
             args.exclude_methods,
             args.exclude_problems,
         )
-        # if not args.no_plot:
-        #     plot_converges(dataframe, title)
         if fplot or fpgfplotstables:
+            optimiser_convergences(dataframe, fplot, fpgfplotstables, "gap", stitle)
             itertime_vs_gap(dataframe, fplot, fpgfplotstables, stitle)
         if fsummary or fpgfplotstables:
             summary_tables(dataframe, fsummary, fpgfplotstables, stitle)
