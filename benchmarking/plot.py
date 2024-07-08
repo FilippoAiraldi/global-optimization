@@ -19,6 +19,7 @@ from scipy.stats import sem, t, wilcoxon
 
 from globopt.problems import get_benchmark_problem
 
+plt.style.use("bmh")
 pd.options.mode.copy_on_write = True
 
 
@@ -167,18 +168,21 @@ def optimiser_convergences(
     problem_names = df_.index.unique(level="problem")
 
     if plot:
-        nrows = ceil(len(problem_names) / ncols)
+        N = len(problem_names)
+        ncols = min(ncols, N)
+        nrows = ceil(N / ncols)
         fig, axs = plt.subplots(nrows, ncols, constrained_layout=True)
+        axs = np.atleast_2d(axs)
         plotted_methods = {}
         for i, problem_name in enumerate(problem_names):
             row, col = i // ncols, i % ncols
             ax = axs[row, col]
             df_problem = df_.loc[problem_name]
-            for method, row in df_problem.iterrows():
+            for method, row_data in df_problem.iterrows():
                 color = None
-                avg = row["avg"]
-                lb = row["lb"]
-                ub = row["ub"]
+                avg = row_data["avg"]
+                lb = row_data["lb"]
+                ub = row_data["ub"]
                 iters = np.arange(avg.size)
                 h = ax.step(iters, avg, lw=1.0, color=color)
                 if color is None:
