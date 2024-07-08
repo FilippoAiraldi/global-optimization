@@ -138,13 +138,18 @@ def load_data(
     return df.apply(_compute_all_stats, axis=1)
 
 
-def _compute_avg_and_ci(row: pd.Series, column: str) -> pd.Series:
+def _compute_avg_and_ci(
+    row: pd.Series, column: str, bounds: tuple[float, float] | None = None
+) -> pd.Series:
     """Computes the average and conf. interval of the given row of the dataframe."""
     data = row[column]
     avg = data.mean(axis=0)
     scale = sem(data, axis=0) + 1e-12
-    ci_lb, ci_ub = t.interval(ALPHA, data.shape[0] - 1, loc=avg, scale=scale)
-    return pd.Series({"avg": avg, "lb": ci_lb, "ub": ci_ub})
+    lb, ub = t.interval(ALPHA, data.shape[0] - 1, loc=avg, scale=scale)
+    if bounds is not None:
+        lb = np.clip(lb, *bounds)
+        ub = np.clip(ub, *bounds)
+    return pd.Series({"avg": avg, "lb": lb, "ub": ub})
 
 
 def optimiser_convergences(
@@ -157,7 +162,8 @@ def optimiser_convergences(
 ) -> None:
     """Plots/saves the results in the given dataframe. In particular, it plots the
     convergence to the optimum or the evolution of the optimality gap."""
-    df_ = df.apply(_compute_avg_and_ci, args=(column,), axis=1)
+    bounds = (0.0, 1.0) if column == "gap" else None
+    df_ = df.apply(_compute_avg_and_ci, args=(column, bounds), axis=1)
     problem_names = df_.index.unique(level="problem")
 
     if plot:
@@ -216,8 +222,9 @@ def optimiser_convergences(
                 fn = f"pgfplotstables/{column}_{problem}_{method.lower()}"
                 fn += f"_{title}.dat" if title is not None else ".dat"
                 pd.DataFrame(row.to_dict()).to_string(fn, index=False)
+                print(f"INFO: written `{fn}`.")
                 if fn in tables_already_written:
-                    print(f"WARNING: overwritten `{fn}`")
+                    print(f"WARNING: overwritten `{fn}`.")
                 else:
                     tables_already_written.add(fn)
 
@@ -306,6 +313,7 @@ def itertime_vs_gap(
         df_.reset_index().apply(_compute_official_name_and_type, axis=1).to_string(
             fn, index=False
         )
+        print(f"INFO: written `{fn}`.")
 
 
 def _format_row(
