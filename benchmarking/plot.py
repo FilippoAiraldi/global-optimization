@@ -208,6 +208,7 @@ def optimiser_convergences(
         fig.suptitle(title, fontsize=12)
 
     if pgfplotstables:
+        tables_already_written = set()
         column = column.replace("-", "")
         for problem in problem_names:
             for method, row in df_.loc[problem].iterrows():
@@ -215,6 +216,10 @@ def optimiser_convergences(
                 fn = f"pgfplotstables/{column}_{problem}_{method.lower()}"
                 fn += f"_{title}.dat" if title is not None else ".dat"
                 pd.DataFrame(row.to_dict()).to_string(fn, index=False)
+                if fn in tables_already_written:
+                    print(f"WARNING: overwritten `{fn}`")
+                else:
+                    tables_already_written.add(fn)
 
 
 def _compute_dispersion(row: pd.Series) -> pd.Series:
