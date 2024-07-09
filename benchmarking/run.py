@@ -385,11 +385,10 @@ def run_benchmarks(
     )
 
 
-if __name__ == "__main__":
-    # parse the arguments
+def parse_args(name: str, multiproblem: bool = True) -> argparse.Namespace:
+    """Parses the command-line arguments for the benchmarking script."""
     parser = argparse.ArgumentParser(
-        description="Benchmarking of Global Optimization strategies on synthetic "
-        "benchmark problems.",
+        description=f"Benchmarking of Global Optimization strategies on {name}.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     group = parser.add_argument_group("Benchmarking options")
@@ -397,21 +396,22 @@ if __name__ == "__main__":
         "--methods",
         type=check_methods_arg,
         nargs="+",
-        help="Methods to run the benchmarking on. Greedy algorithms include `ei` and "
-        " `myopic`. Non-myopic multi-step algorithms have the following semantic: "
-        "`ms-sampler.m1.m2. ...`, where `ms` stands for multi-step, `sampler` is either"
-        "`gh` or `mc` (for Gauss Hermite and Monte Carlo, respectively), while `m1`, "
-        "`m2` and so on are the number of fantasies at each stage. The overall horizon "
-        "of an `ms` method is the number of fantasies plus one.",
+        help="Methods to run. Greedy algorithms include `ei` and `myopic`. Non-myopic "
+        "multi-step algorithms have the following semantic: `ms-sampler.m1.m2. ...`, "
+        "where `ms` stands for multi-step, `sampler` is either `gh` or `mc` (for "
+        "Gauss-Hermite and Monte Carlo, respectively), while `m1`, `m2` and so on are "
+        "the number of fantasies at each stage. The overall horizon of an `ms` method "
+        "is the number of fantasies plus one.",
         required=True,
     )
-    group.add_argument(
-        "--problems",
-        choices=["all"] + BENCHMARK_PROBLEMS,
-        nargs="+",
-        default=["all"],
-        help="Problems to include in the benchmarking.",
-    )
+    if multiproblem:
+        group.add_argument(
+            "--problems",
+            choices=["all"] + BENCHMARK_PROBLEMS,
+            nargs="+",
+            default=["all"],
+            help="Problems to include in the benchmarking.",
+        )
     group.add_argument(
         "--n-trials", type=int, default=30, help="Number  of trials to run per problem."
     )
@@ -428,23 +428,29 @@ if __name__ == "__main__":
         default=["cpu"],
         help="List of torch devices to use, e.g., `cpu`, `cuda:0`, etc..",
     )
-    args = parser.parse_args()
+    return parser.parse_args()
 
-    # if the output csv is not specified, create it, and write header if anew
-    if args.csv is None or args.csv == "":
-        args.csv = f"results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-    elif not args.csv.endswith(".csv"):
-        args.csv += ".csv"
-    if not Path(args.csv).is_file():
-        lock_write(args.csv, "problem;method;stage-reward;best-so-far;time")
 
-    # run the benchmarks
+def create_csv_if_needed(filename: str, header: str) -> str:
+    """Creates the output csv file if it does not exist."""
+    if filename is None or filename == "":
+        filename = f"results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    elif not filename.endswith(".csv"):
+        filename += ".csv"
+    if not Path(filename).is_file():
+        lock_write(filename, header)
+    return filename
+
+
+if __name__ == "__main__":
+    args = parse_args("synthetic/real benchmark problems")
+    csv = create_csv_if_needed(args.csv, "problem;method;stage-reward;best-so-far;time")
     run_benchmarks(
         args.methods,
         args.problems,
         args.n_trials,
         args.seed,
         args.n_jobs,
-        args.csv,
+        csv,
         args.devices,
     )

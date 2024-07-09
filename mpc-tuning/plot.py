@@ -1,4 +1,3 @@
-import argparse
 import os
 import sys
 from typing import Optional
@@ -17,7 +16,13 @@ from tune import (
 
 sys.path.append(os.getcwd())
 
-from benchmarking.plot import load_data, plot_converges, plot_timings, summarize
+from benchmarking.plot import (
+    itertime_vs_gap,
+    load_data,
+    optimiser_convergences,
+    parse_args,
+    summary_tables,
+)
 
 
 def _extract_envdata(row: pd.Series) -> pd.Series:
@@ -77,55 +82,23 @@ def plot_envdata(df: pd.DataFrame, figtitle: Optional[str]) -> None:
 
 if __name__ == "__main__":
     # parse the arguments
-    parser = argparse.ArgumentParser(
-        description="Visualization of benchmark results.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
-    parser.add_argument(
-        "filenames",
-        type=str,
-        nargs="+",
-        help="Filenames of the results to be visualized.",
-    )
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
-        "--include",
-        type=str,
-        nargs="+",
-        default=[],
-        help="List of methods and/or benchmark patterns to plot.",
-    )
-    group.add_argument(
-        "--exclude",
-        type=str,
-        nargs="+",
-        default=[],
-        help="List of methods and/or benchmark patterns not to plot.",
-    )
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
-        "--no-plot",
-        action="store_true",
-        help="Only print the summary and do not show the plots.",
-    )
-    group.add_argument(
-        "--no-summary",
-        action="store_true",
-        help="Only show the plot and do not print the summary.",
-    )
-    args = parser.parse_args()
-
-    setup_mpc_tuning()
+    args = parse_args("MPC tuning", multiproblem=False)
+    fplot, fsummary, fpgfplotstables = args.plot, args.summary, args.pgfplotstables
 
     # load each result and plot
+    setup_mpc_tuning()
     include_title = len(args.filenames) > 1
     for filename in args.filenames:
-        title = filename if include_title else None
-        dataframe = load_data(filename, args.include, args.exclude)
-        if not args.no_plot:
-            plot_converges(dataframe, title, n_cols=1)
-            plot_timings(dataframe, title, single_problem=True)
-            plot_envdata(dataframe, title)
-        if not args.no_summary:
-            summarize(dataframe, title)
+        stitle = filename if include_title else None
+        dataframe = load_data(
+            filename, args.include_methods, [], args.exclude_methods, []
+        )
+        if fplot or fpgfplotstables:
+            optimiser_convergences(
+                dataframe, fplot, fpgfplotstables, "best-so-far", stitle
+            )
+            itertime_vs_gap(dataframe, fplot, fpgfplotstables, stitle)
+            # plot_envdata(dataframe, stitle)
+        if fsummary or fpgfplotstables:
+            summary_tables(dataframe, fsummary, fpgfplotstables, stitle)
     plt.show()

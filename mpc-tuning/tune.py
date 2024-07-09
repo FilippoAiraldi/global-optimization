@@ -1,10 +1,7 @@
-import argparse
 import os
 import sys
 from collections.abc import Iterable
-from datetime import datetime
 from math import prod
-from pathlib import Path
 from typing import Any, Optional
 from warnings import filterwarnings
 
@@ -32,7 +29,7 @@ sys.path.append(os.path.join(os.getcwd(), "benchmarking"))
 
 # I am lazy so let's import all the helpful functions defined in benchmarking/run.py
 # instead of coding them again here
-from run import check_methods_arg, lock_write, run_benchmarks
+from run import create_csv_if_needed, parse_args, run_benchmarks
 
 PROBLEM_NAME = "cstr-mpc-tuning"
 INIT_ITER = 5
@@ -433,63 +430,19 @@ def save_callback(problem: CstrMpcControllerTuning) -> str:
 
 
 if __name__ == "__main__":
-    # parse the arguments
-    parser = argparse.ArgumentParser(
-        description="Benchmarking of Global Optimization strategies on synthetic "
-        "benchmark problems.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    args = parse_args("MPC tuning", multiproblem=False)
+    header = (
+        "problem;method;stage-reward;best-so-far;time;"
+        "env-states;env-actions;env-rewards"
     )
-    group = parser.add_argument_group("Benchmarking options")
-    group.add_argument(
-        "--methods",
-        type=check_methods_arg,
-        nargs="+",
-        help="Methods to run the benchmarking on. Greedy algorithms include `ei` and "
-        " `myopic`. Non-myopic multi-step algorithms have the following semantic: "
-        "`ms-sampler.m1.m2. ...`, where `ms` stands for multi-step, `sampler` is either"
-        "`gh` or `mc` (for Gauss Hermite and Monte Carlo, respectively), while `m1`, "
-        "`m2` and so on are the number of fantasies at each stage. The overall horizon "
-        "of an `ms` method is the number of fantasies plus one.",
-        required=True,
-    )
-    group.add_argument(
-        "--n-trials", type=int, default=30, help="Number  of trials to run per problem."
-    )
-    group = parser.add_argument_group("Simulation options")
-    group.add_argument(
-        "--n-jobs", type=int, default=2, help="Number (positive) of parallel processes."
-    )
-    group.add_argument("--seed", type=int, default=0, help="RNG seed.")
-    group.add_argument("--csv", type=str, default="", help="Output csv filename.")
-    group.add_argument(
-        "--devices",
-        type=str,
-        nargs="+",
-        default=["cpu"],
-        help="List of torch devices to use, e.g., `cpu`, `cuda:0`, etc..",
-    )
-    args = parser.parse_args()
-
-    # if the output csv is not specified, create it, and write header if anew
-    if args.csv is None or args.csv == "":
-        args.csv = f"results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-    elif not args.csv.endswith(".csv"):
-        args.csv += ".csv"
-    if not Path(args.csv).is_file():
-        header = (
-            "problem;method;stage-reward;best-so-far;time;"
-            "env-states;env-actions;env-rewards"
-        )
-        lock_write(args.csv, header)
-
-    # run the benchmarks
+    csv = create_csv_if_needed(args.csv, header)
     run_benchmarks(
         args.methods,
         [PROBLEM_NAME],
         args.n_trials,
         args.seed,
         args.n_jobs,
-        args.csv,
+        csv,
         args.devices,
         n_init=INIT_ITER,
         setup_callback=setup_mpc_tuning,

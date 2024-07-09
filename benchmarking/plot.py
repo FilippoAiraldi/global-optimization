@@ -442,10 +442,10 @@ def summary_tables(
             f.write(latex)
 
 
-if __name__ == "__main__":
-    # parse the arguments
+def parse_args(name: str, multiproblem: bool = True) -> argparse.ArgumentParser:
+    """Parses the command line arguments."""
     parser = argparse.ArgumentParser(
-        description="Visualization of benchmark results.",
+        description=f"Visualization of {name} results.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
@@ -455,6 +455,21 @@ if __name__ == "__main__":
         help="Filenames of the results to be visualized.",
     )
     group = parser.add_argument_group("Include/Exclude options")
+    if multiproblem:
+        group.add_argument(
+            "--include-problems",
+            type=str,
+            nargs="+",
+            default=[],
+            help="List of benchmark problems patterns to plot.",
+        )
+        group.add_argument(
+            "--exclude-problems",
+            type=str,
+            nargs="+",
+            default=[],
+            help="List of benchmark problems patterns not to plot.",
+        )
     group.add_argument(
         "--include-methods",
         type=str,
@@ -463,25 +478,11 @@ if __name__ == "__main__":
         help="List of methods patterns to plot.",
     )
     group.add_argument(
-        "--include-problems",
-        type=str,
-        nargs="+",
-        default=[],
-        help="List of benchmark problems patterns to plot.",
-    )
-    group.add_argument(
         "--exclude-methods",
         type=str,
         nargs="+",
         default=[],
         help="List of methods patterns not to plot.",
-    )
-    group.add_argument(
-        "--exclude-problems",
-        type=str,
-        nargs="+",
-        default=[],
-        help="List of benchmark problems patterns not to plot.",
     )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -499,7 +500,12 @@ if __name__ == "__main__":
         action="store_true",
         help="Generates the data files for PGFPLOTS.",
     )
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    # parse the arguments
+    args = parse_args("benchmark")
     fplot, fsummary, fpgfplotstables = args.plot, args.summary, args.pgfplotstables
 
     # load each result and plot
