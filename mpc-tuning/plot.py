@@ -1,6 +1,6 @@
 import os
 import sys
-from typing import Optional
+from typing import Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -19,65 +19,69 @@ sys.path.append(os.getcwd())
 from benchmarking.plot import (
     itertime_vs_gap,
     load_data,
+    official_method_name_and_type,
     optimiser_convergences,
     parse_args,
     summary_tables,
 )
 
 
-def _extract_envdata(row: pd.Series) -> pd.Series:
-    """Extracts average and std of the env data from a row of the dataframe."""
-    iters = INIT_ITER + MAX_ITER
-    S = np.asarray([np.fromstring(o, sep=",") for o in row["env-states"]])
-    S = S.reshape(-1, iters, TIME_STEPS + 1, CstrEnv.ns)[..., [1, 2]]
-    A = np.asarray([np.fromstring(o, sep=",") for o in row["env-actions"]])
-    A = A.reshape(-1, iters, TIME_STEPS, CstrEnv.na)
-    R = np.asarray([np.fromstring(o, sep=",") for o in row["env-rewards"]])
-    R = R.reshape(-1, iters, TIME_STEPS).sum(-1)
-    data = {}
-    for n, val in [("S", S), ("A", A), ("R", R)]:
-        val = val[:, INIT_ITER:]  # skip the first random iterations, not interesting
-        data[n + "-avg"] = val.mean(axis=0)
-        data[n + "-std"] = val.std(axis=0)  # sem(arr, axis=0)
-    return pd.Series(data)
+def _extract_reactor_temp(
+    row: pd.Series,
+    iters: Union[None, int, list[int], slice] = None,
+    temp_idx: int = 2,
+) -> pd.Series:
+    """Extracts the reactor temperature from a row of the dataframe."""
+    if iters is None:
+        iters = slice(None)
+    states = np.asarray([np.fromstring(o, sep=",") for o in row["env-states"]])
+    states = states.reshape(-1, INIT_ITER + MAX_ITER, TIME_STEPS + 1, CstrEnv.ns)
+    reactor_temp = states[:, iters, :, temp_idx]
+    return pd.Series({"Tr": reactor_temp})
 
 
-def plot_envdata(df: pd.DataFrame, figtitle: Optional[str]) -> None:
-    """Plots the states, action and rewards of the environment."""
-    # TODO: understand first what we really want to plot
-    df_ = df.apply(_extract_envdata, axis=1).loc[PROBLEM_NAME]
-    time = np.arange(TIME_STEPS + 1) * CstrEnv(float("nan")).tf
-    np.arange(INIT_ITER, INIT_ITER + MAX_ITER)
+def plot_reactor_temp(
+    df: pd.DataFrame, plot: bool, pgfplotstables: bool, title: Optional[str]
+) -> None:
+    """Plots/saves the results on the reactor temperature from the env."""
+    iters = [2, 20, 54]
+    df_ = df.apply(_extract_reactor_temp, iters=iters, axis=1).loc[PROBLEM_NAME]
+    time = np.arange(TIME_STEPS + 1) * CstrEnv.tf
 
-    fig, axs = plt.subplots(2, 2, constrained_layout=True)
-    for i, (method, row) in enumerate(df_.iterrows()):
-        c = f"C{i}"
+    if plot:
+        methods = df_.index
+        N = len(methods)
+        ncols = int(np.ceil(np.sqrt(N)))
+        nrows = int(np.ceil(N / ncols))
+        fig, axs = plt.subplots(nrows, ncols, constrained_layout=True, sharex=True)
+        axs = axs.flat
+        for (method, row_data), ax in zip(df_.iterrows(), axs):
+            Tr = row_data["Tr"]
+            for i in range(len(iters)):
+                ax.plot(time, Tr[i].T, color=f"C{i}")
+            ax.set_xlabel("Time [h]")
+            ax.set_ylabel("Reactor Temperature [°C]")
+            ax.set_title(method)
+        for ax in axs:
+            ax.set_axis_off()
+        fig.suptitle(title, fontsize=12)
 
-        S_avg, S_std = row["S-avg"], row["S-std"]
-        axs[0, 0].plot(time, S_avg[..., 0].T, lw=0.1, color=c)
-        axs[0, 1].plot(time, S_avg[..., 1].T, lw=0.1, color=c)
-
-        A_avg, A_std = row["A-avg"], row["A-std"]
-        axs[1, 0].plot(time[:-1], A_avg[..., 0].T, lw=0.1, color=c)
-        # axs[0, 0].plot(time, S_avg[:, 0], lw=1.0, color=c, label=method)
-
-        # Ravg, Rstd = -row["R-avg"], -row["R-std"]
-        # axs[1, 1].fill_between(episodes, Ravg - Rstd, Ravg + Rstd, alpha=0.2, color=c, step="pre")
-        # axs[1, 1].step(episodes, Ravg, lw=1.0, color=c, label=method)
-        # print("method", method)
-        break
-
-    # ax.fill_between(evals, ci_lb, ci_ub, alpha=0.2, color=color, step="pre")
-
-    axs[0, 0].set_xlabel("Time [h]")
-    axs[0, 0].set_ylabel("Concentration of B [mol/L]")
-    axs[0, 1].set_xlabel("Time [h]")
-    axs[0, 1].set_ylabel("Reactor Temperature [°C]")
-    axs[1, 0].set_xlabel("Time [h]")
-    axs[1, 0].set_ylabel("Feed Flow Rate [1/h]")
-    axs[1, 1].set_xlabel("Evaluations")
-    axs[1, 1].set_ylabel("Cost")
-    fig.suptitle(figtitle, fontsize=12)
+    if pgfplotstables:
+        n_iters = len(iters)
+        for method, row_data in df_.iterrows():
+            Tr = row_data["Tr"]
+            n_trials = Tr.shape[1]
+            data = {
+                "iter": np.repeat(iters, n_trials * (TIME_STEPS + 1)),
+                "trial": np.tile(np.arange(n_trials).repeat(TIME_STEPS + 1), n_iters),
+                "time": np.tile(time, n_trials * n_iters),
+                "Tr": Tr.reshape(-1),
+            }
+            method, _ = official_method_name_and_type(method, for_filename=True)
+            fn = f"pgfplotstables/reactor_temp_{method.lower()}"
+            fn += f"_{title}.dat" if title is not None else ".dat"
+            pd.DataFrame(data).to_string(fn, index=False)
+            print(f"INFO: written `{fn}`.")
 
 
 if __name__ == "__main__":
@@ -94,11 +98,9 @@ if __name__ == "__main__":
             filename, args.include_methods, [], args.exclude_methods, []
         )
         if fplot or fpgfplotstables:
-            optimiser_convergences(
-                dataframe, fplot, fpgfplotstables, "best-so-far", stitle
-            )
+            optimiser_convergences(dataframe, fplot, fpgfplotstables, "gap", stitle)
             itertime_vs_gap(dataframe, fplot, fpgfplotstables, stitle)
-            # plot_envdata(dataframe, stitle)
+            plot_reactor_temp(dataframe, fplot, fpgfplotstables, stitle)
         if fsummary or fpgfplotstables:
             summary_tables(dataframe, fsummary, fpgfplotstables, stitle)
     plt.show()
