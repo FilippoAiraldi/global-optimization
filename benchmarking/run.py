@@ -399,9 +399,9 @@ def parse_args(name: str, multiproblem: bool = True) -> argparse.Namespace:
         help="Methods to run. Greedy algorithms include `ei` and `myopic`. Non-myopic "
         "multi-step algorithms have the following semantic: `ms-sampler.m1.m2. ...`, "
         "where `ms` stands for multi-step, `sampler` is either `gh` or `mc` (for "
-        "Gauss-Hermite and Monte Carlo, respectively), while `m1`, `m2` and so on are "
-        "the number of fantasies at each stage. The overall horizon of an `ms` method "
-        "is the number of fantasies plus one.",
+        "Gauss-Hermite or Monte Carlo, respectively), while `m1`, `m2`, and so on, are "
+        "the number of fantasies at each stage. The overall horizon of a multi-step "
+        "method is the number of fantasies plus one.",
         required=True,
     )
     if multiproblem:
