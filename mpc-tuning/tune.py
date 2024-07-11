@@ -94,6 +94,25 @@ class CstrEnv(Env[npt.NDArray[np.floating], float]):
     inflow_bound = (5, 35)
     x0 = np.asarray([1.0, 1.0, 100.0, 100.0])  # initial state
 
+    # nonlinear dynamics parameters (see [1, Table 1] for these values)
+    k01 = k02 = (1.287, 12)
+    k03 = (9.043, 9)
+    EA1R = EA2R = 9758.3
+    EA3R = 7704.0
+    DHAB = 4.2
+    DHBC = 4.2
+    DHAD = 4.2
+    rho = 0.9342
+    cP = 3.01
+    cPK = 2.0
+    A = 0.215
+    VR = 10.01
+    mK = 5.0
+    Tin = 130.0
+    kW = 4032
+    QK = -4500
+    tf = 0.2 / 40  # 0.2 hours / 40 steps
+
     def __init__(self, constraint_violation_penalty: float) -> None:
         """Creates a CSTR environment.
 
@@ -109,52 +128,34 @@ class CstrEnv(Env[npt.NDArray[np.floating], float]):
         )
         self.action_space = Box(*self.inflow_bound, (self.na,), np.float64)
 
-        # set the nonlinear dynamics parameters (see [1, Table 1] for these values)
-        k01 = k02 = (1.287, 12)
-        k03 = (9.043, 9)
-        EA1R = EA2R = 9758.3
-        EA3R = 7704.0
-        DHAB = 4.2
-        DHBC = 4.2
-        DHAD = 4.2
-        rho = 0.9342
-        cP = 3.01
-        cPK = 2.0
-        A = 0.215
-        self.VR = VR = 10.01
-        mK = 5.0
-        Tin = 130.0
-        kW = 4032
-        QK = -4500
-
         # instantiate states and control action
         x = cs.SX.sym("x", self.ns)
         cA, cB, TR, TK = cs.vertsplit_n(x, self.ns)
         F = cs.SX.sym("u", self.na)
 
         # define the states' PDEs
-        k1 = k01[0] * cs.exp(k01[1] * np.log(10) - EA1R / (TR + 273.15))
-        k2 = k02[0] * cs.exp(k02[1] * np.log(10) - EA2R / (TR + 273.15))
-        k3 = k03[0] * cs.exp(k03[1] * np.log(10) - EA3R / (TR + 273.15))
+        k1 = self.k01[0] * cs.exp(self.k01[1] * np.log(10) - self.EA1R / (TR + 273.15))
+        k2 = self.k02[0] * cs.exp(self.k02[1] * np.log(10) - self.EA2R / (TR + 273.15))
+        k3 = self.k03[0] * cs.exp(self.k03[1] * np.log(10) - self.EA3R / (TR + 273.15))
         cA_dot = F * (self.x0[0] - cA) - k1 * cA - k3 * cA**2
         cB_dot = -F * cB + k1 * cA - k2 * cB
         TR_dot = (
-            F * (Tin - TR)
-            + kW * A / (rho * cP * VR) * (TK - TR)
-            - (k1 * cA * DHAB + k2 * cB * DHBC + k3 * cA**2 * DHAD) / (rho * cP)
+            F * (self.Tin - TR)
+            + self.kW * self.A / (self.rho * self.cP * self.VR) * (TK - TR)
+            - (k1 * cA * self.DHAB + k2 * cB * self.DHBC + k3 * cA**2 * self.DHAD)
+            / (self.rho * self.cP)
         )
-        TK_dot = (QK + kW * A * (TR - TK)) / (mK * cPK)
+        TK_dot = (self.QK + self.kW * self.A * (TR - TK)) / (self.mK * self.cPK)
         x_dot = cs.vertcat(cA_dot, cB_dot, TR_dot, TK_dot)
 
         # define the reward function, i.e., moles of B + constraint penalties
         lb_TR, ub_TR = self.reactor_temperature_bound
-        reward = VR * F * cB - constraint_violation_penalty * (
+        reward = self.VR * F * cB - constraint_violation_penalty * (
             cs.fmax(0, lb_TR - TR) + cs.fmax(0, TR - ub_TR)
         )
 
         # build the casadi integrator
         dae = {"x": x, "p": F, "ode": cs.cse(cs.simplify(x_dot)), "quad": reward}
-        self.tf = 0.2 / 40  # 0.2 hours / 40 steps
         self.dynamics = cs.integrator("cstr_dynamics", "cvodes", dae, 0.0, self.tf)
 
     def reset(
@@ -299,7 +300,7 @@ class CstrMpcControllerTuning(SyntheticTestFunction):
     """Synthetic benchmark problem for tuning the parameters of an MPC controller for
     a CSTR environment."""
 
-    _optimal_value = 20.0  # found empirically
+    _optimal_value = 19.759385287455036 * 1.0001  # found empirically
 
     def __init__(
         self,
@@ -323,7 +324,7 @@ class CstrMpcControllerTuning(SyntheticTestFunction):
         env = NoisyFilterObservation(
             MonitorEpisodes(TimeLimit(env, max_episode_steps=TIME_STEPS)),
             measurable_states=measurable_states,
-            measurement_noise_std=env_measurement_noise_std,  # TODO: check if it works
+            measurement_noise_std=env_measurement_noise_std,
         )
 
         # create the mpc and the dict of adjustable parameters - the initial values we
