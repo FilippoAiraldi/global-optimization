@@ -268,7 +268,7 @@ def itertime_vs_gap(
     )
 
     if plot:
-        fig, ax = plt.subplots(1, 1, constrained_layout=True)
+        fig, ax = plt.subplots(constrained_layout=True)
         opts = {
             "random": {"ha": "left", "xytext": (5, 5)},
             "ei": {"ha": "left", "xytext": (5, 5)},
