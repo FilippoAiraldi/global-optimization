@@ -54,7 +54,7 @@ def plot_reactor_temp(
         ncols = int(np.ceil(np.sqrt(N)))
         nrows = int(np.ceil(N / ncols))
         fig, axs = plt.subplots(nrows, ncols, constrained_layout=True, sharex=True)
-        axs = axs.flat
+        axs = np.atleast_1d(axs).flat
         for (method, row_data), ax in zip(df_.iterrows(), axs):
             Tr = row_data["Tr"]
             for i in range(len(iters)):
@@ -67,21 +67,16 @@ def plot_reactor_temp(
         fig.suptitle(title, fontsize=12)
 
     if pgfplotstables:
-        n_iters = len(iters)
         for method, row_data in df_.iterrows():
+            method = official_method_name_and_type(method, for_filename=True)[0].lower()
             Tr = row_data["Tr"]
-            n_trials = Tr.shape[1]
-            data = {
-                "iter": np.repeat(iters, n_trials * (TIME_STEPS + 1)),
-                "trial": np.tile(np.arange(n_trials).repeat(TIME_STEPS + 1), n_iters),
-                "time": np.tile(time, n_trials * n_iters),
-                "Tr": Tr.reshape(-1),
-            }
-            method, _ = official_method_name_and_type(method, for_filename=True)
-            fn = f"pgfplotstables/reactor_temp_{method.lower()}"
-            fn += f"_{title}.dat" if title is not None else ".dat"
-            pd.DataFrame(data).to_string(fn, index=False)
-            print(f"INFO: written `{fn}`.")
+            columns = ["time"] + [f"TempTrial{t}" for t in range(Tr.shape[1])]
+            for iter_, Tr_ in zip(iters, Tr):
+                data = np.vstack((time, Tr_)).T
+                fn = f"pgfplotstables/reactor_temp_{method}_iter{iter_}"
+                fn += f"_{title}.dat" if title is not None else ".dat"
+                pd.DataFrame(data, columns=columns).to_string(fn, index=False)
+                print(f"INFO: written `{fn}`.")
 
 
 if __name__ == "__main__":
