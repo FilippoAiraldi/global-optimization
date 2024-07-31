@@ -51,7 +51,7 @@ TODO
 ```
 
 More information is available in the
-[section Paper](https://github.com/FilippoAiraldi/global-optimization/#Getting-started)
+[section Paper](https://github.com/FilippoAiraldi/global-optimization/#paper)
 below.
 
 ---
