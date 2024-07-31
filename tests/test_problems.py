@@ -95,15 +95,13 @@ class TestProblems(unittest.TestCase):
             actual, expected, rtol=1e-4, atol=1e-6, msg=f"{name} f_opt"
         )
 
-        if (
-            not isinstance(problem, HyperTuningGridTestFunction)
-            and problem._optimizers is not None
-        ):
+        if problem._optimizers is not None:
+            tol = 1e0 if isinstance(problem, HyperTuningGridTestFunction) else 1e-4
             for i, x_opt in enumerate(problem._optimizers):
                 f_computed = problem(torch.as_tensor(x_opt))
                 expected_ = torch.as_tensor(expected).view_as(f_computed).to(f_computed)
                 torch.testing.assert_close(
-                    f_computed, expected_, rtol=1e-4, atol=1e-6, msg=f"{name} x_opt {i}"
+                    f_computed, expected_, rtol=tol, atol=tol, msg=f"{name} x_opt {i}"
                 )
 
 

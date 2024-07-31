@@ -9,6 +9,7 @@ References
 """
 
 
+import os
 from typing import Any, Optional, Union
 
 import torch
@@ -19,6 +20,8 @@ from linear_operator.operators import DiagLinearOperator
 from torch import Tensor
 from torch.nn import Module
 
+RUNNING_TESTS = int(os.environ.get("RUNNING_TESTS", "0"))
+
 DELTA = 1e-12
 """Small value to avoid division by zero."""
 
@@ -27,6 +30,8 @@ def trace(*args: Any, **kwargs: Any):
     """Applies `torch.jit.trace` to the decorated function."""
 
     def _inner_decorator(func):
+        if RUNNING_TESTS:
+            return func
         return torch.jit.trace(func, *args, **kwargs)
 
     return _inner_decorator
@@ -36,6 +41,8 @@ def script(*args: Any, **kwargs: Any):
     """Applies `torch.jit.script` to the decorated function."""
 
     def _inner_decorator(func):
+        if RUNNING_TESTS:
+            return func
         return torch.jit.script(func, *args, **kwargs)
 
     return _inner_decorator
@@ -141,6 +148,7 @@ def _rbf_partial_fit(
         Minv_new_shape = X.shape[:-2] + (X.shape[-2], X.shape[-2])
         Minv_new = torch.empty(Minv_new_shape, device=Minv.device, dtype=Minv.dtype)
 
+        # block inversion
         Cinv = torch.linalg.inv(C[mask, :, :])
         L = L[mask, :, :]
         B = -L @ Cinv
@@ -151,6 +159,7 @@ def _rbf_partial_fit(
             (torch.cat((A, B), -1), torch.cat((B.mT, Cinv), -1)), -2
         )
 
+        # full inversion
         not_mask = ~mask
         X_old_nm = X[..., :n, :][not_mask, :, :]
         _, M = _cdist_and_inverse_quadratic_kernel(X_old_nm, X_old_nm, eps)
