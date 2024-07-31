@@ -8,6 +8,7 @@ import re
 from functools import partial
 from math import ceil
 from typing import Literal, Optional
+from warnings import warn
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -337,7 +338,8 @@ def _format_row(
     problem = row.name[0]
     best_method_idx = getattr(row, f"arg{order}")()
     strs[best_method_idx] = f"\033[1;34m{strs[best_method_idx]}\033[0m"
-    best_method_data = src_data[(problem, methods[best_method_idx])]
+    best_method = methods[best_method_idx]
+    best_method_data = src_data[(problem, best_method)]
 
     # then, loop over the rest of the methods, and compare them in a pairwise
     # fashion via the Wilcoxon (one-sided) signed-rank test. If the null hypothesis
@@ -345,10 +347,15 @@ def _format_row(
     # highlight the other method in italic violet
     side = "less" if order == "min" else "greater"
     for i in filter(lambda i: i != best_method_idx, range(len(strs))):
-        other_method_data = src_data[(problem, methods[i])]
+        method = methods[i]
+        method_data = src_data[(problem, method)]
         try:
-            _, alpha = wilcoxon(best_method_data, other_method_data, alternative=side)
-        except ValueError:
+            _, alpha = wilcoxon(best_method_data, method_data, alternative=side)
+        except ValueError as e:
+            warn(
+                f"Exception during statistical test of `{best_method}` vs `{method}` "
+                f" for `{problem}`: {e}"
+            )
             alpha = float("nan")
         if alpha > threshold_alpha:
             strs[i] = f"\033[35m{strs[i]}\033[0m"

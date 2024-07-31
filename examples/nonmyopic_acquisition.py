@@ -65,8 +65,8 @@ horizon = len(fantasies) + 1
 # because now the acquisition is a function of trajectories of query points, not just
 # the poins themselves. In other words, the input to the `forward` method of the
 # acquisition function is a tensor of shape n x horizon x d, where n is the number of
-# query points, horizon is the number of steps in the lookahead, and d is the dimension
-# of the input space.
+# query trajectories (not points), horizon is the number of steps in the lookahead, and
+# d is the dimension of the input space.
 # Therefore, to plot it, we generate all possible combinations of trajectories,
 # evaluate them, and plot the best one.
 acqfun = Ms(
@@ -104,18 +104,14 @@ ax.plot(X, problem(X), label="Unknown objective $f(x)$", color="C0")
 ax.plot(train_X.cpu().squeeze(), train_Y.cpu().squeeze(), "o", label=None, color="C0")
 ax.plot(X, y_hat.squeeze(), label=r"Surrogate model $\hat{f}(x) \pm s(x)$", color="C1")
 ax.fill_between(X, (y_hat - s).squeeze(), (y_hat + s).squeeze(), color="C1", alpha=0.2)
-names = [
-    r"Vanilla acquisition $\Lambda$",
-]
-data = [(a, x_opt, a_opt)]
-for i, (name, (a_, x_opt_, a_opt_)) in enumerate(zip(names, data)):
-    c = f"C{i + 3}"
-    a_ = a_.cpu().squeeze()
-    x_opt_ = x_opt_.cpu().squeeze()
-    a_opt_ = a_opt_.cpu().squeeze()
-    a_min = a_.amin()
-    ax.plot(X_subset.cpu(), a_ - a_min, "--", lw=1, label=name, color=c)
-    ax.plot(x_opt_, a_opt_ - a_min, "*", markersize=17, color=c)
+a = a.cpu().squeeze()
+x_opt = x_opt.cpu().squeeze()
+a_opt = a_opt.cpu().squeeze()
+a_min = a.amin()
+ax.plot(
+    X_subset.cpu(), a - a_min, "--", lw=1, label="Nonmyopic acquisition", color="C3"
+)
+ax.plot(x_opt, a_opt - a_min, "*", markersize=17, color="C3")
 ax.set_xlim(lb, ub)
 ax.set_ylim(0, 2.5)
 ax.legend()
