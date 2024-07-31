@@ -1,6 +1,6 @@
 """
-Visualization and summary of results of benchmarking of myopic and non-myopic Global
-Optimization strategies on various problems.
+Analysis and visualization and summary of results of benchmarking of myopic and
+non-myopic Global Optimization strategies on various problems.
 """
 
 import argparse
@@ -162,7 +162,7 @@ def optimiser_convergences(
     title: Optional[str] = None,
     ncols: int = 4,
 ) -> None:
-    """Plots/saves the results in the given dataframe. In particular, it plots the
+    """Analyzes the results in the given dataframe. In particular, it plots the
     convergence to the optimum or the evolution of the optimality gap."""
     bounds = (0.0, 1.0) if column == "gap" else None
     df_ = df.apply(_compute_avg_and_ci, args=(column, bounds), axis=1)
@@ -258,7 +258,7 @@ def _compute_official_name_and_type(row: pd.Series) -> pd.Series:
 def itertime_vs_gap(
     df: pd.DataFrame, plot: bool, pgfplotstables: bool, title: Optional[str] = None
 ) -> None:
-    """Plots/saves the average time per iteration versus the optimality gap."""
+    """Analyzes the average time per iteration versus the optimality gap."""
     df_ = (
         df[["final-gap-mean", "time-mean"]]
         .rename(columns={"final-gap-mean": "gap", "time-mean": "time"})
@@ -365,9 +365,9 @@ def _format_row(
 def summary_tables(
     df: pd.DataFrame, summary: bool, pgfplotstables: bool, title: Optional[str] = None
 ) -> None:
-    """Prints/saves the summary of the results in the given dataframe as three tables,
-    one containing the (final) optimality gap, one the cumulative rewards, and the last
-    the time per iteration."""
+    """Analyze and outputs the summary of the results in the given dataframe as three
+    tables, one containing the (final) optimality gap, one the cumulative rewards, and
+    the last the time per iteration."""
 
     # first, build the dataframe with the statistics for gap, returns, and time
     cols = [
@@ -459,7 +459,24 @@ def parse_args(name: str, multiproblem: bool = True) -> argparse.ArgumentParser:
         "filenames",
         type=str,
         nargs="+",
-        help="Filenames of the results to be visualized.",
+        help="Filenames of the results to be analyzed.",
+    )
+    group = parser.add_argument_group("Mode")
+    group = group.add_mutually_exclusive_group(required=True)
+    group.add_argument(
+        "--plot",
+        action="store_true",
+        help="Plots the results.",
+    )
+    group.add_argument(
+        "--summary",
+        action="store_true",
+        help="Prints a summary of the results.",
+    )
+    group.add_argument(
+        "--pgfplotstables",
+        action="store_true",
+        help="Generates the data files for PGFPLOTS.",
     )
     group = parser.add_argument_group("Include/Exclude options")
     if multiproblem:
@@ -468,44 +485,28 @@ def parse_args(name: str, multiproblem: bool = True) -> argparse.ArgumentParser:
             type=str,
             nargs="+",
             default=[],
-            help="List of benchmark problems patterns to plot.",
+            help="List of benchmark problems patterns to analyze.",
         )
         group.add_argument(
             "--exclude-problems",
             type=str,
             nargs="+",
             default=[],
-            help="List of benchmark problems patterns not to plot.",
+            help="List of benchmark problems patterns not to analyze.",
         )
     group.add_argument(
         "--include-methods",
         type=str,
         nargs="+",
         default=[],
-        help="List of methods patterns to plot.",
+        help="List of methods patterns to analyze.",
     )
     group.add_argument(
         "--exclude-methods",
         type=str,
         nargs="+",
         default=[],
-        help="List of methods patterns not to plot.",
-    )
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
-        "--plot",
-        action="store_true",
-        help="Only print the summary and do not show the plots.",
-    )
-    group.add_argument(
-        "--summary",
-        action="store_true",
-        help="Only show the plot and do not print the summary.",
-    )
-    group.add_argument(
-        "--pgfplotstables",
-        action="store_true",
-        help="Generates the data files for PGFPLOTS.",
+        help="List of methods patterns not to analyze.",
     )
     return parser.parse_args()
 
