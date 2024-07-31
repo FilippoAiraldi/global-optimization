@@ -16,7 +16,7 @@ from tune import (
 
 sys.path.append(os.getcwd())
 
-from benchmarking.plot import (
+from benchmarking.analyze import (
     itertime_vs_gap,
     load_data,
     official_method_name_and_type,
