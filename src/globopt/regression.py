@@ -376,6 +376,27 @@ def _rbf_partial_fit(
         (torch.cat((A, B), -1), torch.cat((B.transpose(-2, -1), Sinv), -1)), -2
     )
     coeffs_new = Minv_new.matmul(Y)
+    # Other two methods for computing blockwise inversion
+    #
+    # A = torch.eye(m, dtype=X.dtype, device=X.device).expand(*L.shape[:-2], -1, -1)
+    # A[..., :n, n:] = -L  # add -L in the top right corner
+    # B = torch.block_diag(Minv, Sinv)
+    # Minv_new = A.matmul(B).matmul(A.T)
+    #
+    # Phi = PhiT.transpose(-2, -1)
+    # phi_inv: Tensor = torch.linalg.inv(phi)
+    # L = Minv.matmul(Phi)
+    # Z = Minv.addcdiv(L.matmul(L.transpose(-2, -1)), phi - PhiT.matmul(L))  # phi 1x1
+    # # I = torch.eye(m - n, dtype=X.dtype, device=X.device)
+    # # T = I - PhiT @ Minv @ Phi @ phi_inv
+    # # Tinv = torch.linalg.inv(T)
+    # # Z = Minv + Minv @ Phi @ phi_inv @ Tinv @ PhiT @ Minv
+    # A = Phi.matmul(phi_inv)
+    # B = -Z.matmul(A)
+    # C = phi_inv.sub(A.transpose(-2, -1).matmul(B))
+    # Minv_new = torch.cat(
+    #     (torch.cat((Z, B), -1), torch.cat((B.transpose(-2, -1), C), -1)), -2
+    # )
     return Minv_new, coeffs_new
 
 
