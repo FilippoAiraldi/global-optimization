@@ -290,12 +290,109 @@ class Idw(BaseRegression):
         """
         return _idw_predict(self.train_X, self.train_Y, X)
 
-    def condition_on_observations(self, X: Tensor, Y: Tensor, **_: Any) -> "Idw":
-        train_X, train_Y = self._prepare_for_fantasizing(X, Y)
-        return Idw(torch.cat((train_X, X), dim=-2), torch.cat((train_Y, Y), dim=-2))
 
-    def __str__(self) -> str:
-        return self.__class__.__name__
+# from botorch.models import SingleTaskGP
+# from botorch.fit import fit_gpytorch_mll
+# from botorch.utils import standardize
+# from gpytorch.mlls import ExactMarginalLogLikelihood
+# from botorch.optim import optimize_acqf
+# from botorch.acquisition import qExpectedImprovement
+# from botorch.sampling import SobolQMCNormalSampler
+# torch.set_default_dtype(torch.float64)
+# train_X = torch.linspace(0.0, 1.0, 6).unsqueeze(-1)
+# Y = ((train_X * 6).sin() + 1) / 2 + 0.1 * torch.randn_like(train_X)  # add some noise
+# train_Y = standardize(Y)
+# sampler = SobolQMCNormalSampler(sample_shape=128, seed=0)
+
+# mdl = SingleTaskGP(train_X, train_Y)
+# fit_gpytorch_mll(ExactMarginalLogLikelihood(mdl.likelihood, mdl))
+# # mdl = Idw(train_X, train_Y)
+
+# AF = qExpectedImprovement(mdl, best_f=0.1, sampler=sampler)
+# XX = torch.linspace(0.0, 1.0, 20).view(-1, 1, 1)
+# YY = AF(XX)
+# import matplotlib.pyplot as plt
+# plt.plot(XX.squeeze().detach().numpy(), YY.squeeze().detach().numpy())
+# plt.show()
+# quit()
+
+# bounds = torch.stack([torch.zeros(train_X.size(-1)), torch.ones(train_X.size(-1))])
+# candidate, acq_value = optimize_acqf(
+#     AF, bounds=bounds, q=8, num_restarts=5, raw_samples=20,
+# )
+
+# from botorch.optim import optimize_acqf
+# from botorch.acquisition import qExpectedImprovement
+# from botorch.sampling import SobolQMCNormalSampler
+# mdl = Idw(torch.rand(10, 2), torch.rand(10, 1))
+# sampler = SobolQMCNormalSampler(sample_shape=128)
+# EI = qExpectedImprovement(mdl, best_f=0.2, sampler=sampler)
+# bounds = torch.tensor([[0., 0.], [1., 1.]])
+# candidates, acq_value_list = optimize_acqf(
+#     EI, bounds=bounds, q=8, num_restarts=16, raw_samples=32
+# )
+
+# quit(-1)
+
+
+def _cdist_and_inverse_quadratic_kernel(
+    X: Tensor, Y: Tensor, eps: Tensor
+) -> tuple[Tensor, Tensor]:
+    """RBF inverse quadratic kernel function."""
+    cdist = torch.cdist(X, Y)
+    scaled_cdist = eps[..., None, None] * cdist
+    kernel = torch.scalar_tensor(1.0).addcmul(scaled_cdist, scaled_cdist).reciprocal()
+    return cdist, kernel
+
+
+def _rbf_fit(
+    X: Tensor, Y: Tensor, eps: Tensor, svd_tol: Tensor
+) -> tuple[Tensor, Tensor]:
+    """Fits the RBF regression model to the training data."""
+    _, M = _cdist_and_inverse_quadratic_kernel(X, X, eps)
+    U, S, VT = torch.linalg.svd(M)
+    S = S.where(S > svd_tol, torch.inf)
+    Minv = VT.transpose(-2, -1).div(S.unsqueeze(-2)).matmul(U.transpose(-2, -1))
+    coeffs = Minv.matmul(Y)
+    return Minv, coeffs
+
+
+def _rbf_partial_fit(
+    X: Tensor, Y: Tensor, eps: Tensor, Minv: Tensor, coeffs: Tensor
+) -> tuple[Tensor, Tensor]:
+    """Fits the given RBF regression to the new training data."""
+    n = coeffs.size(-2)  # index of the first new data point onwards
+    # m = X.size(-2)  # total number of training points, including new ones
+    X_new = X[..., n:, :]
+    _, Phi_and_phi = _cdist_and_inverse_quadratic_kernel(X_new, X, eps)
+    PhiT = Phi_and_phi[..., :n]
+    phi = Phi_and_phi[..., n:]
+    L = Minv.matmul(PhiT.transpose(-2, -1))
+    S = phi - PhiT.matmul(L)  # Schur complement
+    Sinv = torch.linalg.inv(S)
+    B = -L.matmul(Sinv)
+    A = Minv - B.matmul(L.transpose(-2, -1))
+    Minv_new = torch.cat(
+        (torch.cat((A, B), -1), torch.cat((B.transpose(-2, -1), Sinv), -1)), -2
+    )
+    coeffs_new = Minv_new.matmul(Y)
+    return Minv_new, coeffs_new
+
+
+def _rbf_predict(
+    train_X: Tensor, train_Y: Tensor, eps: Tensor, coeffs: Tensor, X: Tensor
+) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    """Predicts mean and scale for RBF regression."""
+    # NOTE: here, we do not use `KernelLinearOperator` so as to avoid computing the
+    # distance from `X` to `train_X` twice, one in the linear operator and one in the
+    # `idw_weighting` function.
+    dist, M = _cdist_and_inverse_quadratic_kernel(X, train_X, eps)
+    mean = M.matmul(coeffs)
+    W = dist.square().clamp_min(DELTA).reciprocal()
+    W_sum_recipr = W.sum(-1, keepdim=True).reciprocal()
+    V = W.mul(W_sum_recipr)
+    std = _idw_scale(mean, train_Y, V)
+    return mean, std, W_sum_recipr, V
 
 
 class Rbf(BaseRegression):
