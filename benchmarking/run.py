@@ -236,16 +236,21 @@ def run_problem(
                     kwargs_factory,
                     valfunc_sampler=valfunc_sampler,
                 )
+                q = acqfun.get_augmented_q_batch_size(1)
                 if prev_full_opt is torch.nan:
                     prev_full_opt = None
                 else:
                     prev_full_opt = warmstart_multistep(
-                        acqfun, bounds, n_restarts_, raw_samples_, prev_full_opt[:, :h]
+                        acqfun,
+                        bounds,
+                        n_restarts_,
+                        raw_samples_,
+                        prev_full_opt[:n_restarts_, :q],
                     )
                 full_opt, tree_vals = optimize_acqf(
                     acqfun,
                     bounds,
-                    acqfun.get_augmented_q_batch_size(1),
+                    q,
                     n_restarts_,
                     raw_samples_,
                     batch_initial_conditions=prev_full_opt,
