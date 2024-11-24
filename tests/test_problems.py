@@ -98,7 +98,7 @@ class TestProblems(unittest.TestCase):
         if problem._optimizers is not None:
             tol = 2e0 if isinstance(problem, HyperTuningGridTestFunction) else 1e-4
             for i, x_opt in enumerate(problem._optimizers):
-                f_computed = problem(torch.as_tensor(x_opt))
+                f_computed = problem(torch.as_tensor(x_opt).view(1, -1))
                 expected_ = torch.as_tensor(expected).view_as(f_computed).to(f_computed)
                 torch.testing.assert_close(
                     f_computed, expected_, rtol=tol, atol=tol, msg=f"{name} x_opt {i}"
