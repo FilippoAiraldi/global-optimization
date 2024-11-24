@@ -4,8 +4,8 @@
 black-box functions via Inverse Distance Weighting (IDW) and Radial Basis Function (RBF)
 approximation.
 
-> |   |   |
-> |---|---|
+> |                   |                                                                 |
+> | ----------------- | --------------------------------------------------------------- |
 > | **Download**      | <https://pypi.python.org/pypi/globopt/>                         |
 > | **Source code**   | <https://github.com/FilippoAiraldi/global-optimization/>        |
 > | **Report issues** | <https://github.com/FilippoAiraldi/global-optimization/issues/> |
@@ -81,7 +81,7 @@ git clone https://github.com/FilippoAiraldi/global-optimization.git
 ```
 
 The main branch is `botorch`, and the other branches contain previous or experimental
-versions of the package.  You can then install the package to edit it
+versions of the package. You can then install the package to edit it
 as you wish as
 
 ```bash
@@ -125,7 +125,7 @@ class CustomProblem(SyntheticTestFunction):
 ```
 
 Then, we can draw some random points to initialize the surrogate model (in this case,
- IDW), and define some other constants.
+IDW), and define some other constants.
 
 ```python
 import torch
@@ -165,8 +165,8 @@ for iteration in range(N_ITERS):
 
 Assuming a sufficiently large number of iterations is carried out, the optimization
 process will converge to the global minimum of the black-box function, which can be
-retrieved, in theory, as the last queried point ```train_Y[-1]```, but for technical
-reasons it is more convenient to retrieved the best-so-far ```train_Y.min()```.
+retrieved, in theory, as the last queried point `train_Y[-1]`, but for technical
+reasons it is more convenient to retrieved the best-so-far `train_Y.min()`.
 
 ---
 
@@ -257,7 +257,7 @@ pip install -r mpc-tuning/requirements-mpc-tuning.txt
 Then, to launch the simulations, run
 
 ```bash
-python mpc-tuning/tune.py --methods myopic ms-gh.1.1.1 ms-gh.10.5 --n-jobs={number-of-jobs} --devices {list-of-available-devices} --csv={filename} --n-trials=20
+python mpc-tuning/tune.py --methods myopic ms-gh.1.1.1 ms-gh.10.5 --n-jobs={number-of-jobs} --devices {list-of-available-devices} --csv={filename} --n-trials=30
 ```
 
 where we limited the number of trials to just 20. You can monitor the progress of the
@@ -283,7 +283,7 @@ this repository.
 [f.airaldi@tudelft.nl | filippoairaldi@gmail.com]
 
 > [Delft Center for Systems and Control](https://www.tudelft.nl/en/me/about/departments/delft-center-for-systems-and-control/)
-in [Delft University of Technology](https://www.tudelft.nl/en/)
+> in [Delft University of Technology](https://www.tudelft.nl/en/)
 
 Copyright (c) 2024 Filippo Airaldi.
 
