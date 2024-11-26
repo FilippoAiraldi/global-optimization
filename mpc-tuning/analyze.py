@@ -67,6 +67,7 @@ def plot_reactor_temp(
         fig.suptitle(title, fontsize=12)
 
     if pgfplotstables:
+        os.makedirs("pgfplotstables", exist_ok=True)
         for method, row_data in df_.iterrows():
             method = official_method_name_and_type(method, for_filename=True)[0].lower()
             Tr = row_data["Tr"]

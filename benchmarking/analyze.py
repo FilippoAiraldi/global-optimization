@@ -4,6 +4,7 @@ non-myopic Global Optimization strategies on various problems.
 """
 
 import argparse
+import os
 import re
 from functools import partial
 from math import ceil
@@ -219,6 +220,7 @@ def optimiser_convergences(
         fig.suptitle(title, fontsize=12)
 
     if pgfplotstables:
+        os.makedirs("pgfplotstables", exist_ok=True)
         tables_already_written = set()
         column = column.replace("-", "")
         for problem in problem_names:
@@ -313,6 +315,7 @@ def itertime_vs_gap(
         fig.suptitle(title, fontsize=12)
 
     if pgfplotstables:
+        os.makedirs("pgfplotstables", exist_ok=True)
         fn = "pgfplotstables/itertime-vs-gap"
         fn += f"_{title}.dat" if title is not None else ".dat"
         df_.reset_index().apply(_compute_official_name_and_type, axis=1).to_string(
@@ -443,6 +446,7 @@ def summary_tables(
         latex = latex.replace("|", "&")
         latex = "\n".join(line[:-1] + r"\\" for line in latex.split("\n"))
 
+        os.makedirs("pgfplotstables", exist_ok=True)
         fn = "pgfplotstables/summary"
         fn += f"_{title}.tex" if title is not None else ".tex"
         with open(fn, "w", encoding="utf-8") as f:
