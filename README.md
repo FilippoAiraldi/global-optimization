@@ -260,12 +260,11 @@ Then, to launch the simulations, run
 python mpc-tuning/tune.py --methods myopic ms-gh.1.1.1 ms-gh.10.5 --n-jobs={number-of-jobs} --devices {list-of-available-devices} --csv={filename} --n-trials=30
 ```
 
-where we limited the number of trials to just 20. You can monitor the progress of the
-simulation with the same `benchmarking/status.py` script as before. To analyze the
-results obtained by us, run
+You can monitor the progress of the simulation with the same `benchmarking/status.py`
+script as before. To analyze the results obtained by us, run
 
 ```bash
-python mpc-tuning/analyze.py mpc-tuning/results.csv --plot --include-methods myopic ms-gh.1.1.1$ ms-gh.10.5
+python mpc-tuning/analyze.py mpc-tuning/results.csv {--summary,--plot,--pgfplotstables} --include-methods myopic ms-gh.1.1.1$ ms-gh.10.5
 ```
 
 ---
