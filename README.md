@@ -16,8 +16,8 @@ approximation.
 
 [![Tests](https://github.com/FilippoAiraldi/global-optimization/actions/workflows/ci.yml/badge.svg)](https://github.com/FilippoAiraldi/global-optimization/actions/workflows/ci.yml)
 [![Downloads](https://static.pepy.tech/badge/globopt)](https://www.pepy.tech/projects/globopt)
-[![Maintainability](https://api.codeclimate.com/v1/badges/d1cf537cff6af108508/maintainability)](https://codeclimate.com/github/FilippoAiraldi/global-optimization/maintainability)
-[![Test Coverage](https://api.codeclimate.com/v1/badges/d1cf537cff6af1a0808/test_coverage)](https://codeclimate.com/github/FilippoAiraldi/global-optimization/test_coverage)
+[![Maintainability](https://api.codeclimate.com/v1/badges/6847f2c2c04b20a909fe/maintainability)](https://codeclimate.com/github/FilippoAiraldi/global-optimization/maintainability)
+[![Test Coverage](https://api.codeclimate.com/v1/badges/6847f2c2c04b20a909fe/test_coverage)](https://codeclimate.com/github/FilippoAiraldi/global-optimization/test_coverage)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 ---
@@ -40,7 +40,7 @@ it to the more generic field of global optimization via IDW [[3]](#3) and RBF [[
 
 The repository of this package includes also the source code for the following paper:
 
-TODO
+TODO: submitted to COAP
 
 ```bibtex
 @article{airaldi2024nonmyopic,
@@ -184,7 +184,7 @@ use them to optimize custom black-box functions.
 
 As aforementioned, this package was used as source code of the following paper:
 
-TODO
+TODO: submitted to COAP
 
 ```bibtex
 @article{airaldi2024nonmyopic,
