@@ -40,13 +40,12 @@ it to the more generic field of global optimization via IDW [[3]](#3) and RBF [[
 
 The repository of this package includes also the source code for the following paper:
 
-TODO: submitted to COAP
-
 ```bibtex
 @article{airaldi2024nonmyopic,
   title = {Nonmyopic Global Optimisation via Approximate Dynamic Programming},
   year = {2024},
   author = {Filippo Airaldi and Bart De Schutter and Azita Dabiri},
+  journal = {arXiv preprint arXiv:2412.04882},
 }
 ```
 
@@ -184,13 +183,12 @@ use them to optimize custom black-box functions.
 
 As aforementioned, this package was used as source code of the following paper:
 
-TODO: submitted to COAP
-
 ```bibtex
 @article{airaldi2024nonmyopic,
   title = {Nonmyopic Global Optimisation via Approximate Dynamic Programming},
   year = {2024},
   author = {Filippo Airaldi and Bart De Schutter and Azita Dabiri},
+  journal = {arXiv preprint arXiv:2412.04882},
 }
 ```
 
