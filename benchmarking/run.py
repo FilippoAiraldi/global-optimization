@@ -388,6 +388,13 @@ def parse_args(name: str, multiproblem: bool = True) -> argparse.Namespace:
 if __name__ == "__main__":
     args = parse_args("synthetic/real benchmark problems")
     csv = create_csv_if_needed(args.csv, "problem;method;best-so-far;time")
+
+    # ensure each job runs only on one CPU
+    os.environ["OPENBLAS_NUM_THREADS"] = os.environ["MKL_NUM_THREADS"] = os.environ[
+        "OMP_NUM_THREADS"
+    ] = "1"
+    # torch.set_num_threads(1)  # this must be done inside each job
+
     run_benchmarks(
         args.methods,
         args.problems,
