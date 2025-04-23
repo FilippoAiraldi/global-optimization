@@ -179,7 +179,6 @@ def run_problem(
                 return X_opt, torch.nan, mdl
 
         elif method == "myopic-s":
-            # NOTE: the stage reward is slightly different between myopic and myopic-s
             gh_sampler = GaussHermiteSampler(sample_shape=torch.Size([16]))
 
             def next_obs(
@@ -268,10 +267,8 @@ def run_problem(
     # run optimization loop
     mdl: Optional[Model] = None
     obs_opt: Tensor = torch.nan
-    acq_opt: float = float("nan")
     full_opt: Tensor = torch.nan
     bests: list[float] = [Y.amin().item()]
-    rewards: list[float] = []
     timings: list[float] = []
     try:
         for iteration in range(maxiter):
@@ -280,14 +277,6 @@ def run_problem(
             obs_opt, full_opt, mdl = next_obs(X, Y, mdl, full_opt, maxiter - iteration)
             timings.append(perf_counter() - start_time)
 
-            # compute stage reward (if applicable)
-            if isinstance(mdl, (Idw, Rbf)):
-                stage_cost_acqfun = IdwAcquisitionFunction(mdl, c1, c2)
-                acq_opt = stage_cost_acqfun(obs_opt).item()
-            else:
-                acq_opt = float("nan")
-            rewards.append(acq_opt)
-
             # evaluate objective function at new point, and append it to training data
             X = torch.cat((X, obs_opt))
             Y = torch.cat((Y, problem(obs_opt)))
@@ -295,10 +284,9 @@ def run_problem(
 
         # save results, delete references and free memory (at least, try to) - call also
         # the callback for (optional) additional data to be saved
-        rewards = ",".join(map(str, rewards))
         bests = ",".join(map(str, bests))
         timings = ",".join(map(str, timings))
-        data = f"{problem_name};{method};{rewards};{bests};{timings}"
+        data = f"{problem_name};{method};{bests};{timings}"
         if callback is not None:
             data += f";{callback(problem)}"
         lock_write(csv, data)
@@ -308,7 +296,7 @@ def run_problem(
             RuntimeWarning,
         )
     finally:
-        del problem, X, Y, mdl, obs_opt, acq_opt, full_opt, bests, rewards, timings
+        del problem, X, Y, mdl, obs_opt, full_opt, bests, timings
         gc.collect()
         if device.startswith("cuda"):
             with torch.no_grad():
@@ -449,7 +437,7 @@ def create_csv_if_needed(filename: str, header: str) -> str:
 
 if __name__ == "__main__":
     args = parse_args("synthetic/real benchmark problems")
-    csv = create_csv_if_needed(args.csv, "problem;method;stage-reward;best-so-far;time")
+    csv = create_csv_if_needed(args.csv, "problem;method;best-so-far;time")
     run_benchmarks(
         args.methods,
         args.problems,

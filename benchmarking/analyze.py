@@ -49,17 +49,13 @@ def _compute_all_stats(row: pd.Series) -> pd.Series:
     gaps = (bests_so_far - init_best) / (f_opt - init_best)
     final_gap = gaps[:, -1]
 
-    # cumulative return
-    return_ = row["stage-reward"].sum(axis=1)
-
     # average time per iteration and std
     time = row["time"]
     time_avg = time.mean()
     time_std = time.std()
 
     # pass on data that was not used
-    columns_used = ["best-so-far", "stage-reward", "time"]
-    other_data = {n: row[n] for n in row.index if n not in columns_used}
+    other_data = {n: row[n] for n in row.index if n not in ["best-so-far", "time"]}
     return pd.Series(
         {
             "best-so-far": bests_so_far,
@@ -67,9 +63,6 @@ def _compute_all_stats(row: pd.Series) -> pd.Series:
             "final-gap": final_gap,
             "final-gap-mean": final_gap.mean(),
             "final-gap-median": np.median(final_gap),
-            "return": return_,
-            "return-mean": return_.mean(),
-            "return-median": np.median(return_),
             "time": time,
             "time-mean": time_avg,
             "time-std": time_std,
@@ -117,7 +110,7 @@ def load_data(
         csv_filename,
         sep=";",
         dtype={"problem": pd.StringDtype(), "method": pd.StringDtype()},
-        converters={s: converter for s in ["stage-reward", "best-so-far", "time"]},
+        converters={s: converter for s in ["best-so-far", "time"]},
     )
     for col, include in (("method", include_methods), ("problem", include_problems)):
         if include:
@@ -368,16 +361,14 @@ def _format_row(
 def summary_tables(
     df: pd.DataFrame, summary: bool, pgfplotstables: bool, title: Optional[str] = None
 ) -> None:
-    """Analyze and outputs the summary of the results in the given dataframe as three
-    tables, one containing the (final) optimality gap, one the cumulative rewards, and
-    the last the time per iteration."""
+    """Analyzes the results in the given dataframe and outputs a summary as two
+    tables: one containing the (final) optimality gap, and the other the solver time per
+    iteration."""
 
-    # first, build the dataframe with the statistics for gap, returns, and time
+    # first, build the dataframe with the statistics for gap and time
     cols = [
         "final-gap-mean",
         "final-gap-median",
-        "return-mean",
-        "return-median",
         "time-mean",
         "time-std",
     ]
@@ -387,7 +378,6 @@ def summary_tables(
     field_names = ["Name", ""] + df.index.unique(level="method").to_list()
     tables = (
         pt.PrettyTable(field_names, title="gap"),
-        pt.PrettyTable(field_names, title="return"),
         pt.PrettyTable(field_names[:1] + field_names[2:], title="time"),
     )
 
@@ -399,13 +389,6 @@ def summary_tables(
         g_median = _format_row(df_.loc[(pname, "final-gap-median")], gap_data, prec=6)
         tables[0].add_row([pname, "mean"] + g_mean)
         tables[0].add_row(["", "median"] + g_median)
-
-        # return (mean and median)
-        return_data = df["return"]
-        r_mean = _format_row(df_.loc[(pname, "return-mean")], return_data, prec=3)
-        r_median = _format_row(df_.loc[(pname, "return-median")], return_data, prec=3)
-        tables[1].add_row([pname, "mean"] + r_mean)
-        tables[1].add_row(["", "median"] + r_median)
 
         # time (mean +/- std)
         time_data = df["time"].map(lambda t: t.mean(axis=1))
