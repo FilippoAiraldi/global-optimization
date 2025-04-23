@@ -8,7 +8,6 @@ References
     functions. Computational Optimization and Applications, 77(2):571–595, 2020
 """
 
-
 import os
 from typing import Any, Optional, Union
 

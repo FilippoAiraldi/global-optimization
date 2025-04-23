@@ -14,7 +14,6 @@ References
     functions. Computational Optimization and Applications, 77(2):571–595, 2020
 """
 
-
 import matplotlib.pyplot as plt
 import torch
 from botorch.optim import optimize_acqf

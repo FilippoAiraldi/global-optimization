@@ -1,6 +1,5 @@
 """Status of an on-going benchmarking on problems."""
 
-
 import argparse
 from collections.abc import Iterable, Iterator
 from datetime import datetime

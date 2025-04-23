@@ -11,7 +11,6 @@ References
     functions. Computational Optimization and Applications, 77(2):571–595, 2020
 """
 
-
 from random import seed
 
 import matplotlib.pyplot as plt
@@ -27,7 +26,6 @@ from globopt import (
     qIdwAcquisitionFunction,
 )
 from globopt.problems import SimpleProblem
-from globopt.regression import Rbf
 
 seed(0)
 np.random.seed(0)

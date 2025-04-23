@@ -8,7 +8,6 @@ References
     functions. Computational Optimization and Applications, 77(2):571–595, 2020
 """
 
-
 from math import ceil
 
 import matplotlib.pyplot as plt
