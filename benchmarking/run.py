@@ -16,7 +16,7 @@ from warnings import filterwarnings, warn
 
 import numpy as np
 import torch
-from botorch.acquisition import ExpectedImprovement
+from botorch.acquisition import LogExpectedImprovement
 from botorch.acquisition.multi_step_lookahead import warmstart_multistep
 from botorch.fit import fit_gpytorch_mll
 from botorch.models import SingleTaskGP
@@ -123,13 +123,18 @@ def run_problem(
 
     # draw random initial points
     np_random = np.random.default_rng(seed)
-    mk_seed = lambda: int(np_random.integers(0, 2**32 - 1))
     bounds: Tensor = problem.bounds
     X = (
         torch.as_tensor(np_random.random((n_init, ndim))) * (bounds[1] - bounds[0])
         + bounds[0]
     )
     Y = problem(X)
+
+    # create seed functions - one for the optimizer, the other for other uses. In this
+    # way, all methods' optimizer runs are seeded equally
+    mk_seed = lambda: int(np_random.integers(0, 2**32 - 1))
+    np_random_other = np_random.spawn(1)[0]
+    mk_other_seed = lambda: int(np_random_other.integers(0, 2**32 - 1))
 
     # define mdoel and acquisition function getters
     if method == "random":
@@ -148,7 +153,7 @@ def run_problem(
                 X, standardize(Y_), input_transform=Normalize(ndim, bounds=bounds)
             )
             fit_gpytorch_mll(ExactMarginalLogLikelihood(mdl.likelihood, mdl))
-            acqfun = ExpectedImprovement(mdl, Y.amin(), maximize=False)
+            acqfun = LogExpectedImprovement(mdl, Y.amin(), maximize=False)
             X_opt, _ = optimize_acqf(
                 acqfun, bounds, 1, n_restarts, raw_samples, {"seed": mk_seed()}
             )
@@ -206,7 +211,7 @@ def run_problem(
                 ]
             else:
                 fantasies_samplers = [
-                    SobolQMCNormalSampler(torch.Size([f]), seed=mk_seed())
+                    SobolQMCNormalSampler(torch.Size([f]), seed=mk_other_seed())
                     for f in fantasies
                 ]
 
@@ -363,18 +368,20 @@ def run_benchmarks(
         for p in problems
     }
     tasks = filter_tasks_by_status(product(range(n_trials), problems, methods), csv)
-    Parallel(n_jobs=n_jobs, verbose=100, backend="loky")(
-        delayed(run_benchmark)(
-            prob,
-            method,
-            int(seeds[prob][trial]),
-            csv,
-            device,
-            n_init,
-            setup_callback,
-            save_callback,
+    list(
+        Parallel(n_jobs=n_jobs, verbose=100, return_as="generator_unordered")(
+            delayed(run_benchmark)(
+                prob,
+                method,
+                int(seeds[prob][trial]),
+                csv,
+                device,
+                n_init,
+                setup_callback,
+                save_callback,
+            )
+            for (trial, prob, method), device in zip(tasks, cycle(devices))
         )
-        for (trial, prob, method), device in zip(tasks, cycle(devices))
     )
 
 
@@ -410,7 +417,7 @@ def parse_args(name: str, multiproblem: bool = True) -> argparse.Namespace:
     )
     group = parser.add_argument_group("Simulation options")
     group.add_argument(
-        "--n-jobs", type=int, default=2, help="Number (positive) of parallel processes."
+        "--n-jobs", type=int, default=1, help="Number (positive) of parallel processes."
     )
     group.add_argument("--seed", type=int, default=0, help="RNG seed.")
     group.add_argument("--csv", type=str, default="", help="Output csv filename.")
