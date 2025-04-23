@@ -194,7 +194,7 @@ As aforementioned, this package was used as source code of the following paper:
 
 Below the details on how to run the experiments and reproduce the results of the paper
 are reported. Note that, while the package is available for Python >= 3.9, the results
-of the paper, and thus the commands below, are based on Python 3.11.3.
+of the paper, and thus the commands below, are based on Python 3.13.2.
 
 ### Synthetic and real problems
 
@@ -202,7 +202,7 @@ To reproduce the results of the paper on the collection of synthetic and real be
 problems, first make sure the Python version and the correct packages are installed
 
 ```bash
-python --version  # 3.11.3 in our case
+python --version  # 3.13.2 in our case
 pip install -r benchmarking/requirements-benchmarking.txt
 ```
 
