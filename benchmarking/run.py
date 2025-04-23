@@ -4,6 +4,7 @@ Benchmarking myopic and non-myopic Global Optimization strategies on benchmark p
 
 import argparse
 import gc
+import os
 import sys
 from collections.abc import Iterable
 from itertools import cycle, product
@@ -47,6 +48,8 @@ from benchmarking.utils import (
     create_csv_if_needed,
     fnv1a_64,
     lock_write,
+    mk_seed,
+    torch_seed,
 )
 
 BENCHMARK_PROBLEMS = get_available_benchmark_problems()
@@ -58,9 +61,9 @@ def run_problem(
     regression_type: Literal["rbf", "idw"],
     method: str,
     maxiter: int,
-    seed: int,
+    rng: np.random.Generator,
     csv: str,
-    device: str,
+    device: torch.device,
     n_init: Optional[int] = None,
     callback: Optional[Callable[[SyntheticTestFunction], str]] = None,
 ) -> None:
@@ -76,25 +79,23 @@ def run_problem(
     raw_samples = 16 * 8 * ndim
 
     # draw random initial points
-    np_random = np.random.default_rng(seed)
     bounds: Tensor = problem.bounds
     X = (
-        torch.as_tensor(np_random.random((n_init, ndim))) * (bounds[1] - bounds[0])
+        torch.as_tensor(rng.random((n_init, ndim))) * (bounds[1] - bounds[0])
         + bounds[0]
     )
     Y = problem(X)
 
     # create seed functions - one for the optimizer, the other for other uses. In this
     # way, all methods' optimizer runs are seeded equally
-    mk_seed = lambda: int(np_random.integers(0, 2**32 - 1))
-    np_random_other = np_random.spawn(1)[0]
-    mk_other_seed = lambda: int(np_random_other.integers(0, 2**32 - 1))
+    other_rng = rng.spawn(1)[0]
 
     # define mdoel and acquisition function getters
     if method == "random":
 
         def next_obs(*_, **__) -> tuple[Tensor, Tensor, None]:
-            X_opt = torch.rand(1, ndim) * (bounds[1] - bounds[0]) + bounds[0]
+            lb, ub = bounds
+            X_opt = torch.rand(1, ndim) * (ub - lb) + lb
             return X_opt, torch.nan, None
 
     elif method == "ei":
@@ -109,7 +110,7 @@ def run_problem(
             fit_gpytorch_mll(ExactMarginalLogLikelihood(mdl.likelihood, mdl))
             acqfun = LogExpectedImprovement(mdl, Y.amin(), maximize=False)
             X_opt, _ = optimize_acqf(
-                acqfun, bounds, 1, n_restarts, raw_samples, {"seed": mk_seed()}
+                acqfun, bounds, 1, n_restarts, raw_samples, {"seed": mk_seed(rng)}
             )
             return X_opt, torch.nan, mdl
 
@@ -133,7 +134,7 @@ def run_problem(
                 mdl = get_mdl(X, Y, prev_mdl)
                 acqfun = IdwAcquisitionFunction(mdl, c1, c2)
                 X_opt, _ = optimize_acqf(
-                    acqfun, bounds, 1, n_restarts, raw_samples, {"seed": mk_seed()}
+                    acqfun, bounds, 1, n_restarts, raw_samples, {"seed": mk_seed(rng)}
                 )
                 return X_opt, torch.nan, mdl
 
@@ -146,7 +147,7 @@ def run_problem(
                 mdl = get_mdl(X, Y, prev_mdl)
                 acqfun = qIdwAcquisitionFunction(mdl, c1, c2, sampler=gh_sampler)
                 X_opt, _ = optimize_acqf(
-                    acqfun, bounds, 1, n_restarts, raw_samples, {"seed": mk_seed()}
+                    acqfun, bounds, 1, n_restarts, raw_samples, {"seed": mk_seed(rng)}
                 )
                 return X_opt, torch.nan, mdl
 
@@ -165,7 +166,7 @@ def run_problem(
                 ]
             else:
                 fantasies_samplers = [
-                    SobolQMCNormalSampler(torch.Size([f]), seed=mk_other_seed())
+                    SobolQMCNormalSampler(torch.Size([f]), seed=mk_seed(other_rng))
                     for f in fantasies
                 ]
 
@@ -181,7 +182,12 @@ def run_problem(
                 if h == 1:
                     acqfun = qIdwAcquisitionFunction(mdl, c1, c2, valfunc_sampler)
                     X_opt, _ = optimize_acqf(
-                        acqfun, bounds, 1, n_restarts, raw_samples, {"seed": mk_seed()}
+                        acqfun,
+                        bounds,
+                        1,
+                        n_restarts,
+                        raw_samples,
+                        {"seed": mk_seed(rng)},
                     )
                     return X_opt, torch.nan, mdl
 
@@ -214,7 +220,7 @@ def run_problem(
                     batch_initial_conditions=prev_full_opt,
                     return_best_only=False,
                     return_full_tree=True,
-                    options={"seed": mk_seed(), "maxfun": maxfun},
+                    options={"seed": mk_seed(rng), "maxfun": maxfun},
                 )
                 best_tree_idx = tree_vals.argmax()
                 X_opt = acqfun.extract_candidates(full_opt[best_tree_idx])
@@ -257,7 +263,7 @@ def run_problem(
     finally:
         del problem, X, Y, mdl, obs_opt, full_opt, bests, timings
         gc.collect()
-        if device.startswith("cuda"):
+        if device.type == "cuda":
             with torch.no_grad():
                 torch.cuda.empty_cache()
 
@@ -265,9 +271,9 @@ def run_problem(
 def run_benchmark(
     problem_name: str,
     method: str,
-    seed: int,
+    seed: np.random.SeedSequence,
     csv: str,
-    device: str,
+    device: torch.device,
     n_init: Optional[int] = None,
     setup_callback: Optional[Callable[[], None]] = None,
     save_callback: Optional[Callable[[SyntheticTestFunction], str]] = None,
@@ -276,9 +282,8 @@ def run_benchmark(
     filterwarnings("ignore", "Optimization failed", module="botorch")
     torch.set_default_device(device)
     torch.set_default_dtype(torch.float64)
-    torch.manual_seed(seed)
-    np.random.rand(seed)
-    random.seed(seed)
+    np_random = np.random.default_rng(seed)
+    torch_seed(mk_seed(np_random))
     if setup_callback is not None:
         setup_callback()
     problem, maxiter, regression_type = get_benchmark_problem(problem_name)
@@ -288,7 +293,7 @@ def run_benchmark(
         regression_type,
         method,
         maxiter,
-        seed,
+        np_random,
         csv,
         device,
         n_init,
@@ -318,8 +323,7 @@ def run_benchmarks(
     if problems == ["all"]:
         problems = BENCHMARK_PROBLEMS
     seeds = {
-        p: np.random.SeedSequence(fnv1a_64(p, seed)).generate_state(n_trials)
-        for p in problems
+        p: np.random.SeedSequence(fnv1a_64(p, seed)).spawn(n_trials) for p in problems
     }
     tasks = filter_tasks_by_status(product(range(n_trials), problems, methods), csv)
     list(
@@ -327,7 +331,7 @@ def run_benchmarks(
             delayed(run_benchmark)(
                 prob,
                 method,
-                int(seeds[prob][trial]),
+                seeds[prob][trial],
                 csv,
                 device,
                 n_init,
@@ -402,5 +406,5 @@ if __name__ == "__main__":
         args.seed,
         args.n_jobs,
         csv,
-        args.devices,
+        list(map(torch.device, args.devices)),
     )

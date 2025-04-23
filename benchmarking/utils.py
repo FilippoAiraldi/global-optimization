@@ -3,6 +3,9 @@ from datetime import datetime
 from pathlib import Path
 from warnings import warn
 
+import torch
+from numpy.random import Generator
+
 FNV_OFFSET = 0xCBF29CE484222325
 FNV_PRIME = 0x100000001B3
 FCNTL_LOADED = True
@@ -68,3 +71,22 @@ def create_csv_if_needed(filename: str, header: str) -> str:
     if not Path(filename).is_file():
         lock_write(filename, header)
     return filename
+
+
+def torch_seed(seed: int) -> None:
+    """Sets the seed accorindly for the CPU and current GPU (other GPU rng states are
+    left unmodified)."""
+    cuda_avail = torch.cuda.is_available()
+    if cuda_avail:
+        gpu_states = torch.cuda.get_rng_state_all()
+
+    torch.manual_seed(seed)
+
+    if cuda_avail:
+        torch.cuda.set_rng_state_all(gpu_states)
+        torch.cuda.manual_seed(seed)
+
+
+def mk_seed(np_random: Generator) -> int:
+    """Generates a random seed using NumPy."""
+    return int(np_random.integers(0, 2**32 - 1))
