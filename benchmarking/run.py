@@ -80,10 +80,9 @@ def run_problem(
 
     # draw random initial points
     bounds: Tensor = problem.bounds
-    X = (
-        torch.as_tensor(rng.random((n_init, ndim))) * (bounds[1] - bounds[0])
-        + bounds[0]
-    )
+    lb, ub = bounds
+    span = ub - lb
+    X = torch.as_tensor(rng.random((n_init, ndim))) * span + lb
     Y = problem(X)
 
     # create seed functions - one for the optimizer, the other for other uses. In this
@@ -94,8 +93,7 @@ def run_problem(
     if method == "random":
 
         def next_obs(*_, **__) -> tuple[Tensor, Tensor, None]:
-            lb, ub = bounds
-            X_opt = torch.rand(1, ndim) * (ub - lb) + lb
+            X_opt = torch.rand(1, ndim) * span + lb
             return X_opt, torch.nan, None
 
     elif method == "ei":
