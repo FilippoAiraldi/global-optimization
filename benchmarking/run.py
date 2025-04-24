@@ -75,8 +75,8 @@ def run_problem(
     c1 = torch.scalar_tensor(1.0 / ndim)
     c2 = torch.scalar_tensor(0.5 / ndim)
     eps = torch.scalar_tensor(1.0 / ndim)
-    n_restarts = 16 * ndim
-    raw_samples = 16 * 8 * ndim
+    n_restarts = 10 * ndim
+    raw_samples = max(n_restarts, 512)
 
     # draw random initial points
     bounds: Tensor = problem.bounds
@@ -189,8 +189,8 @@ def run_problem(
                     )
                     return X_opt, torch.nan, mdl
 
-                n_restarts_ = n_restarts * h
-                raw_samples_ = raw_samples * h
+                n_restarts_ = n_restarts * h * 2 // 3
+                raw_samples_ = max(n_restarts_, 512)
                 acqfun = Ms(
                     mdl,
                     fantasies_samplers[: h - 1],
