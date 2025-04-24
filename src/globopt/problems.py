@@ -227,8 +227,8 @@ class Shubert(SyntheticTestFunction):
 
         f(x) = prod_i sum_j cos((j + 1) * x_i + j).
 
-    x is bounded [-5.12,5.12] in each dimension. f has 18 global minima at with
-    `f_opt = -186.7309`."""
+    x is bounded [-5.12,5.12] in each dimension. f has 18 global minima at various
+    locations with `f_opt = -186.7309`."""
 
     dim = 2
     _optimal_value = -186.7309
@@ -372,6 +372,13 @@ class Svm(HyperTuningGridTestFunction):
         super().__init__("benchmarking/data/svm_on_grid.csv", *args, **kwargs)
 
 
+class Cosmological(HyperTuningGridTestFunction):
+    """Estimation of cosmological constants of a physical model of the Universe."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__("benchmarking/data/cosmological_on_grid.csv", *args, **kwargs)
+
+
 Ackley2 = partial(Ackley, dim=2)
 setattr(Ackley2, "__name__", Ackley.__name__ + "2")
 Ackley5 = partial(Ackley, dim=5)
@@ -406,6 +413,7 @@ TESTS: dict[
         (Brochu4, {}, 80, "idw"),
         (Brochu6, {}, 80, "idw"),
         (Bukin, {}, 25, "idw"),
+        (Cosmological, {}, 100, "idw"),
         (DropWave, {}, 80, "idw"),
         (EggHolder, {}, 50, "idw"),
         (GoldsteinPrice, {}, 50, "idw"),
