@@ -17,7 +17,7 @@ from warnings import filterwarnings, warn
 import numpy as np
 import torch
 from botorch.acquisition import LogExpectedImprovement
-from botorch.acquisition.multi_step_lookahead import warmstart_multistep
+from botorch.acquisition.multi_step_lookahead import make_best_f, warmstart_multistep
 from botorch.fit import fit_gpytorch_mll
 from botorch.models import SingleTaskGP
 from botorch.models.model import Model
@@ -35,6 +35,7 @@ from globopt import (
     GaussHermiteSampler,
     IdwAcquisitionFunction,
     Ms,
+    make_acq_arg_factory,
     make_idw_acq_arg_factory,
     qIdwAcquisitionFunction,
 )
@@ -85,34 +86,22 @@ def run_problem(
     X = torch.as_tensor(rng.random((n_init, ndim))) * span + lb
     Y = problem(X)
 
-    # create seed functions - one for the optimizer, the other for other uses. In this
-    # way, all methods' optimizer runs are seeded equally
+    # create another seed rng for other uses. In this way, all methods' optimizer runs
+    # are seeded equally by just using the orignal rng
     other_rng = rng.spawn(1)[0]
 
-    # define mdoel and acquisition function getters
-    if method == "random":
+    # define method to fit a model
+    if method == "ei" or method.startswith("msbo"):
 
-        def next_obs(*_, **__) -> tuple[Tensor, Tensor, None]:
-            X_opt = torch.rand(1, ndim) * span + lb
-            return X_opt, torch.nan, None
-
-    elif method == "ei":
-
-        def next_obs(
-            X: Tensor, Y: Tensor, *_, **__
-        ) -> tuple[Tensor, Tensor, SingleTaskGP]:
+        def get_mdl(X: Tensor, Y: Tensor, _) -> SingleTaskGP:
             Y_ = Y.unsqueeze(-1)
             mdl = SingleTaskGP(
                 X, standardize(Y_), input_transform=Normalize(ndim, bounds=bounds)
             )
             fit_gpytorch_mll(ExactMarginalLogLikelihood(mdl.likelihood, mdl))
-            acqfun = LogExpectedImprovement(mdl, Y.amin(), maximize=False)
-            X_opt, _ = optimize_acqf(
-                acqfun, bounds, 1, n_restarts, raw_samples, {"seed": mk_seed(rng)}
-            )
-            return X_opt, torch.nan, mdl
+            return mdl
 
-    else:
+    elif method.startswith("myopic") or method.startswith("msgo"):
         if regression_type == "rbf":
 
             def get_mdl(X: Tensor, Y: Tensor, prev_mdl: Optional[Rbf]) -> Rbf:
@@ -124,6 +113,26 @@ def run_problem(
             def get_mdl(X: Tensor, Y: Tensor, _) -> Idw:
                 return Idw(X, Y)
 
+    # define acquisition function optimizers
+    if method == "random":
+
+        def next_obs(*_, **__) -> tuple[Tensor, Tensor, None]:
+            X_opt = torch.rand(1, ndim) * span + lb
+            return X_opt, torch.nan, None
+
+    elif method == "ei":
+
+        def next_obs(
+            X: Tensor, Y: Tensor, *_, **__
+        ) -> tuple[Tensor, Tensor, SingleTaskGP]:
+            mdl = get_mdl(X, Y, _)
+            acqfun = LogExpectedImprovement(mdl, Y.amin(), maximize=False)
+            X_opt, _ = optimize_acqf(
+                acqfun, bounds, 1, n_restarts, raw_samples, {"seed": mk_seed(rng)}
+            )
+            return X_opt, torch.nan, mdl
+
+    else:
         if method == "myopic":
 
             def next_obs(
@@ -150,14 +159,20 @@ def run_problem(
                 return X_opt, torch.nan, mdl
 
         elif method.startswith("ms"):
-            sampler_type, *fantasies_str = method[3:].split(".")
-            fantasies = list(map(int, fantasies_str))
+            if method.startswith("msbo"):
+                valfunc_sampler = None
+                kwargs_factory = make_acq_arg_factory(make_best_f, maximize=False)
+                base_acq = LogExpectedImprovement
 
+            else:  # msgo
+                valfunc_sampler = GaussHermiteSampler(torch.Size([16]))
+                kwargs_factory = make_idw_acq_arg_factory(c1, c2)
+                base_acq = qIdwAcquisitionFunction
+
+            sampler_type, *fantasies_str = method[5:].split(".")
+            fantasies = list(map(int, fantasies_str))
             horizon = len(fantasies) + 1
             maxfun = 15_000
-            valfunc_sampler = GaussHermiteSampler(torch.Size([16]))
-            kwargs_factory = make_idw_acq_arg_factory(c1, c2)
-
             if sampler_type == "gh":
                 fantasies_samplers = [
                     GaussHermiteSampler(torch.Size([f])) for f in fantasies
@@ -178,7 +193,10 @@ def run_problem(
                 mdl = get_mdl(X, Y, prev_mdl)
                 h = min(horizon, budget)
                 if h == 1:
-                    acqfun = qIdwAcquisitionFunction(mdl, c1, c2, valfunc_sampler)
+                    kwargs = kwargs_factory(mdl, X)
+                    if valfunc_sampler is not None:
+                        kwargs["sampler"] = valfunc_sampler
+                    acqfun = base_acq(mdl, **kwargs)
                     X_opt, _ = optimize_acqf(
                         acqfun,
                         bounds,
@@ -194,7 +212,7 @@ def run_problem(
                 acqfun = Ms(
                     mdl,
                     fantasies_samplers[: h - 1],
-                    qIdwAcquisitionFunction,
+                    base_acq,
                     kwargs_factory,
                     valfunc_sampler=valfunc_sampler,
                 )
@@ -353,11 +371,12 @@ def parse_args(name: str, multiproblem: bool = True) -> argparse.Namespace:
         type=check_methods_arg,
         nargs="+",
         help="Methods to run. Greedy algorithms include `ei` and `myopic`. Non-myopic "
-        "multi-step algorithms have the following semantic: `ms-sampler.m1.m2. ...`, "
-        "where `ms` stands for multi-step, `sampler` is either `gh` or `mc` (for "
-        "Gauss-Hermite or Monte Carlo, respectively), while `m1`, `m2`, and so on, are "
-        "the number of fantasies at each stage. The overall horizon of a multi-step "
-        "method is the number of fantasies plus one.",
+        "multi-step algorithms have the following semantic: `msgo-sampler.m1.m2. ...`, "
+        "where `msgo` stands for multi-step Global Optimization (use `msbo` for the "
+        "Bayesian version), `sampler` is either `gh` or `mc` (for Gauss-Hermite or "
+        "Monte Carlo, respectively), while `m1`, `m2`, ..., are the number of "
+        "fantasies at each stage. The overall horizon of a multi-step method is the "
+        "number of fantasies plus one.",
         required=True,
     )
     if multiproblem:

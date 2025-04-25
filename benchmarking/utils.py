@@ -18,10 +18,10 @@ except ImportError:
 
 def check_methods_arg(method: str) -> str:
     """Given a `method` argument, check its value."""
-    if method in ["random", "ei", "myopic", "myopic-s"]:
+    if method in {"random", "ei", "myopic", "myopic-s"}:
         return method
-    elif method.startswith("ms"):
-        sampler_type, *fantasies = method[3:].split(".")
+    elif method.startswith("ms"):  # msgo or msbo methods
+        sampler_type, *fantasies = method[5:].split(".")
         if sampler_type != "gh" and sampler_type != "mc":
             raise ArgumentTypeError(
                 f"Sampler type must be either `gh` or `mc`; got {sampler_type} instead."
