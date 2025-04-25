@@ -135,7 +135,7 @@ def load_data(
 
 
 def _compute_avg_and_ci(
-    row: pd.Series, column: str, bounds: tuple[float, float] | None = None
+    row: pd.Series, column: str, bounds: Optional[tuple[float, float]] = None
 ) -> pd.Series:
     """Computes the average and conf. interval of the given row of the dataframe."""
     data = row[column]
