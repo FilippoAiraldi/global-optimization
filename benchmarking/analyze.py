@@ -396,8 +396,8 @@ def summary_tables(
         t_mean_std = [
             f"{m} +/- {s:.2f}" for m, s in zip(t_mean, df_.loc[(pname, "time-std")])
         ]
-        tables[2].add_row([pname] + t_mean_std)
-        tables[2].add_row([""] * (len(field_names) - 1))
+        tables[1].add_row([pname] + t_mean_std)
+        tables[1].add_row([""] * (len(field_names) - 1))
 
     # finally, print the tables side by side
     if summary:
