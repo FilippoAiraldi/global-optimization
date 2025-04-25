@@ -394,7 +394,7 @@ def summary_tables(
         time_data = df["time"].map(lambda t: t.mean(axis=1))
         t_mean = _format_row(df_.loc[(pname, "time-mean")], time_data, "min", prec=2)
         t_mean_std = [
-            f"{m} +/- {s:.2f}" for m, s in zip(t_mean, df_.loc[(pname, "time-std")])
+            f"{m} ± {s:.2f}" for m, s in zip(t_mean, df_.loc[(pname, "time-std")])
         ]
         tables[1].add_row([pname] + t_mean_std)
         tables[1].add_row([""] * (len(field_names) - 1))
