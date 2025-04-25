@@ -130,7 +130,7 @@ dmypy.json
 
 # Others
 .vscode
-_*
+_OLD
 *.m
 *.model
 pgfplotstables/

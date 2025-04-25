@@ -20,8 +20,9 @@ References
 """
 
 from functools import partial
-from pathlib import Path
+from importlib import resources
 from typing import Any, Literal, Union
+from warnings import warn
 
 import numpy as np
 import torch
@@ -296,7 +297,10 @@ class HyperTuningGridTestFunction(SyntheticTestFunction):
         noise_std: Union[None, float, list[float]] = None,
         negate: bool = False,
     ) -> None:
-        data = np.genfromtxt(dataname, delimiter=",")
+        with resources.path("globopt.data", dataname) as datapath:
+            data = np.genfromtxt(datapath, delimiter=",")
+            modelpath = datapath.with_suffix(".model")
+
         is_not_nan = np.logical_not(np.any(np.isnan(data), axis=1))
         data = data[is_not_nan, :]
         self.dim = data.shape[1] - 1
@@ -306,14 +310,18 @@ class HyperTuningGridTestFunction(SyntheticTestFunction):
         self._optimal_value = data[opt_idx, -1]
         self._optimizers = [tuple(data[opt_idx, :-1])]
 
-        path = Path(dataname)
-        model_path = path.parent / f"{path.stem}.model"
         try:
-            self.model = load(model_path)
+            self.model = load(modelpath)
         except (FileNotFoundError, EOFError):
+            warn(
+                f'Preparing a regression model for "{dataname}". This can take some '
+                "time",
+                UserWarning,
+                2,
+            )
             self.model = RandomForestRegressor(n_estimators=200)
             self.model.fit(data[:, :-1], data[:, -1])
-            dump(self.model, model_path)
+            dump(self.model, modelpath)
 
         super().__init__(noise_std, negate, bounds)
 
@@ -327,56 +335,56 @@ class Lda(HyperTuningGridTestFunction):
     """Online Latent Dirichlet allocation (LDA) for Wikipedia articles."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__("benchmarking/data/lda_on_grid.csv", *args, **kwargs)
+        super().__init__("lda_on_grid.csv", *args, **kwargs)
 
 
 class LogReg(HyperTuningGridTestFunction):
     """Logistic regression for the MNIST dataset."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__("benchmarking/data/logreg_on_grid.csv", *args, **kwargs)
+        super().__init__("logreg_on_grid.csv", *args, **kwargs)
 
 
 class NnBoston(HyperTuningGridTestFunction):
     """Neural network hyperparameter tuning for the Boston housing dataset."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__("benchmarking/data/nn_boston_on_grid.csv", *args, **kwargs)
+        super().__init__("nn_boston_on_grid.csv", *args, **kwargs)
 
 
 class NnCancer(HyperTuningGridTestFunction):
     """Neural network hyperparameter tuning for the breast cancer dataset."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__("benchmarking/data/nn_cancer_on_grid.csv", *args, **kwargs)
+        super().__init__("nn_cancer_on_grid.csv", *args, **kwargs)
 
 
 class RobotPush3(HyperTuningGridTestFunction):
     """Robot pushing task (3-dimensional)."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__("benchmarking/data/robotpush3_on_grid.csv", *args, **kwargs)
+        super().__init__("robotpush3_on_grid.csv", *args, **kwargs)
 
 
 class RobotPush4(HyperTuningGridTestFunction):
     """Robot pushing task (4-dimensional)."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__("benchmarking/data/robotpush4_on_grid.csv", *args, **kwargs)
+        super().__init__("robotpush4_on_grid.csv", *args, **kwargs)
 
 
 class Svm(HyperTuningGridTestFunction):
     """Structured support vector machine (SVM) on UniPROBE dataset."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__("benchmarking/data/svm_on_grid.csv", *args, **kwargs)
+        super().__init__("svm_on_grid.csv", *args, **kwargs)
 
 
 class Cosmological(HyperTuningGridTestFunction):
     """Estimation of cosmological constants of a physical model of the Universe."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__("benchmarking/data/cosmological_on_grid.csv", *args, **kwargs)
+        super().__init__("cosmological_on_grid.csv", *args, **kwargs)
 
 
 Ackley2 = partial(Ackley, dim=2)
