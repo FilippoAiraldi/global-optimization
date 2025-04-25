@@ -35,7 +35,7 @@ from globopt import (
     GaussHermiteSampler,
     IdwAcquisitionFunction,
     Ms,
-    make_idw_acq_factory,
+    make_idw_acq_arg_factory,
     qIdwAcquisitionFunction,
 )
 from globopt.problems import get_available_benchmark_problems, get_benchmark_problem
@@ -156,7 +156,7 @@ def run_problem(
             horizon = len(fantasies) + 1
             maxfun = 15_000
             valfunc_sampler = GaussHermiteSampler(torch.Size([16]))
-            kwargs_factory = make_idw_acq_factory(c1, c2)
+            kwargs_factory = make_idw_acq_arg_factory(c1, c2)
 
             if sampler_type == "gh":
                 fantasies_samplers = [

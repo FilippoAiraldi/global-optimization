@@ -11,16 +11,47 @@ from botorch.models.model import Model
 from botorch.sampling.base import MCSampler
 
 
-def make_idw_acq_factory(
+def make_acq_arg_factory(
+    action: Optional[TAcqfArgConstructor] = None, **kwargs: Any
+) -> TAcqfArgConstructor:
+    """Returns a kwargs factory for `qMultiStepLookahead` with the given parameters,
+    and an optional action to be called with the model and the current observation
+    tensor. This is useful for passing additional parameters to the base acquisition
+    function constructor.
+
+    Parameters
+    ----------
+    action : TAcqfArgConstructor, optional
+        A callable that takes the current model and observations and returns
+        the kwargs to pass to the base acquisition function constructor.
+    kwargs : Any
+        Additional kwargs to pass to the base acquisition function constructor. This
+        kwargs are not passed to `action`, and are overwritten by its return value, if
+        any.
+
+    Returns
+    -------
+    TAcqfArgConstructor
+        A callable that takes the current model and observations and returns
+        the kwargs to pass to the base acquisition function constructor.
+    """
+
+    def _inner(model: Model, X: torch.Tensor) -> dict[str, Any]:
+        out = kwargs.copy()
+        if action is not None and callable(action):
+            out.update(action(model, X))
+        return out
+
+    return _inner
+
+
+def make_idw_acq_arg_factory(
     c1: float, c2: float, span_Y_min: float = 1e-3
 ) -> TAcqfArgConstructor:
     """Returns a kwargs factory for `IdwAcquisitionFunction` with the given parameters,
     useful for `qMultiStepLookahead`."""
 
-    def _inner(*_, **__) -> dict[str, Any]:
-        return {"c1": c1, "c2": c2, "span_Y_min": span_Y_min}
-
-    return _inner
+    return make_acq_arg_factory(c1=c1, c2=c2, span_Y_min=span_Y_min)
 
 
 class Ms(qMultiStepLookahead):
