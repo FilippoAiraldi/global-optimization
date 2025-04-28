@@ -452,7 +452,7 @@ if __name__ == "__main__":
         args.seed,
         args.n_jobs,
         csv,
-        args.devices,
+        list(map(torch.device, args.devices)),
         n_init=INIT_ITER,
         setup_callback=setup_mpc_tuning,
         save_callback=save_callback,
