@@ -39,7 +39,11 @@ from globopt import (
     make_idw_acq_arg_factory,
     qIdwAcquisitionFunction,
 )
-from globopt.problems import get_available_benchmark_problems, get_benchmark_problem
+from globopt.problems import (
+    get_available_benchmark_problems,
+    get_benchmark_problem,
+    get_problem_constraints_and_ic_generator,
+)
 from globopt.regression import Idw, Rbf
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
@@ -78,17 +82,28 @@ def run_problem(
     eps = torch.scalar_tensor(1.0 / ndim)
     n_restarts = 10 * ndim
     raw_samples = max(n_restarts, 512)
-
-    # draw random initial points
     bounds: Tensor = problem.bounds
     lb, ub = bounds
-    span = ub - lb
-    X = torch.as_tensor(rng.random((n_init, ndim))) * span + lb
-    Y = problem(X)
 
     # create another seed rng for other uses. In this way, all methods' optimizer runs
     # are seeded equally by just using the orignal rng
     other_rng = rng.spawn(1)[0]
+
+    # get the problem's inequality and nonlinear constraints, if any. If there is at
+    # least one nonlinear constraint, we have to manually provide the batch initial
+    # conditions via ic_generator (noop otherwise)
+    ineq_constr, nonlin_ineq_constr, ic_generator = (
+        get_problem_constraints_and_ic_generator(problem)
+    )
+
+    # draw random initial points - if there are nonlinear constraints, we have to use
+    # the provided initial conditions generator, otherwise we can just sample uniformly
+    X = (
+        torch.as_tensor(rng.random((n_init, ndim))) * (ub - lb) + lb
+        if nonlin_ineq_constr is None
+        else ic_generator(n_init, 1).view(n_init, ndim)
+    )
+    Y = problem(X)
 
     # define method to fit a model
     if method == "ei" or method.startswith("msbo"):
@@ -117,7 +132,11 @@ def run_problem(
     if method == "random":
 
         def next_obs(*_, **__) -> tuple[Tensor, None, None]:
-            X_opt = torch.rand(1, ndim) * span + lb
+            X_opt = (
+                torch.rand(1, ndim) * (ub - lb) + lb
+                if nonlin_ineq_constr is None
+                else ic_generator(1, 1).view(1, ndim)
+            )
             return X_opt, None, None
 
     elif method == "ei":
@@ -128,7 +147,15 @@ def run_problem(
             mdl = get_mdl(X, Y, _)
             acqfun = LogExpectedImprovement(mdl, Y.amin(), maximize=False)
             X_opt, _ = optimize_acqf(
-                acqfun, bounds, 1, n_restarts, raw_samples, {"seed": mk_seed(rng)}
+                acqfun,
+                bounds,
+                1,
+                n_restarts,
+                raw_samples,
+                {"seed": mk_seed(rng)},
+                ineq_constr,
+                nonlinear_inequality_constraints=nonlin_ineq_constr,
+                batch_initial_conditions=ic_generator(n_restarts, 1),
             )
             return X_opt, None, mdl
 
@@ -141,7 +168,15 @@ def run_problem(
                 mdl = get_mdl(X, Y, prev_mdl)
                 acqfun = IdwAcquisitionFunction(mdl, c1, c2)
                 X_opt, _ = optimize_acqf(
-                    acqfun, bounds, 1, n_restarts, raw_samples, {"seed": mk_seed(rng)}
+                    acqfun,
+                    bounds,
+                    1,
+                    n_restarts,
+                    raw_samples,
+                    {"seed": mk_seed(rng)},
+                    ineq_constr,
+                    nonlinear_inequality_constraints=nonlin_ineq_constr,
+                    batch_initial_conditions=ic_generator(n_restarts, 1),
                 )
                 return X_opt, None, mdl
 
@@ -154,7 +189,15 @@ def run_problem(
                 mdl = get_mdl(X, Y, prev_mdl)
                 acqfun = qIdwAcquisitionFunction(mdl, c1, c2, sampler=gh_sampler)
                 X_opt, _ = optimize_acqf(
-                    acqfun, bounds, 1, n_restarts, raw_samples, {"seed": mk_seed(rng)}
+                    acqfun,
+                    bounds,
+                    1,
+                    n_restarts,
+                    raw_samples,
+                    {"seed": mk_seed(rng)},
+                    ineq_constr,
+                    nonlinear_inequality_constraints=nonlin_ineq_constr,
+                    batch_initial_conditions=ic_generator(n_restarts, 1),
                 )
                 return X_opt, None, mdl
 
@@ -204,6 +247,9 @@ def run_problem(
                         n_restarts,
                         raw_samples,
                         {"seed": mk_seed(rng)},
+                        ineq_constr,
+                        nonlinear_inequality_constraints=nonlin_ineq_constr,
+                        batch_initial_conditions=ic_generator(n_restarts, 1),
                     )
                     return X_opt, None, mdl
 
@@ -217,7 +263,9 @@ def run_problem(
                     valfunc_sampler=valfunc_sampler,
                 )
                 q = acqfun.get_augmented_q_batch_size(1)
-                if prev_full_opt is not None:
+                if prev_full_opt is None:
+                    prev_full_opt = ic_generator(n_restarts, q)
+                else:
                     prev_full_opt = warmstart_multistep(
                         acqfun,
                         bounds,
@@ -232,6 +280,8 @@ def run_problem(
                     n_restarts_,
                     raw_samples_,
                     {"seed": mk_seed(rng), "maxfun": maxfun},
+                    ineq_constr,
+                    nonlinear_inequality_constraints=nonlin_ineq_constr,
                     batch_initial_conditions=prev_full_opt,
                     return_best_only=False,
                     return_full_tree=True,
