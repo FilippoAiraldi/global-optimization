@@ -21,7 +21,8 @@ References
 
 from functools import partial
 from importlib import resources
-from typing import Any, Literal, Union
+from math import sqrt
+from typing import Any, Callable, Literal, Optional, Union
 from warnings import warn
 
 import numpy as np
@@ -39,10 +40,18 @@ from botorch.test_functions import (
     SixHumpCamel,
     StyblinskiTang,
 )
-from botorch.test_functions.synthetic import SyntheticTestFunction
+from botorch.test_functions.base import BaseTestProblem, ConstrainedBaseTestProblem
+from botorch.test_functions.synthetic import (
+    ConstrainedSyntheticTestFunction,
+    SyntheticTestFunction,
+)
 from joblib import dump, load
 from sklearn.ensemble import RandomForestRegressor
 from torch import Tensor
+
+from globopt.sampling import latin_hypercube_with_nonlinear_constraint
+
+# TODO: run everything on GPU - even fast methods such as BO and myopic
 
 
 class SimpleProblem(SyntheticTestFunction):
@@ -94,11 +103,11 @@ class Step2(SyntheticTestFunction):
         f(x) = sum( floor(x + 0.5)^2 ).
 
     x is bounded [-100,100] in each dimension. f has infinitely many global minima at
-    `[-0.5,0.5]`, with `f_opt = 0`.
+    the origin, with `f_opt = 0`.
     """
 
     _optimal_value = 0.0
-    _optimizers = [(0.0, 0.0)]
+    _optimizers = [(0.0,)]
     _bounds = [(-100.0, 100.0), (-100.0, 100.0)]
 
     def __init__(self, dim: int, *args: Any, **kwargs: Any) -> None:
@@ -412,37 +421,37 @@ TESTS: dict[
 ] = {
     problem.__name__.lower(): (problem, kwargs, max_evals, regressor_type)
     for problem, kwargs, max_evals, regressor_type in [
-        (Ackley2, {}, 55, "rbf"),
+        (Ackley2, {}, 80, "idw"),
         (Ackley5, {}, 80, "idw"),
         (Adjiman, {}, 25, "idw"),
-        (Bohachevsky, {}, 35, "rbf"),
+        (Bohachevsky, {}, 50, "idw"),
         (Branin, {}, 35, "idw"),
         (Brochu2, {}, 50, "idw"),
         (Brochu4, {}, 80, "idw"),
         (Brochu6, {}, 80, "idw"),
         (Bukin, {}, 25, "idw"),
-        (Cosmological, {}, 100, "idw"),
-        (DropWave, {}, 80, "idw"),
-        (EggHolder, {}, 50, "idw"),
+        (Cosmological, {}, 80, "idw"),
+        (DropWave, {}, 100, "idw"),
+        (EggHolder, {}, 80, "idw"),
         (GoldsteinPrice, {}, 50, "idw"),
         (Griewank, {"dim": 3}, 80, "idw"),
-        (Hartmann3, {}, 50, "idw"),
-        (Hartmann6, {}, 80, "rbf"),
+        (Hartmann3, {}, 80, "idw"),
+        (Hartmann6, {}, 100, "idw"),
         (Himmelblau, {}, 40, "idw"),
         (Lda, {}, 30, "idw"),
-        (LogReg, {}, 25, "rbf"),
+        (LogReg, {}, 25, "idw"),
         (NnBoston, {}, 100, "idw"),
-        (NnCancer, {}, 50, "idw"),
-        (Rastrigin, {"dim": 4}, 60, "idw"),
+        (NnCancer, {}, 60, "idw"),
+        (Rastrigin, {"dim": 4}, 100, "idw"),
         (RobotPush3, {}, 90, "idw"),
         (RobotPush4, {}, 100, "idw"),
-        (Rosenbrock, {"dim": 8}, 50, "rbf"),
+        (Rosenbrock, {"dim": 8}, 50, "idw"),
         (Shekel5, {}, 80, "idw"),
         (Shekel7, {}, 100, "idw"),
         (Shubert, {}, 50, "idw"),
         (SixHumpCamel, {"bounds": [(-5.0, 5.0), (-5.0, 5.0)]}, 50, "idw"),
-        (Step2, {"dim": 5}, 60, "idw"),
-        (StyblinskiTang, {"dim": 5}, 60, "idw"),
+        (Step2, {"dim": 5}, 80, "idw"),
+        (StyblinskiTang, {"dim": 5}, 100, "idw"),
         (Svm, {}, 20, "idw"),
     ]
 }
@@ -459,9 +468,165 @@ def get_available_benchmark_problems() -> list[str]:
     return list(TESTS.keys())
 
 
-def get_benchmark_problem(
-    name: str,
-) -> tuple[SyntheticTestFunction, int, Literal["rbf", "idw"]]:
+########################################################################################
+
+
+class ConstrainedSixHumpCamel(SixHumpCamel, ConstrainedSyntheticTestFunction):
+    r"""Constraind six hump camel function."""
+
+    dim = SixHumpCamel.dim
+    _optimizers = [
+        (
+            (684452907 - 5000 * sqrt(2889571934)) / 1950978529,
+            (215115 * sqrt(2889571934) - 360078529) / 19509785290,
+        )
+    ]
+    _bounds = [(-2.0, 2.0), (-1.0, 1.0)]
+
+    def __init__(
+        self, *args: Any, dtype: torch.dtype = torch.double, **kwargs: Any
+    ) -> None:
+        x1, x2 = self._optimizers[0]
+        x1_sq = x1**2
+        x2_sq = x2**2
+        self._optimal_value = (
+            (4 - 2.1 * x1_sq + 1 / 3 * (x1_sq * x1_sq)) * x1_sq
+            + x1 * x2
+            + (-4 + 4 * x2_sq) * x2_sq
+        )
+        self.A = torch.as_tensor(
+            [
+                (-1.6295, -1),
+                (1, -4.4553),
+                (4.3023, 1),
+                (5.6905, 12.1374),
+                (-17.6198, -1),
+            ]
+        )
+        self.b = torch.as_tensor([-3.0786, -2.7417, 1.4909, -1.0, -32.5198])
+        self.num_constraints = 1 + self.A.shape[0]
+        ConstrainedSyntheticTestFunction.__init__(self, *args, **kwargs, dtype=dtype)
+
+    @staticmethod
+    def _nonlinear_inequality_constraint(X: Tensor) -> Tensor:
+        x1, x2 = X.unbind(-1)
+        return 0.5 - x1.square() - (x2 + 0.1).square()
+
+    def evaluate_slack_true(self, X: Tensor) -> Tensor:
+        nonlinear_ineq_con = self._nonlinear_inequality_constraint(X).unsqueeze(-1)
+        lin_ineq_cons = (self.A @ X.unsqueeze(-1)).squeeze(-1) - self.b
+        return torch.concat((nonlinear_ineq_con, lin_ineq_cons), dim=-1)
+
+
+CONSTRAINED_TESTS: dict[
+    str, tuple[type[SyntheticTestFunction], dict[str, Any], int, Literal["rbf", "idw"]]
+] = {
+    problem.__name__.lower(): (problem, kwargs, max_evals, regressor_type)
+    for problem, kwargs, max_evals, regressor_type in [
+        (ConstrainedSixHumpCamel, {}, 30, "rbf")
+    ]
+}
+
+
+def get_problem_constraints_and_ic_generator(
+    problem: ConstrainedSyntheticTestFunction,
+) -> tuple[
+    Optional[list[tuple[Tensor, Tensor, float]]],
+    Optional[list[tuple[Callable, bool]]],
+    Callable[[int, int], Optional[Tensor]],
+]:
+    """Given a problem, returns the inequality and nonlinear constraints in a form
+    amenable to BoTorch's `optimize_acqf`, and, if necessary, a callable to generate
+    initial conditions via constrained scrambled Latin hypercube sampling.
+
+    Parameters
+    ----------
+    problem : ConstrainedSyntheticTestFunction
+        The problem to get the constraints from.
+
+    Returns
+    -------
+    tuple of two lists and callable
+         - list of tuples of (indices, coefficients, rhs) for the linear ineq. constr.,
+         - list of tuples of (function, intrapoint) for the nonlinear ineq. constraints.
+        Any of the two lists may be `None` if the problem does not have that type of
+        constraints.
+        Finally, a callable is also returned that generates initial conditions for the
+        the problem, if necessary. It returns `None` if no nonlinear ineq. constraints
+        are present. Otherwise, it accepts the number of samples `num_restarts` and
+        `q`-batches and returns a tensor of shape `(num_restarts, q, dim)` of the
+        initial conditions.
+
+    Raises
+    ------
+    ValueError
+        If the problem has some unrecognized constraints.
+    """
+    if getattr(problem, "num_constraints", 0) <= 0:
+        return None, None, lambda *_, **__: None
+
+    # get some constants
+    bounds = problem.bounds
+    lb, ub = bounds
+    dim = problem.dim
+    dtype = bounds.dtype
+
+    # process each constrained problem individually. For each, we extract the linear and
+    # nonlinear inequality constraints in the form that is required by BoTorch's
+    # `optimize_acqf` method. We also create, if at least one nonlinear constraint is
+    # present, a callable that finds the minimum of all constraints. This will be then
+    # used for LHS.
+    if isinstance(problem, ConstrainedSixHumpCamel):
+        indices = torch.arange(dim, dtype=torch.long)
+        lin_ineq_constrs = [
+            (indices, a.to(dtype), b) for a, b in zip(problem.A, problem.b)
+        ]
+        nonlin_ineq_constrs = [(problem._nonlinear_inequality_constraint, True)]
+
+    else:
+        raise ValueError(
+            f"Problem {problem.__class__.__name__} has unrecognized constraints."
+        )
+
+    # if the problem has at least one nonlinear constraint, we need to sample points
+    # via a custom LHS method
+    if nonlin_ineq_constrs is None:
+        return lin_ineq_constrs, None, lambda *_, **__: None
+
+    def sampler(num_restart: int, q: int) -> Tensor:
+        samples = latin_hypercube_with_nonlinear_constraint(
+            num_restart,
+            q * dim,
+            lb,
+            ub,
+            lambda X: problem.evaluate_slack_true(X).amin(-1),
+        ).view(num_restart, q, dim)
+        return samples
+
+    return lin_ineq_constrs, nonlin_ineq_constrs, sampler
+
+
+def get_available_constrained_benchmark_problems() -> list[str]:
+    """Gets the names of all the available benchmark constrained test problems.
+
+    Parameters
+    ----------
+    include_constrained_problems : bool, optional
+        If `True`, the function will include constrained problems in the list. Default
+        is `False`.
+
+    Returns
+    -------
+    list of str
+        Names of all the available benchmark tests.
+    """
+    return list(CONSTRAINED_TESTS.keys())
+
+
+########################################################################################
+
+
+def get_benchmark_problem(name: str) -> tuple[SyntheticTestFunction, int, Literal["rbf", "idw"]]:
     """Gets an instance of a benchmark synthetic problem.
 
     Parameters
@@ -480,5 +645,7 @@ def get_benchmark_problem(
     KeyError
         Raised if the name of the benchmark test is not found.
     """
-    cls, kwargs, max_evals, regressor = TESTS[name.lower()]
+    name_ = name.lower()
+    source = TESTS if name_ in TESTS else CONSTRAINED_TESTS
+    cls, kwargs, max_evals, regressor = source[name_]
     return cls(**kwargs), max_evals, regressor

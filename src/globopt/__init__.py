@@ -9,6 +9,7 @@ __all__ = [
     "IdwAcquisitionFunction",
     "Ms",
     "Rbf",
+    "latin_hypercube_with_nonlinear_constraint",
 ]
 
 from globopt.myopic_acquisitions import IdwAcquisitionFunction, qIdwAcquisitionFunction
@@ -18,4 +19,7 @@ from globopt.nonmyopic_acquisitions import (
     make_idw_acq_arg_factory,
 )
 from globopt.regression import Idw, Rbf
-from globopt.sampling import GaussHermiteSampler
+from globopt.sampling import (
+    GaussHermiteSampler,
+    latin_hypercube_with_nonlinear_constraint,
+)
