@@ -2,6 +2,7 @@ import os
 import sys
 from collections.abc import Iterable
 from math import prod
+from pathlib import Path
 from typing import Any, Optional
 from warnings import filterwarnings
 
@@ -29,7 +30,10 @@ sys.path.append(os.path.join(os.getcwd(), "benchmarking"))
 
 # I am lazy so let's import all the helpful functions defined in benchmarking/run.py
 # instead of coding them again here
-from run import create_csv_if_needed, parse_args, run_benchmarks
+repo_dir = Path(__file__).resolve().parents[1]
+sys.path.extend((str(repo_dir), str(repo_dir / "benchmarking")))
+
+from benchmarking.run import create_csv_if_needed, parse_args, run_benchmarks
 
 PROBLEM_NAME = "cstr-mpc-tuning"
 INIT_ITER = 5
