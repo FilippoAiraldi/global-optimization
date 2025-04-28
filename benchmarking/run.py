@@ -336,8 +336,6 @@ def run_benchmarks(
     # conditions; moreover, they are crafted out of the name of the problem, so that new
     # benchmarks (with different, new names) can be added without having to simulate all
     # again. Lastly, they are also subsquent, so that new trials can be appended freely.
-    if problems == ["all"]:
-        problems = BENCHMARK_PROBLEMS
     seeds = {
         p: np.random.SeedSequence(fnv1a_64(p, seed)).spawn(n_trials) for p in problems
     }
@@ -359,7 +357,9 @@ def run_benchmarks(
     )
 
 
-def parse_args(name: str, multiproblem: bool = True) -> argparse.Namespace:
+def parse_args(
+    name: str, available_problems: Optional[list[str]]
+) -> argparse.Namespace:
     """Parses the command-line arguments for the benchmarking script."""
     parser = argparse.ArgumentParser(
         description=f"Benchmarking of Global Optimization strategies on {name}.",
@@ -379,10 +379,10 @@ def parse_args(name: str, multiproblem: bool = True) -> argparse.Namespace:
         "number of fantasies plus one.",
         required=True,
     )
-    if multiproblem:
+    if available_problems is not None:
         group.add_argument(
             "--problems",
-            choices=["all"] + BENCHMARK_PROBLEMS,
+            choices=["all"] + available_problems,
             nargs="+",
             default=["all"],
             help="Problems to include in the benchmarking.",
@@ -403,11 +403,14 @@ def parse_args(name: str, multiproblem: bool = True) -> argparse.Namespace:
         default=["cpu"],
         help="List of torch devices to use, e.g., `cpu`, `cuda:0`, etc..",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if available_problems is not None and args.problems == ["all"]:
+        args.problems = available_problems
+    return args
 
 
 if __name__ == "__main__":
-    args = parse_args("synthetic/real benchmark problems")
+    args = parse_args("synthetic/real benchmark problems", BENCHMARK_PROBLEMS)
     csv = create_csv_if_needed(args.csv, "problem;method;best-so-far;time")
 
     # ensure each job runs only on one CPU

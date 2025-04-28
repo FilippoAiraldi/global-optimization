@@ -435,7 +435,7 @@ def save_callback(problem: CstrMpcControllerTuning) -> str:
 
 
 if __name__ == "__main__":
-    args = parse_args("MPC tuning", multiproblem=False)
+    args = parse_args("MPC tuning", available_problems=None)
     header = "problem;method;best-so-far;time;env-states;env-actions;env-rewards"
     csv = create_csv_if_needed(args.csv, header)
 
