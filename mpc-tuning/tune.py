@@ -240,7 +240,9 @@ def get_cstr_mpc(
     env: CstrEnv, horizon: int, multistarts: int, n_jobs: int
 ) -> Mpc[cs.SX]:
     """Returns an MPC controller for the given CSTR env."""
-    nlp = ParallelMultistartNlp[cs.SX]("SX", starts=multistarts, n_jobs=n_jobs)
+    nlp = ParallelMultistartNlp[cs.SX](
+        "SX", starts=multistarts, parallel_kwargs={"n_jobs": n_jobs}
+    )
     mpc = Mpc[cs.SX](nlp, horizon)
 
     # variables (state, action)
@@ -271,7 +273,7 @@ def get_cstr_mpc(
         y_next = y_next_scaled * (ub[:ny] - lb[:ny]) + lb[:ny]
         return cs.cse(cs.simplify(y_next))
 
-    mpc.set_dynamics(narx_dynamics, n_in=2, n_out=1)
+    mpc.set_nonlinear_dynamics(narx_dynamics)
 
     # add constraints on the reactor temperature (soft and with backoff)
     b = mpc.parameter(TUNABLE_PARS[1])
@@ -294,9 +296,9 @@ def get_cstr_mpc(
         "calc_lam_x": False,
         "calc_lam_p": False,
         "calc_multipliers": False,
-        "ipopt": {"max_iter": 1000, "sb": "yes", "print_level": 0},
+        "fatrop": {"max_iter": 1000, "print_level": 0},
     }
-    mpc.init_solver(opts, solver="ipopt")
+    mpc.init_solver(opts, solver="fatrop", type="nlp")
     return mpc
 
 
@@ -371,7 +373,7 @@ class CstrMpcControllerTuning(SyntheticTestFunction):
         )
 
         # finally create an MPC agent
-        agent = Agent[cs.SX](mpc, pars, warmstart)
+        agent = Agent[cs.SX](mpc, pars, warmstart=warmstart)
         self._np_random = np.random.default_rng(seed)
         agent.reset(self._np_random)
 
