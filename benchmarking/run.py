@@ -116,47 +116,47 @@ def run_problem(
     # define acquisition function optimizers
     if method == "random":
 
-        def next_obs(*_, **__) -> tuple[Tensor, Tensor, None]:
+        def next_obs(*_, **__) -> tuple[Tensor, None, None]:
             X_opt = torch.rand(1, ndim) * span + lb
-            return X_opt, torch.nan, None
+            return X_opt, None, None
 
     elif method == "ei":
 
         def next_obs(
             X: Tensor, Y: Tensor, *_, **__
-        ) -> tuple[Tensor, Tensor, SingleTaskGP]:
+        ) -> tuple[Tensor, None, SingleTaskGP]:
             mdl = get_mdl(X, Y, _)
             acqfun = LogExpectedImprovement(mdl, Y.amin(), maximize=False)
             X_opt, _ = optimize_acqf(
                 acqfun, bounds, 1, n_restarts, raw_samples, {"seed": mk_seed(rng)}
             )
-            return X_opt, torch.nan, mdl
+            return X_opt, None, mdl
 
     else:
         if method == "myopic":
 
             def next_obs(
                 X: Tensor, Y: Tensor, prev_mdl: Union[None, Idw, Rbf], *_, **__
-            ) -> tuple[Tensor, Tensor, Union[Idw, Rbf]]:
+            ) -> tuple[Tensor, None, Union[Idw, Rbf]]:
                 mdl = get_mdl(X, Y, prev_mdl)
                 acqfun = IdwAcquisitionFunction(mdl, c1, c2)
                 X_opt, _ = optimize_acqf(
                     acqfun, bounds, 1, n_restarts, raw_samples, {"seed": mk_seed(rng)}
                 )
-                return X_opt, torch.nan, mdl
+                return X_opt, None, mdl
 
         elif method == "myopic-s":
             gh_sampler = GaussHermiteSampler(sample_shape=torch.Size([16]))
 
             def next_obs(
                 X: Tensor, Y: Tensor, prev_mdl: Union[None, Idw, Rbf], *_, **__
-            ) -> tuple[Tensor, Tensor, Union[Idw, Rbf]]:
+            ) -> tuple[Tensor, None, Union[Idw, Rbf]]:
                 mdl = get_mdl(X, Y, prev_mdl)
                 acqfun = qIdwAcquisitionFunction(mdl, c1, c2, sampler=gh_sampler)
                 X_opt, _ = optimize_acqf(
                     acqfun, bounds, 1, n_restarts, raw_samples, {"seed": mk_seed(rng)}
                 )
-                return X_opt, torch.nan, mdl
+                return X_opt, None, mdl
 
         elif method.startswith("ms"):
             if method.startswith("msbo"):
@@ -187,9 +187,9 @@ def run_problem(
                 X: Tensor,
                 Y: Tensor,
                 prev_mdl: Union[None, Idw, Rbf],
-                prev_full_opt: Tensor,
+                prev_full_opt: Optional[Tensor],
                 budget: int,
-            ) -> tuple[Tensor, Tensor, Union[Idw, Rbf]]:
+            ) -> tuple[Tensor, Optional[Tensor], Union[Idw, Rbf]]:
                 mdl = get_mdl(X, Y, prev_mdl)
                 h = min(horizon, budget)
                 if h == 1:
@@ -205,7 +205,7 @@ def run_problem(
                         raw_samples,
                         {"seed": mk_seed(rng)},
                     )
-                    return X_opt, torch.nan, mdl
+                    return X_opt, None, mdl
 
                 n_restarts_ = n_restarts * h * 2 // 3
                 raw_samples_ = max(n_restarts_, 512)
@@ -217,9 +217,7 @@ def run_problem(
                     valfunc_sampler=valfunc_sampler,
                 )
                 q = acqfun.get_augmented_q_batch_size(1)
-                if prev_full_opt is torch.nan:
-                    prev_full_opt = None
-                else:
+                if prev_full_opt is not None:
                     prev_full_opt = warmstart_multistep(
                         acqfun,
                         bounds,
@@ -233,10 +231,10 @@ def run_problem(
                     q,
                     n_restarts_,
                     raw_samples_,
+                    {"seed": mk_seed(rng), "maxfun": maxfun},
                     batch_initial_conditions=prev_full_opt,
                     return_best_only=False,
                     return_full_tree=True,
-                    options={"seed": mk_seed(rng), "maxfun": maxfun},
                 )
                 best_tree_idx = tree_vals.argmax()
                 X_opt = acqfun.extract_candidates(full_opt[best_tree_idx])
@@ -247,8 +245,7 @@ def run_problem(
 
     # run optimization loop
     mdl: Optional[Model] = None
-    obs_opt: Tensor = torch.nan
-    full_opt: Tensor = torch.nan
+    full_opt: Optional[Tensor] = None
     bests: list[float] = [Y.amin().item()]
     timings: list[float] = []
     try:
@@ -277,7 +274,7 @@ def run_problem(
             RuntimeWarning,
         )
     finally:
-        del problem, X, Y, mdl, obs_opt, full_opt, bests, timings
+        del problem, X, Y, mdl, full_opt, bests, timings
         gc.collect()
         if device.type == "cuda":
             with torch.no_grad():
