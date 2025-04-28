@@ -53,7 +53,7 @@ dynamic = ["version"]
 version = {attr = "globopt.__version__"}
 
 [tool.black]
-target-version = ["py39", "py310", "py311", "py312"]
+target-version = ["py39", "py310", "py311", "py312", "py313"]
 color = true
 
 [tool.isort]
