@@ -26,8 +26,6 @@ from mpcrl.wrappers.envs import MonitorEpisodes
 from numpy import typing as npt
 from torch import Tensor
 
-sys.path.append(os.path.join(os.getcwd(), "benchmarking"))
-
 # I am lazy so let's import all the helpful functions defined in benchmarking/run.py
 # instead of coding them again here
 repo_dir = Path(__file__).resolve().parents[1]

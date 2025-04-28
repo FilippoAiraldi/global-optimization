@@ -255,7 +255,7 @@ pip install -r mpc-tuning/requirements-mpc-tuning.txt
 Then, to launch the simulations, run
 
 ```bash
-python mpc-tuning/tune.py --methods myopic ms-gh.1.1.1 ms-gh.10.5 --n-jobs={number-of-jobs} --devices {list-of-available-devices} --csv={filename} --n-trials=30
+python mpc-tuning/run.py --methods myopic ms-gh.1.1.1 ms-gh.10.5 --n-jobs={number-of-jobs} --devices {list-of-available-devices} --csv={filename} --n-trials=30
 ```
 
 You can monitor the progress of the simulation with the same `benchmarking/status.py`
