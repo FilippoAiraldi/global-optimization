@@ -95,13 +95,14 @@ def run_problem(
     ineq_constr, nonlin_ineq_constr, ic_generator = (
         get_problem_constraints_and_ic_generator(problem)
     )
+    has_nonlinear_ineq_constr = nonlin_ineq_constr is not None
 
     # draw random initial points - if there are nonlinear constraints, we have to use
     # the provided initial conditions generator, otherwise we can just sample uniformly
     X = (
-        torch.as_tensor(rng.random((n_init, ndim))) * (ub - lb) + lb
-        if nonlin_ineq_constr is None
-        else ic_generator(n_init, 1).view(n_init, ndim)
+        ic_generator(n_init, 1).view(n_init, ndim)
+        if has_nonlinear_ineq_constr
+        else torch.as_tensor(rng.random((n_init, ndim))) * (ub - lb) + lb
     )
     Y = problem(X)
 
@@ -133,9 +134,9 @@ def run_problem(
 
         def next_obs(*_, **__) -> tuple[Tensor, None, None]:
             X_opt = (
-                torch.rand(1, ndim) * (ub - lb) + lb
-                if nonlin_ineq_constr is None
-                else ic_generator(1, 1).view(1, ndim)
+                ic_generator(1, 1).view(1, ndim)
+                if has_nonlinear_ineq_constr
+                else torch.rand(1, ndim) * (ub - lb) + lb
             )
             return X_opt, None, None
 
@@ -253,8 +254,6 @@ def run_problem(
                     )
                     return X_opt, None, mdl
 
-                n_restarts_ = n_restarts * h * 2 // 3
-                raw_samples_ = max(n_restarts_, 512)
                 acqfun = Ms(
                     mdl,
                     fantasies_samplers[: h - 1],
@@ -263,8 +262,10 @@ def run_problem(
                     valfunc_sampler=valfunc_sampler,
                 )
                 q = acqfun.get_augmented_q_batch_size(1)
-                if prev_full_opt is None:
-                    prev_full_opt = ic_generator(n_restarts, q)
+                n_restarts_ = n_restarts * h * 2 // 3
+                raw_samples_ = max(n_restarts_, 512)
+                if prev_full_opt is None or has_nonlinear_ineq_constr:
+                    prev_full_opt = ic_generator(n_restarts_, q)
                 else:
                     prev_full_opt = warmstart_multistep(
                         acqfun,
