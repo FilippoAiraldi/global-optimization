@@ -40,26 +40,19 @@ from botorch.test_functions import (
     SixHumpCamel,
     StyblinskiTang,
 )
-from botorch.test_functions.base import BaseTestProblem, ConstrainedBaseTestProblem
 from botorch.test_functions.synthetic import ConstrainedGramacy as _ConstrainedGramacy
 from botorch.test_functions.synthetic import (
     ConstrainedHartmannSmooth as ConstrainedHartmann6,
 )
-from botorch.test_functions.synthetic import (
-    ConstrainedSyntheticTestFunction,
-)
+from botorch.test_functions.synthetic import ConstrainedSyntheticTestFunction
 from botorch.test_functions.synthetic import PressureVessel as _PressureVessel
-from botorch.test_functions.synthetic import (
-    SyntheticTestFunction,
-)
+from botorch.test_functions.synthetic import SyntheticTestFunction
 from botorch.test_functions.synthetic import WeldedBeamSO as _WeldedBeamSO
 from joblib import dump, load
 from sklearn.ensemble import RandomForestRegressor
 from torch import Tensor
 
 from globopt.sampling import latin_hypercube_with_nonlinear_constraint
-
-# TODO: run everything on GPU - even fast methods such as BO and myopic
 
 
 class SimpleProblem(SyntheticTestFunction):
@@ -759,7 +752,9 @@ def get_available_constrained_benchmark_problems() -> list[str]:
 ########################################################################################
 
 
-def get_benchmark_problem(name: str) -> tuple[SyntheticTestFunction, int, Literal["rbf", "idw"]]:
+def get_benchmark_problem(
+    name: str,
+) -> tuple[SyntheticTestFunction, int, Literal["rbf", "idw"]]:
     """Gets an instance of a benchmark synthetic problem.
 
     Parameters
