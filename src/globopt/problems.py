@@ -46,6 +46,7 @@ from botorch.test_functions.synthetic import (
 )
 from botorch.test_functions.synthetic import ConstrainedSyntheticTestFunction
 from botorch.test_functions.synthetic import PressureVessel as _PressureVessel
+from botorch.test_functions.synthetic import SpeedReducer as _SpeedReducer
 from botorch.test_functions.synthetic import SyntheticTestFunction
 from botorch.test_functions.synthetic import WeldedBeamSO as _WeldedBeamSO
 from joblib import dump, load
@@ -510,12 +511,12 @@ class ConstrainedSixHumpCamel(SixHumpCamel, ConstrainedSyntheticTestFunction):
         ConstrainedSyntheticTestFunction.__init__(self, *args, **kwargs, dtype=dtype)
 
     @staticmethod
-    def _nonlinear_inequality_constraint(X: Tensor) -> Tensor:
+    def _nonlinear_inequality_constraint0(X: Tensor) -> Tensor:
         x1, x2 = X.unbind(-1)
         return 0.5 - x1.square() - (x2 + 0.1).square()
 
     def evaluate_slack_true(self, X: Tensor) -> Tensor:
-        nonlinear_ineq_con = self._nonlinear_inequality_constraint(X).unsqueeze(-1)
+        nonlinear_ineq_con = self._nonlinear_inequality_constraint0(X).unsqueeze(-1)
         lin_ineq_cons = (self.A @ X.unsqueeze(-1)).squeeze(-1) - self.b
         return torch.concat((nonlinear_ineq_con, lin_ineq_cons), dim=-1)
 
@@ -526,12 +527,12 @@ class ConstrainedGramacy(_ConstrainedGramacy):
     _bounds = [(0.0, 1.0), (0.1, 1.0)]
 
     @staticmethod
-    def _nonlinear_inequality_constraint1(X: Tensor) -> Tensor:
+    def _nonlinear_inequality_constraint0(X: Tensor) -> Tensor:
         x1, x2 = X.unbind(-1)
         return x1 + 2 * x2 + 0.5 * torch.sin(2 * pi * (x1.pow(2) - 2 * x2)) - 1.5
 
     @staticmethod
-    def _nonlinear_inequality_constraint2(X: Tensor) -> Tensor:
+    def _nonlinear_inequality_constraint1(X: Tensor) -> Tensor:
         x1, x2 = X.unbind(-1)
         return 1.5 - x1.pow(2) - x2.pow(2)
 
@@ -540,7 +541,7 @@ class PressureVessel(_PressureVessel):
     """Pressure vessel design test function with tighetened bounds."""
 
     num_constraints = 3
-    _optimal_value = 6059.946341
+    _optimal_value = 6059.715
     _bounds = [(0.5, 10.0), (0.25, 10.0), (30, 50.0), (150.0, 240.0)]
 
     def __init__(
@@ -553,14 +554,9 @@ class PressureVessel(_PressureVessel):
         super().__init__(*args, **kwargs, dtype=dtype)
 
     @staticmethod
-    def _nonlinear_inequality_constraint(X: Tensor) -> Tensor:
-        _, _, x3, x4 = X.unbind(-1)
+    def _nonlinear_inequality_constraint0(X: Tensor) -> Tensor:
+        x3, x4 = X[..., 2], X[..., 3]
         return x3.square() * x4 + 4 / 3 * x3.pow(3) - 1296000 / pi
-
-    def evaluate_slack_true(self, X: Tensor) -> Tensor:
-        nonlinear_ineq_con = self._nonlinear_inequality_constraint(X).unsqueeze(-1)
-        lin_ineq_cons = (self.A @ X.unsqueeze(-1)).squeeze(-1) - self.b
-        return torch.concat((nonlinear_ineq_con, lin_ineq_cons), dim=-1)
 
 
 class WeldedBeam(_WeldedBeamSO):
@@ -583,7 +579,7 @@ class WeldedBeam(_WeldedBeamSO):
         self._d_max = 0.25
         super().__init__(*args, **kwargs, dtype=dtype)
 
-    def _nonlinear_inequality_constraint1(self, X: Tensor) -> Tensor:
+    def _nonlinear_inequality_constraint0(self, X: Tensor) -> Tensor:
         x1, x2, x3, _ = X.unbind(-1)
         sqrt2 = sqrt(2)
         M = self._P * (self._L + x2 / 2)
@@ -593,40 +589,88 @@ class WeldedBeam(_WeldedBeamSO):
         t2 = M * R / J
         return self._t_max - (t1.square() + t1 * t2 * x2 / R + t2.square()).sqrt()
 
-    def _nonlinear_inequality_constraint2(self, X: Tensor) -> Tensor:
-        _, _, x3, x4 = X.unbind(-1)
+    def _nonlinear_inequality_constraint1(self, X: Tensor) -> Tensor:
+        x3, x4 = X[..., 2], X[..., 3]
         s = 6 * self._P * self._L / (x4 * x3.square())
         return self._s_max - s
 
-    def _nonlinear_inequality_constraint3(self, X: Tensor) -> Tensor:
+    def _nonlinear_inequality_constraint2(self, X: Tensor) -> Tensor:
         x1, x2, x3, x4 = X.unbind(-1)
         return 5.0 - 0.10471 * x1.square() - 0.04811 * x3 * x4 * (14.0 + x2)
 
-    def _nonlinear_inequality_constraint4(self, X: Tensor) -> Tensor:
-        _, _, x3, x4 = X.unbind(-1)
+    def _nonlinear_inequality_constraint3(self, X: Tensor) -> Tensor:
+        x3, x4 = X[..., 2], X[..., 3]
         d = 4 * self._P * self._L**3 / (self._E * x3.pow(3) * x4)
         return self._d_max - d
 
-    def _nonlinear_inequality_constraint5(self, X: Tensor) -> Tensor:
-        _, _, x3, x4 = X.unbind(-1)
+    def _nonlinear_inequality_constraint4(self, X: Tensor) -> Tensor:
+        x3, x4 = X[..., 2], X[..., 3]
         E = self._E
         L = self._L
         C = 4.013 * 6 * E / (L**2)
         P_c = C * x3 * x4.pow(3) * (1 - 0.25 * x3 / L * sqrt(E / self._G))
-        return self._P - P_c
+        return P_c - self._P
 
-    def evaluate_slack_true(self, X: Tensor) -> Tensor:
-        return torch.concat(
-            (
-                self._nonlinear_inequality_constraint1(X).unsqueeze(-1),
-                self._nonlinear_inequality_constraint2(X).unsqueeze(-1),
-                self._nonlinear_inequality_constraint3(X).unsqueeze(-1),
-                self._nonlinear_inequality_constraint4(X).unsqueeze(-1),
-                self._nonlinear_inequality_constraint5(X).unsqueeze(-1),
-                (self.A @ X.unsqueeze(-1)).squeeze(-1) - self.b,
-            ),
-            dim=-1,
-        )
+
+class SpeedReducer(_SpeedReducer):
+    """Speed reducer design test function with tighetened bounds."""
+
+    _optimal_value = 2996.3482
+
+    @staticmethod
+    def _nonlinear_inequality_constraint0(X: Tensor) -> Tensor:
+        x1, x2, x3 = X[..., 0], X[..., 1], X[..., 2]
+        return 1 - 27 / (x1 * x2.square() * x3)
+
+    @staticmethod
+    def _nonlinear_inequality_constraint1(X: Tensor) -> Tensor:
+        x1, x2, x3 = X[..., 0], X[..., 1], X[..., 2]
+        return 1 - 397.5 / (x1 * x2.square() * x3.square())
+
+    @staticmethod
+    def _nonlinear_inequality_constraint2(X: Tensor) -> Tensor:
+        x2, x3, x4, x6 = X[..., 1], X[..., 2], X[..., 3], X[..., 5]
+        return 1 - 1.93 * x4.pow(3) / (x2 * x3 * x6.pow(4))
+
+    @staticmethod
+    def _nonlinear_inequality_constraint3(X: Tensor) -> Tensor:
+        x2, x3, x5, x7 = X[..., 1], X[..., 2], X[..., 4], X[..., 6]
+        return 1 - 1.93 * x5.pow(3) / (x2 * x3 * x7.pow(4))
+
+    @staticmethod
+    def _nonlinear_inequality_constraint4(X: Tensor) -> Tensor:
+        x2, x3, x4, x6 = X[..., 1], X[..., 2], X[..., 3], X[..., 5]
+        return 110 - x6.pow(-3) * ((745 * x4 / (x2 * x3)).square() + 16.9e6).sqrt()
+
+    @staticmethod
+    def _nonlinear_inequality_constraint5(X: Tensor) -> Tensor:
+        x2, x3, x5, x7 = X[..., 1], X[..., 2], X[..., 4], X[..., 6]
+        return 85 - x7.pow(-3) * ((745 * x5 / (x2 * x3)).square() + 157.5e6).sqrt()
+
+    @staticmethod
+    def _nonlinear_inequality_constraint6(X: Tensor) -> Tensor:
+        x2, x3 = X[..., 1], X[..., 2]
+        return 40 - x2 * x3
+
+    @staticmethod
+    def _nonlinear_inequality_constraint7(X: Tensor) -> Tensor:
+        x1, x2 = X[..., 0], X[..., 1]
+        return x1 / x2 - 5
+
+    @staticmethod
+    def _nonlinear_inequality_constraint8(X: Tensor) -> Tensor:
+        x1, x2 = X[..., 0], X[..., 1]
+        return 12 - x1 / x2
+
+    @staticmethod
+    def _nonlinear_inequality_constraint9(X: Tensor) -> Tensor:
+        x4, x6 = X[..., 3], X[..., 5]
+        return 1 - (1.5 * x6 + 1.9) / x4
+
+    @staticmethod
+    def _nonlinear_inequality_constraint10(X: Tensor) -> Tensor:
+        x5, x7 = X[..., 4], X[..., 6]
+        return 1 - (1.1 * x7 + 1.9) / x5
 
 
 CONSTRAINED_TESTS: dict[
@@ -639,6 +683,7 @@ CONSTRAINED_TESTS: dict[
         (ConstrainedHartmann6, {}, 30, "rbf"),
         (PressureVessel, {}, 30, "rbf"),
         (WeldedBeam, {}, 30, "rbf"),
+        (SpeedReducer, {}, 30, "rbf"),
     ]
 }
 
@@ -691,24 +736,26 @@ def get_problem_constraints_and_ic_generator(
     # `optimize_acqf` method. We also create, if at least one nonlinear constraint is
     # present, a callable that finds the minimum of all constraints. This will be then
     # used for LHS.
-    indices = torch.arange(dim, dtype=torch.long)
-    lin_ineq_constrs = nonlin_ineq_constrs = None
-    if isinstance(problem, (ConstrainedSixHumpCamel, PressureVessel)):
+    if hasattr(problem, "A") and hasattr(problem, "b"):
+        indices = torch.arange(dim, dtype=torch.long)
         lin_ineq_constrs = [
             (indices, a.to(dtype), b) for a, b in zip(problem.A, problem.b)
         ]
-        nonlin_ineq_constrs = [(problem._nonlinear_inequality_constraint, True)]
-
-    elif isinstance(problem, ConstrainedGramacy):
-        nonlin_ineq_constrs = [
-            (problem._nonlinear_inequality_constraint1, True),
-            (problem._nonlinear_inequality_constraint2, True),
-        ]
-
-    elif isinstance(problem, ConstrainedHartmann6):
-        nonlin_ineq_constrs = [(problem.evaluate_slack_true, True)]
-
     else:
+        lin_ineq_constrs = None
+
+    nonlin_ineq_constrs = []
+    i = 0
+    while True:
+        func = getattr(problem, f"_nonlinear_inequality_constraint{i}", None)
+        if func is None:
+            break
+        nonlin_ineq_constrs.append((func, True))
+        i += 1
+    if len(nonlin_ineq_constrs) == 0:
+        nonlin_ineq_constrs = None
+
+    if lin_ineq_constrs is None and nonlin_ineq_constrs is None:
         raise ValueError(
             f"Problem {problem.__class__.__name__} has unrecognized constraints."
         )

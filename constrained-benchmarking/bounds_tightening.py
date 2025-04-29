@@ -2,6 +2,7 @@
 feasible region."""
 
 import argparse
+from functools import partial
 from typing import Callable
 
 import numpy as np
@@ -10,11 +11,26 @@ from botorch.test_functions.base import ConstrainedBaseTestProblem
 from scipy.optimize import Bounds, NonlinearConstraint, differential_evolution
 
 from globopt.problems import (
+    NormalizedProblemWrapper,
     get_available_constrained_benchmark_problems,
     get_benchmark_problem,
 )
 
 BENCHMARK_CONSTRAINED_PROBLEMS = get_available_constrained_benchmark_problems()
+
+
+def evaluate_slack_from_numpy(
+    problem: ConstrainedBaseTestProblem, nc: int, x: np.ndarray
+) -> np.ndarray:
+    return problem.evaluate_slack_true(torch.from_numpy(x)).numpy().reshape(nc)
+
+
+def minimize_ith(i: int, x: np.ndarray) -> float:
+    return x[i]
+
+
+def maximize_ith(i: int, x: np.ndarray) -> float:
+    return -x[i]
 
 
 def tighten_bounds(
@@ -23,9 +39,7 @@ def tighten_bounds(
     nc = problem.num_constraints
     bounds = Bounds(*problem.bounds.numpy())
     constraints = NonlinearConstraint(
-        lambda x: problem.evaluate_slack_true(torch.from_numpy(x)).numpy().reshape(nc),
-        0.0,
-        np.inf,
+        partial(evaluate_slack_from_numpy, problem, nc), 0.0, np.inf
     )
 
     def differential_evolution_wrapper(objective: Callable) -> float:
@@ -45,8 +59,10 @@ def tighten_bounds(
     dim = problem.dim
     new_bounds = np.empty((2, dim), dtype=np.float64)
     for i in range(dim):
-        new_bounds[0, i] = differential_evolution_wrapper(lambda x: x[i])
-        new_bounds[1, i] = -differential_evolution_wrapper(lambda x: -x[i])
+        new_bounds[0, i] = differential_evolution_wrapper(partial(minimize_ith, i))
+        new_bounds[1, i] = -differential_evolution_wrapper(partial(maximize_ith, i))
+    if isinstance(problem, NormalizedProblemWrapper):
+        new_bounds = problem.unnormalize(torch.from_numpy(new_bounds)).numpy()
     return new_bounds
 
 
