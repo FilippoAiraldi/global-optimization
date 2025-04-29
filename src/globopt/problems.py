@@ -21,7 +21,7 @@ References
 
 from functools import partial
 from importlib import resources
-from math import sqrt
+from math import pi, sqrt
 from typing import Any, Callable, Literal, Optional, Union
 from warnings import warn
 
@@ -41,10 +41,18 @@ from botorch.test_functions import (
     StyblinskiTang,
 )
 from botorch.test_functions.base import BaseTestProblem, ConstrainedBaseTestProblem
+from botorch.test_functions.synthetic import ConstrainedGramacy as _ConstrainedGramacy
+from botorch.test_functions.synthetic import (
+    ConstrainedHartmannSmooth as ConstrainedHartmann6,
+)
 from botorch.test_functions.synthetic import (
     ConstrainedSyntheticTestFunction,
+)
+from botorch.test_functions.synthetic import PressureVessel as _PressureVessel
+from botorch.test_functions.synthetic import (
     SyntheticTestFunction,
 )
+from botorch.test_functions.synthetic import WeldedBeamSO as _WeldedBeamSO
 from joblib import dump, load
 from sklearn.ensemble import RandomForestRegressor
 from torch import Tensor
@@ -481,7 +489,7 @@ class ConstrainedSixHumpCamel(SixHumpCamel, ConstrainedSyntheticTestFunction):
             (215115 * sqrt(2889571934) - 360078529) / 19509785290,
         )
     ]
-    _bounds = [(-2.0, 2.0), (-1.0, 1.0)]
+    _bounds = [(0.2, 0.8), (-0.4, 0.6)]
 
     def __init__(
         self, *args: Any, dtype: torch.dtype = torch.double, **kwargs: Any
@@ -501,9 +509,10 @@ class ConstrainedSixHumpCamel(SixHumpCamel, ConstrainedSyntheticTestFunction):
                 (4.3023, 1),
                 (5.6905, 12.1374),
                 (-17.6198, -1),
-            ]
+            ],
+            dtype,
         )
-        self.b = torch.as_tensor([-3.0786, -2.7417, 1.4909, -1.0, -32.5198])
+        self.b = torch.as_tensor([-3.0786, -2.7417, 1.4909, -1.0, -32.5198], dtype)
         self.num_constraints = 1 + self.A.shape[0]
         ConstrainedSyntheticTestFunction.__init__(self, *args, **kwargs, dtype=dtype)
 
@@ -518,12 +527,125 @@ class ConstrainedSixHumpCamel(SixHumpCamel, ConstrainedSyntheticTestFunction):
         return torch.concat((nonlinear_ineq_con, lin_ineq_cons), dim=-1)
 
 
+class ConstrainedGramacy(_ConstrainedGramacy):
+    """Constrained Gramacy test function with tighetened bounds."""
+
+    _bounds = [(0.0, 1.0), (0.1, 1.0)]
+
+    @staticmethod
+    def _nonlinear_inequality_constraint1(X: Tensor) -> Tensor:
+        x1, x2 = X.unbind(-1)
+        return x1 + 2 * x2 + 0.5 * torch.sin(2 * pi * (x1.pow(2) - 2 * x2)) - 1.5
+
+    @staticmethod
+    def _nonlinear_inequality_constraint2(X: Tensor) -> Tensor:
+        x1, x2 = X.unbind(-1)
+        return 1.5 - x1.pow(2) - x2.pow(2)
+
+
+class PressureVessel(_PressureVessel):
+    """Pressure vessel design test function with tighetened bounds."""
+
+    num_constraints = 3
+    _optimal_value = 6059.946341
+    _bounds = [(0.5, 10.0), (0.25, 10.0), (30, 50.0), (150.0, 240.0)]
+
+    def __init__(
+        self, *args: Any, dtype: torch.dtype = torch.double, **kwargs: Any
+    ) -> None:
+        self.A = torch.as_tensor(
+            [(1.0, 0.0, -0.0193, 0.0), (0.0, 1.0, -0.00954, 0.0)], dtype=dtype
+        )
+        self.b = torch.zeros(2, dtype=dtype)
+        super().__init__(*args, **kwargs, dtype=dtype)
+
+    @staticmethod
+    def _nonlinear_inequality_constraint(X: Tensor) -> Tensor:
+        _, _, x3, x4 = X.unbind(-1)
+        return x3.square() * x4 + 4 / 3 * x3.pow(3) - 1296000 / pi
+
+    def evaluate_slack_true(self, X: Tensor) -> Tensor:
+        nonlinear_ineq_con = self._nonlinear_inequality_constraint(X).unsqueeze(-1)
+        lin_ineq_cons = (self.A @ X.unsqueeze(-1)).squeeze(-1) - self.b
+        return torch.concat((nonlinear_ineq_con, lin_ineq_cons), dim=-1)
+
+
+class WeldedBeam(_WeldedBeamSO):
+    """ "Welded beam design test function with tighetened bounds."""
+
+    _optimal_value = 1.728226
+    _bounds = [(0.125, 10.0), (0.1, 10.0), (0.1, 10.0), (0.1, 10.0)]
+
+    def __init__(
+        self, *args: Any, dtype: torch.dtype = torch.double, **kwargs: Any
+    ) -> None:
+        self.A = torch.as_tensor([(-1.0, 0.0, 0.0, 1.0)], dtype=dtype)
+        self.b = torch.zeros(1, dtype=dtype)
+        self._P = 6000.0
+        self._L = 14.0
+        self._E = 30e6
+        self._G = 12e6
+        self._t_max = 13600.0
+        self._s_max = 30000.0
+        self._d_max = 0.25
+        super().__init__(*args, **kwargs, dtype=dtype)
+
+    def _nonlinear_inequality_constraint1(self, X: Tensor) -> Tensor:
+        x1, x2, x3, _ = X.unbind(-1)
+        sqrt2 = sqrt(2)
+        M = self._P * (self._L + x2 / 2)
+        R = (0.25 * (x2.square() + (x1 + x3).square())).sqrt()
+        J = 2 * sqrt2 * x1 * x2 * (x2.square() / 12 + 0.25 * (x1 + x3).square())
+        t1 = self._P / (sqrt2 * x1 * x2)
+        t2 = M * R / J
+        return self._t_max - (t1.square() + t1 * t2 * x2 / R + t2.square()).sqrt()
+
+    def _nonlinear_inequality_constraint2(self, X: Tensor) -> Tensor:
+        _, _, x3, x4 = X.unbind(-1)
+        s = 6 * self._P * self._L / (x4 * x3.square())
+        return self._s_max - s
+
+    def _nonlinear_inequality_constraint3(self, X: Tensor) -> Tensor:
+        x1, x2, x3, x4 = X.unbind(-1)
+        return 5.0 - 0.10471 * x1.square() - 0.04811 * x3 * x4 * (14.0 + x2)
+
+    def _nonlinear_inequality_constraint4(self, X: Tensor) -> Tensor:
+        _, _, x3, x4 = X.unbind(-1)
+        d = 4 * self._P * self._L**3 / (self._E * x3.pow(3) * x4)
+        return self._d_max - d
+
+    def _nonlinear_inequality_constraint5(self, X: Tensor) -> Tensor:
+        _, _, x3, x4 = X.unbind(-1)
+        E = self._E
+        L = self._L
+        C = 4.013 * 6 * E / (L**2)
+        P_c = C * x3 * x4.pow(3) * (1 - 0.25 * x3 / L * sqrt(E / self._G))
+        return self._P - P_c
+
+    def evaluate_slack_true(self, X: Tensor) -> Tensor:
+        return torch.concat(
+            (
+                self._nonlinear_inequality_constraint1(X).unsqueeze(-1),
+                self._nonlinear_inequality_constraint2(X).unsqueeze(-1),
+                self._nonlinear_inequality_constraint3(X).unsqueeze(-1),
+                self._nonlinear_inequality_constraint4(X).unsqueeze(-1),
+                self._nonlinear_inequality_constraint5(X).unsqueeze(-1),
+                (self.A @ X.unsqueeze(-1)).squeeze(-1) - self.b,
+            ),
+            dim=-1,
+        )
+
+
 CONSTRAINED_TESTS: dict[
     str, tuple[type[SyntheticTestFunction], dict[str, Any], int, Literal["rbf", "idw"]]
 ] = {
     problem.__name__.lower(): (problem, kwargs, max_evals, regressor_type)
     for problem, kwargs, max_evals, regressor_type in [
-        (ConstrainedSixHumpCamel, {}, 30, "rbf")
+        (ConstrainedSixHumpCamel, {}, 30, "rbf"),
+        (ConstrainedGramacy, {}, 30, "rbf"),
+        (ConstrainedHartmann6, {}, 30, "rbf"),
+        (PressureVessel, {}, 30, "rbf"),
+        (WeldedBeam, {}, 30, "rbf"),
     ]
 }
 
@@ -576,12 +698,22 @@ def get_problem_constraints_and_ic_generator(
     # `optimize_acqf` method. We also create, if at least one nonlinear constraint is
     # present, a callable that finds the minimum of all constraints. This will be then
     # used for LHS.
-    if isinstance(problem, ConstrainedSixHumpCamel):
-        indices = torch.arange(dim, dtype=torch.long)
+    indices = torch.arange(dim, dtype=torch.long)
+    lin_ineq_constrs = nonlin_ineq_constrs = None
+    if isinstance(problem, (ConstrainedSixHumpCamel, PressureVessel)):
         lin_ineq_constrs = [
             (indices, a.to(dtype), b) for a, b in zip(problem.A, problem.b)
         ]
         nonlin_ineq_constrs = [(problem._nonlinear_inequality_constraint, True)]
+
+    elif isinstance(problem, ConstrainedGramacy):
+        nonlin_ineq_constrs = [
+            (problem._nonlinear_inequality_constraint1, True),
+            (problem._nonlinear_inequality_constraint2, True),
+        ]
+
+    elif isinstance(problem, ConstrainedHartmann6):
+        nonlin_ineq_constrs = [(problem.evaluate_slack_true, True)]
 
     else:
         raise ValueError(
