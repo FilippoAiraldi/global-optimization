@@ -26,17 +26,37 @@ pd.options.mode.copy_on_write = True
 
 
 ALPHA = 0.95
-METHODS_ORDER = ["random", "ei", "myopic", "myopic-s", "ms-gh", "ms-mc"]
-METHOD_PATTER = re.compile(r"ms-(mc|gh)((?:\.\d+)+)")
+NONMYOPIC_METHOD_PATTER = re.compile(r"ms(g|b)o-(mc|gh)((?:\.\d+)+)")
 VALID_PATTERN = re.compile(r"[^a-zA-Z0-9]+")
 
 
-def _sort_method(method: str) -> int:
+def _sort_method(method: str) -> float:
     """Computes sorting rank of given method (takes into account horizon, if any)."""
-    parts = method.split(".")
-    method = parts[0]
-    rank = METHODS_ORDER.index(method)
-    return rank if len(parts) == 1 else rank + sum(int(p) for p in parts[1:])
+    # Ranking:
+    # random ei, nmbo (GH, then MC, and based on horizon length and fantasies), myopic,
+    # myopic-s, msgo (same as nmbo for sampler and fantasies)
+    match = NONMYOPIC_METHOD_PATTER.fullmatch(method)
+    if match is None:
+        if method == "random":
+            return 0.0
+        elif method == "ei":
+            return 1.0
+        elif method == "myopic":
+            return 1e6
+        elif method == "myopic-s":
+            return 1e6 + 1.0
+        else:
+            raise RuntimeError(f"Unknown method: {method}")
+
+    is_bayesian = match.group(1) == "b"
+    sampler = match.group(2).upper()
+    fantasies = match.group(3).split(".")[1:]
+
+    key = (2.0 if is_bayesian else 1e6 + 2.0)  # just above the corresponding myopic
+    if sampler == "MC":
+        key += 0.1
+    key += sum(int(f) * 100 for f in fantasies) / len(fantasies)
+    return key
 
 
 def _compute_all_stats(row: pd.Series) -> pd.Series:
@@ -75,10 +95,15 @@ def official_method_name_and_type(
     method: str, no_spaces: bool = False, for_filename: bool = False
 ) -> tuple[str, int]:
     """Utility to get the official name of the method."""
-    match = METHOD_PATTER.fullmatch(method)
+    # Types:
+    # msgo-mc-R -> 0, msgo-gh-R -> 1, msgo-mc-MS -> 2, msgo-gh-MS -> 3
+    # msbo-mc-R -> 4, etc... for 5, 6, 7
+    # else -> 8
+    match = NONMYOPIC_METHOD_PATTER.fullmatch(method)
     if match is not None:  # rollout/multi-step with MC/GH
-        sampler = match.group(1).upper()
-        fantasies = match.group(2).split(".")[1:]
+        is_bayesian = match.group(1) == "b"
+        sampler = match.group(2).upper()
+        fantasies = match.group(3).split(".")[1:]
         horizon = len(fantasies) + 1
         prefix = "R" if all(f == "1" for f in fantasies) else "MS"
         name = f"{prefix}-{horizon} ({sampler})"
@@ -86,9 +111,12 @@ def official_method_name_and_type(
             type_ = 0 if sampler == "MC" else 1
         else:
             type_ = 2 if sampler == "MC" else 3
+        if is_bayesian:
+            name = "BO-" + name
+            type_ += 4
     else:
         name = method.title()
-        type_ = 4
+        type_ = 8
     if no_spaces:
         name = name.replace(" ", r"\,")
     if for_filename:
@@ -119,7 +147,7 @@ def load_data(
         if exclude:
             df = df[~df[col].apply(lambda s: any(re.search(p, s) for p in exclude))]
 
-    # manually sort problems alphabetically but methods in a custom order
+    # sort problems alphabetically but methods in a custom order
     df.sort_values(
         ["problem", "method"],
         key=lambda s: s if s.name == "problem" else s.map(_sort_method),
