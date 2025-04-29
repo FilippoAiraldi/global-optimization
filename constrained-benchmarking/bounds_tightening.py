@@ -11,7 +11,6 @@ from botorch.test_functions.base import ConstrainedBaseTestProblem
 from scipy.optimize import Bounds, NonlinearConstraint, differential_evolution
 
 from globopt.problems import (
-    NormalizedProblemWrapper,
     get_available_constrained_benchmark_problems,
     get_benchmark_problem,
 )
@@ -20,9 +19,9 @@ BENCHMARK_CONSTRAINED_PROBLEMS = get_available_constrained_benchmark_problems()
 
 
 def evaluate_slack_from_numpy(
-    problem: ConstrainedBaseTestProblem, nc: int, x: np.ndarray
+    problem: ConstrainedBaseTestProblem, x: np.ndarray
 ) -> np.ndarray:
-    return problem.evaluate_slack_true(torch.from_numpy(x)).numpy().reshape(nc)
+    return problem.evaluate_slack_true(torch.from_numpy(x.T)).numpy().T
 
 
 def minimize_ith(i: int, x: np.ndarray) -> float:
@@ -36,10 +35,9 @@ def maximize_ith(i: int, x: np.ndarray) -> float:
 def tighten_bounds(
     problem: ConstrainedBaseTestProblem, rng: np.random.Generator
 ) -> np.ndarray:
-    nc = problem.num_constraints
     bounds = Bounds(*problem.bounds.numpy())
     constraints = NonlinearConstraint(
-        partial(evaluate_slack_from_numpy, problem, nc), 0.0, np.inf
+        partial(evaluate_slack_from_numpy, problem), 0.0, np.inf
     )
 
     def differential_evolution_wrapper(objective: Callable) -> float:
@@ -52,6 +50,7 @@ def tighten_bounds(
             tol=5e-3,
             mutation=(0.8, 1.0),
             constraints=constraints,
+            vectorized=True,
             rng=rng,
         )
         return res.fun
@@ -61,8 +60,6 @@ def tighten_bounds(
     for i in range(dim):
         new_bounds[0, i] = differential_evolution_wrapper(partial(minimize_ith, i))
         new_bounds[1, i] = -differential_evolution_wrapper(partial(maximize_ith, i))
-    if isinstance(problem, NormalizedProblemWrapper):
-        new_bounds = problem.unnormalize(torch.from_numpy(new_bounds)).numpy()
     return new_bounds
 
 
