@@ -52,7 +52,7 @@ def _sort_method(method: str) -> float:
     sampler = match.group(2).upper()
     fantasies = match.group(3).split(".")[1:]
 
-    key = (2.0 if is_bayesian else 1e6 + 2.0)  # just above the corresponding myopic
+    key = 2.0 if is_bayesian else 1e6 + 2.0  # just above the corresponding myopic
     if sampler == "MC":
         key += 0.1
     key += sum(int(f) * 100 for f in fantasies) / len(fantasies)
