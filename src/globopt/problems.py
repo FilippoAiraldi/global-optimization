@@ -616,6 +616,15 @@ class SpeedReducer(_SpeedReducer):
     """Speed reducer design test function with tighetened bounds."""
 
     _optimal_value = 2996.3482
+    _bounds = [
+        (3.45, 3.6),
+        (0.7, 0.75),
+        (17.0, 28.0),
+        (7.3, 8.3),
+        (7.8, 8.3),
+        (3.3, 3.9),
+        (5.25, 5.5),
+    ]
 
     @staticmethod
     def _nonlinear_inequality_constraint0(X: Tensor) -> Tensor:
