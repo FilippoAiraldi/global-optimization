@@ -541,7 +541,8 @@ class PressureVessel(_PressureVessel):
     """Pressure vessel design test function with tighetened bounds."""
 
     num_constraints = 3
-    _optimal_value = 6059.715
+    _optimizers = [(0.768325709391, 0.379783796302, 39.809622248187, 207.225559518596)]
+    _optimal_value = 5868.764836  # from Hedar2006derivfree
     _bounds = [(0.5, 10.0), (0.25, 10.0), (30, 50.0), (150.0, 240.0)]
 
     def __init__(
@@ -562,8 +563,9 @@ class PressureVessel(_PressureVessel):
 class WeldedBeam(_WeldedBeamSO):
     """ "Welded beam design test function with tighetened bounds."""
 
+    _optimizers = [(0.205986, 3.471328, 9.020224, 0.206480)]
     _optimal_value = 1.728226
-    _bounds = [(0.125, 10.0), (0.1, 10.0), (0.1, 10.0), (0.1, 10.0)]
+    _bounds = [(0.125, 2.5), (0.3, 10.0), (2.0, 10.0), (0.1, 3.0)]
 
     def __init__(
         self, *args: Any, dtype: torch.dtype = torch.double, **kwargs: Any

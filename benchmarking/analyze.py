@@ -301,16 +301,18 @@ def itertime_vs_gap(
             "ms": {"ha": "left", "xytext": (5, 5)},
         }
         for method, row in df_.iterrows():
-            if re.fullmatch(r"ms-mc(\.1)+", method):  # rollout with MC sampling
+            if re.fullmatch(r"msbo-mc(\.1)+", method):  # rollout with MC sampling
                 color = "C0"
-            elif re.fullmatch(r"ms-gh(\.1)+", method):  # rollout with GH sampling
+            elif re.fullmatch(r"msbo-gh(\.1)+", method):  # rollout with GH sampling
                 color = "C1"
-            elif method.startswith("ms-mc"):  # multistep with MC sampling
+            elif method.startswith("msgo-mc"):  # multistep with MC sampling
                 color = "C2"
-            elif method.startswith("ms-gh"):  # multistep with GH sampling
+            elif method.startswith("msgo-gh"):  # multistep with GH sampling
                 color = "C3"
-            else:  # myopic strategies
+            elif method.startswith("msbo"):  # Bayesian multistep
                 color = "C4"
+            else:  # myopic strategies
+                color = "C5"
             opt = opts["ms"] if method.startswith("ms") else opts[method.split(".")[0]]
             ax.errorbar(
                 x=row["time"],
