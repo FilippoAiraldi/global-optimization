@@ -11,6 +11,7 @@ from botorch.test_functions.base import ConstrainedBaseTestProblem
 from scipy.optimize import Bounds, NonlinearConstraint, differential_evolution
 
 from globopt.problems import (
+    NormalizedProblemWrapper,
     get_available_constrained_benchmark_problems,
     get_benchmark_problem,
 )
@@ -60,6 +61,8 @@ def tighten_bounds(
     for i in range(dim):
         new_bounds[0, i] = differential_evolution_wrapper(partial(minimize_ith, i))
         new_bounds[1, i] = -differential_evolution_wrapper(partial(maximize_ith, i))
+    if isinstance(problem, NormalizedProblemWrapper):
+        new_bounds = problem.unnormalize(torch.from_numpy(new_bounds)).numpy()
     return new_bounds
 
 

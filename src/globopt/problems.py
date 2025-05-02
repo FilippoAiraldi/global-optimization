@@ -40,6 +40,7 @@ from botorch.test_functions import (
     SixHumpCamel,
     StyblinskiTang,
 )
+from botorch.test_functions.base import BaseTestProblem, ConstrainedBaseTestProblem
 from botorch.test_functions.synthetic import ConstrainedGramacy as _ConstrainedGramacy
 from botorch.test_functions.synthetic import (
     ConstrainedHartmannSmooth as ConstrainedHartmann6,
@@ -419,7 +420,10 @@ setattr(Shekel7, "__name__", Shekel.__name__ + "7")
 
 
 TESTS: dict[
-    str, tuple[type[SyntheticTestFunction], dict[str, Any], int, Literal["rbf", "idw"]]
+    str,
+    tuple[
+        type[SyntheticTestFunction], dict[str, Any], int, Literal["rbf", "idw"], bool
+    ],
 ] = {
     problem.__name__.lower(): (problem, kwargs, max_evals, regressor_type)
     for problem, kwargs, max_evals, regressor_type in [
@@ -685,7 +689,14 @@ class SpeedReducer(_SpeedReducer):
 
 
 CONSTRAINED_TESTS: dict[
-    str, tuple[type[SyntheticTestFunction], dict[str, Any], int, Literal["rbf", "idw"]]
+    str,
+    tuple[
+        type[ConstrainedSyntheticTestFunction],
+        dict[str, Any],
+        int,
+        Literal["rbf", "idw"],
+        bool,
+    ],
 ] = {
     problem.__name__.lower(): (problem, kwargs, max_evals, regressor_type)
     for problem, kwargs, max_evals, regressor_type in [
@@ -736,6 +747,13 @@ def get_problem_constraints_and_ic_generator(
     if getattr(problem, "num_constraints", 0) <= 0:
         return None, None, lambda *_, **__: None
 
+    # if wrapped in a normalization wrapper, get the original problem
+    if isinstance(problem, NormalizedProblemWrapper):
+        norm = problem
+        problem = problem._problem
+    else:
+        norm = None
+
     # get some constants
     bounds = problem.bounds
     lb, ub = bounds
@@ -771,6 +789,23 @@ def get_problem_constraints_and_ic_generator(
             f"Problem {problem.__class__.__name__} has unrecognized constraints."
         )
 
+    # if the problem is normalized, we need to unnormalize the constraints and the
+    # sampling constraint
+    if norm is not None:
+        m = norm._coeff
+        c = norm._offset
+        c_div_m = c / m
+        if lin_ineq_constrs is not None:
+            lin_ineq_constrs = [  # manual unnormalization, i.e., a^t (x - c) / m >= b
+                (indices, a / m, b + a.dot(c_div_m).item())
+                for indices, a, b in lin_ineq_constrs
+            ]
+        if nonlin_ineq_constrs is not None:
+            nonlin_ineq_constrs = [
+                (lambda X: func(norm.unnormalize(X)), intrapoint)
+                for func, intrapoint in nonlin_ineq_constrs
+            ]
+
     # if the problem has at least one nonlinear constraint, we need to sample points
     # via a custom LHS method
     if nonlin_ineq_constrs is None:
@@ -782,9 +817,12 @@ def get_problem_constraints_and_ic_generator(
         return problem.evaluate_slack_true(X).amin((1, 2))
 
     def sampler(num_restart: int, q: int) -> Tensor:
+        # NOTE: lb, ub and the constr. func. live in the original unnormalized space
         samples = latin_hypercube_with_nonlinear_constraint(
             num_restart, q, dim, lb, ub, constraint_func
         ).view(num_restart, q, dim)
+        if norm is not None:
+            samples = norm.normalize(samples)
         return samples
 
     return lin_ineq_constrs, nonlin_ineq_constrs, sampler
@@ -810,6 +848,61 @@ def get_available_constrained_benchmark_problems() -> list[str]:
 ########################################################################################
 
 
+class NormalizedProblemWrapper(BaseTestProblem):
+    """This is a wrapper for the a synthetic problem that normalizes the input to the
+    given range."""
+
+    def __init__(
+        self, problem: BaseTestProblem, bounds: list[tuple[float, float]]
+    ) -> None:
+        self.dim = problem.dim
+        self._bounds = bounds  # must be done before calling super().__init__
+        self._check_grad_at_opt = problem._check_grad_at_opt
+        self._bounds_original = problem._bounds
+        self.bounds_original = problem.bounds
+
+        super().__init__(  # this call also sets `self.bounds`
+            problem.noise_std, problem.negate, problem.bounds.dtype
+        )
+        self._problem = problem  # must be called after Module.__init__
+
+        # prepare coeff and offset for normalization
+        a, b = self.bounds_original
+        c, d = self.bounds
+        m = (d - c) / (b - a)
+        self._coeff = m
+        self._offset = c - m * a
+
+        # finish copying from the original problem
+        if isinstance(problem, SyntheticTestFunction):
+            self._optimal_value = problem._optimal_value
+            self.optimal_value = problem.optimal_value
+            self.num_objectives = problem.num_objectives
+            if hasattr(problem, "_optimizers") and problem._optimizers is not None:
+                optimizers = torch.as_tensor(
+                    problem._optimizers, dtype=m.dtype, device=m.device
+                ).expand(-1, self.dim)
+                normalized_optimizers = self.normalize(optimizers)
+                self._optimizers = [tuple(o) for o in normalized_optimizers.tolist()]
+        if isinstance(problem, ConstrainedBaseTestProblem):
+            self.num_constraints = problem.num_constraints
+            self.constraint_noise_std = problem.constraint_noise_std
+
+    def normalize(self, X: Tensor) -> Tensor:
+        """Normalizes the input from the original search space to the new bounds."""
+        return X * self._coeff + self._offset
+
+    def unnormalize(self, X: Tensor) -> Tensor:
+        """Unnormalizes the input from the new bounds to the original search space."""
+        return (X - self._offset) / self._coeff
+
+    def evaluate_true(self, X: Tensor) -> Tensor:
+        return self._problem.evaluate_true(self.unnormalize(X))
+
+    def evaluate_slack_true(self, X: Tensor) -> Tensor:
+        return self._problem.evaluate_slack_true(self.unnormalize(X))
+
+
 def get_benchmark_problem(
     name: str,
 ) -> tuple[SyntheticTestFunction, int, Literal["rbf", "idw"]]:
@@ -833,5 +926,10 @@ def get_benchmark_problem(
     """
     name_ = name.lower()
     source = TESTS if name_ in TESTS else CONSTRAINED_TESTS
-    cls, kwargs, max_evals, regressor = source[name_]
-    return cls(**kwargs), max_evals, regressor
+    cls, kwargs, max_evals, regressor, normalize = source[name_]
+    problem = cls(**kwargs)
+    if normalize:
+        problem = NormalizedProblemWrapper(
+            problem, [(0.0, 1.0) for _ in range(problem.dim)]
+        )
+    return problem, max_evals, regressor
