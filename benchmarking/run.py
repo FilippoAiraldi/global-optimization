@@ -109,7 +109,7 @@ def run_problem(
     # define method to fit a model
     if method == "ei" or method.startswith("msbo"):
 
-        def get_mdl(X: Tensor, Y: Tensor, _) -> SingleTaskGP:
+        def get_mdl(X: Tensor, Y: Tensor, **_) -> SingleTaskGP:
             Y_ = Y.unsqueeze(-1)
             mdl = SingleTaskGP(
                 X, standardize(Y_), input_transform=Normalize(ndim, bounds=bounds)
@@ -120,19 +120,19 @@ def run_problem(
     elif method.startswith("myopic") or method.startswith("msgo"):
         if regression_type == "rbf":
 
-            def get_mdl(X: Tensor, Y: Tensor, prev_mdl: Optional[Rbf]) -> Rbf:
+            def get_mdl(X: Tensor, Y: Tensor, prev_mdl: Optional[Rbf], **_) -> Rbf:
                 state = None if prev_mdl is None else prev_mdl.state
                 return Rbf(X, Y, eps, init_state=state)
 
         else:  # regression_type == "idw":
 
-            def get_mdl(X: Tensor, Y: Tensor, _) -> Idw:
+            def get_mdl(X: Tensor, Y: Tensor, **_) -> Idw:
                 return Idw(X, Y)
 
     # define acquisition function optimizers
     if method == "random":
 
-        def next_obs(*_, **__) -> tuple[Tensor, None, None]:
+        def next_obs(**_) -> tuple[Tensor, None, None]:
             X_opt = (
                 ic_generator(1, 1).view(1, ndim)
                 if has_nonlinear_ineq_constr
@@ -142,10 +142,8 @@ def run_problem(
 
     elif method == "ei":
 
-        def next_obs(
-            X: Tensor, Y: Tensor, *_, **__
-        ) -> tuple[Tensor, None, SingleTaskGP]:
-            mdl = get_mdl(X, Y, _)
+        def next_obs(X: Tensor, Y: Tensor, **_) -> tuple[Tensor, None, SingleTaskGP]:
+            mdl = get_mdl(X=X, Y=Y)
             acqfun = LogExpectedImprovement(mdl, Y.amin(), maximize=False)
             X_opt, _ = optimize_acqf(
                 acqfun,
@@ -164,9 +162,9 @@ def run_problem(
         if method == "myopic":
 
             def next_obs(
-                X: Tensor, Y: Tensor, prev_mdl: Union[None, Idw, Rbf], *_, **__
+                X: Tensor, Y: Tensor, prev_mdl: Union[None, Idw, Rbf], **_
             ) -> tuple[Tensor, None, Union[Idw, Rbf]]:
-                mdl = get_mdl(X, Y, prev_mdl)
+                mdl = get_mdl(X=X, Y=Y, prev_mdl=prev_mdl)
                 acqfun = IdwAcquisitionFunction(mdl, c1, c2)
                 X_opt, _ = optimize_acqf(
                     acqfun,
@@ -185,9 +183,9 @@ def run_problem(
             gh_sampler = GaussHermiteSampler(sample_shape=torch.Size([16]))
 
             def next_obs(
-                X: Tensor, Y: Tensor, prev_mdl: Union[None, Idw, Rbf], *_, **__
+                X: Tensor, Y: Tensor, prev_mdl: Union[None, Idw, Rbf], **_
             ) -> tuple[Tensor, None, Union[Idw, Rbf]]:
-                mdl = get_mdl(X, Y, prev_mdl)
+                mdl = get_mdl(X=X, Y=Y, prev_mdl=prev_mdl)
                 acqfun = qIdwAcquisitionFunction(mdl, c1, c2, sampler=gh_sampler)
                 X_opt, _ = optimize_acqf(
                     acqfun,
@@ -232,10 +230,10 @@ def run_problem(
                 Y: Tensor,
                 prev_mdl: Union[None, Idw, Rbf],
                 prev_full_opt: Optional[Tensor],
-                budget: int,
+                iteration: int,
             ) -> tuple[Tensor, Optional[Tensor], Union[Idw, Rbf]]:
-                mdl = get_mdl(X, Y, prev_mdl)
-                h = min(horizon, budget)
+                mdl = get_mdl(X=X, Y=Y, prev_mdl=prev_mdl)
+                h = min(horizon, maxiter - iteration)
                 if h == 1:
                     kwargs = kwargs_factory(mdl, X)
                     if valfunc_sampler is not None:
@@ -303,7 +301,13 @@ def run_problem(
         for iteration in range(maxiter):
             # fit model and optimize acquisition to get the next point to sample
             start_time = perf_counter()
-            obs_opt, full_opt, mdl = next_obs(X, Y, mdl, full_opt, maxiter - iteration)
+            obs_opt, full_opt, mdl = next_obs(
+                X=X,
+                Y=Y,
+                prev_mdl=mdl,
+                prev_full_opt=full_opt,
+                iteration=iteration,
+            )
             timings.append(perf_counter() - start_time)
 
             # evaluate objective function at new point, and append it to training data
