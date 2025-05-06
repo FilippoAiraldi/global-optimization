@@ -8,7 +8,6 @@ References
     functions. Computational Optimization and Applications, 77(2):571–595, 2020
 """
 
-import os
 from typing import Any, Optional, Union
 
 import torch
@@ -19,35 +18,10 @@ from linear_operator.operators import DiagLinearOperator
 from torch import Tensor
 from torch.nn import Module
 
-RUNNING_TESTS = int(os.environ.get("RUNNING_TESTS", "0"))
-
 DELTA = 1e-12
 """Small value to avoid division by zero."""
 
 
-def trace(*args: Any, **kwargs: Any):
-    """Applies `torch.jit.trace` to the decorated function."""
-
-    def _inner_decorator(func):
-        if RUNNING_TESTS:
-            return func
-        return torch.jit.trace(func, *args, **kwargs)
-
-    return _inner_decorator
-
-
-def script(*args: Any, **kwargs: Any):
-    """Applies `torch.jit.script` to the decorated function."""
-
-    def _inner_decorator(func):
-        if RUNNING_TESTS:
-            return func
-        return torch.jit.script(func, *args, **kwargs)
-
-    return _inner_decorator
-
-
-@trace((torch.rand(5, 4, 1), torch.rand(5, 3, 1), torch.rand(5, 4, 3)))
 def _idw_scale(Y: Tensor, train_Y: Tensor, V: Tensor) -> Tensor:
     """Computes the IDW standard deviation function.
 
@@ -69,7 +43,6 @@ def _idw_scale(Y: Tensor, train_Y: Tensor, V: Tensor) -> Tensor:
     return torch.linalg.vector_norm(scaled_diff, dim=-1, keepdim=True)
 
 
-@trace((torch.rand(5, 4, 3), torch.rand(5, 4, 1), torch.rand(5, 7, 3)))
 def _idw_predict(
     train_X: Tensor, train_Y: Tensor, X: Tensor
 ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
@@ -82,7 +55,14 @@ def _idw_predict(
     return mean, std, W_sum_recipr, V
 
 
-@trace((torch.rand(5, 4, 3), torch.rand(5, 7, 3), torch.rand(())))
+_idw_scale_jit = torch.jit.trace(
+    _idw_scale, (torch.rand(5, 4, 1), torch.rand(5, 3, 1), torch.rand(5, 4, 3))
+)
+_idw_predict_jit = torch.jit.trace(
+    _idw_predict, (torch.rand(5, 4, 3), torch.rand(5, 4, 1), torch.rand(5, 7, 3))
+)
+
+
 def _cdist_and_inverse_quadratic_kernel(
     X: Tensor, Xother: Tensor, eps: Tensor
 ) -> tuple[Tensor, Tensor]:
@@ -93,7 +73,12 @@ def _cdist_and_inverse_quadratic_kernel(
     return cdist, kernel
 
 
-@trace((torch.rand(5, 4, 3), torch.rand(5, 4, 1), torch.rand(()), torch.rand(())))
+_cdist_and_inverse_quadratic_kernel_jit = torch.jit.trace(
+    _cdist_and_inverse_quadratic_kernel,
+    (torch.rand(5, 4, 3), torch.rand(5, 7, 3), torch.rand(())),
+)
+
+
 def _rbf_fit(
     X: Tensor, Y: Tensor, eps: Tensor, svd_tol: Tensor
 ) -> tuple[Tensor, Tensor]:
@@ -106,25 +91,13 @@ def _rbf_fit(
     return Minv, coeffs
 
 
-@script(  # unable to trace this one
-    example_inputs=[
-        (
-            torch.rand(5, 4, 3),
-            torch.rand(5, 4, 1),
-            torch.rand(()),
-            torch.rand(()),
-            torch.rand(5, 2, 2),
-            torch.rand(5, 2, 1),
-        )
-    ]
-)
 def _rbf_partial_fit(
     X: Tensor, Y: Tensor, eps: Tensor, svd_tol: Tensor, Minv: Tensor, coeffs: Tensor
 ) -> tuple[Tensor, Tensor]:
     """Fits the given RBF regression to the new training data."""
     n = coeffs.shape[-2]  # index of the first new data point onwards
     X_new = X[..., n:, :]
-    _, Phi_and_phi = _cdist_and_inverse_quadratic_kernel(X_new, X, eps)
+    _, Phi_and_phi = _cdist_and_inverse_quadratic_kernel_jit(X_new, X, eps)
     PhiT = Phi_and_phi[..., :n]
     phi = Phi_and_phi[..., n:]
 
@@ -161,7 +134,7 @@ def _rbf_partial_fit(
         # full inversion
         not_mask = ~mask
         X_old_nm = X[..., :n, :][not_mask, :, :]
-        _, M = _cdist_and_inverse_quadratic_kernel(X_old_nm, X_old_nm, eps)
+        _, M = _cdist_and_inverse_quadratic_kernel_jit(X_old_nm, X_old_nm, eps)
         M_new = torch.cat(
             (torch.cat((M, Phi[not_mask, :, :]), -1), Phi_and_phi[not_mask, :, :]), -2
         )
@@ -174,15 +147,6 @@ def _rbf_partial_fit(
     return Minv_new, coeffs_new
 
 
-@trace(
-    (
-        torch.rand(5, 4, 3),
-        torch.rand(5, 4, 1),
-        torch.rand(()),
-        torch.rand(5, 4, 1),
-        torch.rand(5, 3, 3),
-    )
-)
 def _rbf_predict(
     train_X: Tensor, train_Y: Tensor, eps: Tensor, coeffs: Tensor, X: Tensor
 ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
@@ -194,6 +158,34 @@ def _rbf_predict(
     V = W * W_sum_recipr
     std = _idw_scale(mean, train_Y, V)
     return mean, std, W_sum_recipr, V
+
+
+_rbf_fit_jit = torch.jit.trace(
+    _rbf_fit, (torch.rand(5, 4, 3), torch.rand(5, 4, 1), torch.rand(()), torch.rand(()))
+)
+_rbf_partial_fit_jit = torch.jit.script(
+    _rbf_partial_fit,
+    example_inputs=[
+        (
+            torch.rand(5, 4, 3),
+            torch.rand(5, 4, 1),
+            torch.rand(()),
+            torch.rand(()),
+            torch.rand(5, 2, 2),
+            torch.rand(5, 2, 1),
+        )
+    ],
+)
+_rbf_predict_jit = torch.jit.trace(
+    _rbf_predict,
+    (
+        torch.rand(5, 4, 3),
+        torch.rand(5, 4, 1),
+        torch.rand(()),
+        torch.rand(5, 4, 1),
+        torch.rand(5, 3, 3),
+    ),
+)
 
 
 class BaseRegression(Model, FantasizeMixin):
@@ -287,7 +279,7 @@ class Idw(BaseRegression):
                 - the normalized IDW weights `(b0 x b1 x ...) x n x m`, where `m` are
                   the number of training points.
         """
-        return _idw_predict(self.train_X, self.train_Y, X)
+        return _idw_predict_jit(self.train_X, self.train_Y, X)
 
     def condition_on_observations(self, X: Tensor, Y: Tensor, **_: Any) -> "Idw":
         train_X, train_Y = self._prepare_for_fantasizing(X, Y)
@@ -336,9 +328,9 @@ class Rbf(BaseRegression):
         eps = torch.scalar_tensor(eps)
         svd_tol = torch.scalar_tensor(svd_tol)
         if init_state is None:
-            Minv, coeffs = _rbf_fit(self.train_X, self.train_Y, eps, svd_tol)
+            Minv, coeffs = _rbf_fit_jit(self.train_X, self.train_Y, eps, svd_tol)
         else:
-            Minv, coeffs = _rbf_partial_fit(
+            Minv, coeffs = _rbf_partial_fit_jit(
                 self.train_X, self.train_Y, eps, svd_tol, *init_state
             )
         self.register_buffer("eps", eps)
@@ -373,7 +365,7 @@ class Rbf(BaseRegression):
                 - the normalized IDW weights `(b0 x b1 x ...) x n x m`, where `m` are
                   the number of training points.
         """
-        return _rbf_predict(self.train_X, self.train_Y, self.eps, self.coeffs, X)
+        return _rbf_predict_jit(self.train_X, self.train_Y, self.eps, self.coeffs, X)
 
     def condition_on_observations(self, X: Tensor, Y: Tensor, **_: Any) -> "Rbf":
         train_X, train_Y = self._prepare_for_fantasizing(X, Y)

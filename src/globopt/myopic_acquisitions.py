@@ -17,10 +17,9 @@ from botorch.sampling.base import MCSampler
 from botorch.utils import t_batch_mode_transform
 from torch import Tensor
 
-from globopt.regression import Idw, Rbf, _idw_scale, trace
+from globopt.regression import Idw, Rbf, _idw_scale_jit
 
 
-@trace(torch.rand(2, 3, 4, 1))
 def _idw_distance(W_sum_recipr: Tensor) -> Tensor:
     """Computes the IDW distance function.
 
@@ -39,16 +38,6 @@ def _idw_distance(W_sum_recipr: Tensor) -> Tensor:
     return (2 / torch.pi) * W_sum_recipr.arctan()
 
 
-@trace(
-    (
-        torch.rand(2, 3, 4, 1),
-        torch.rand(2, 3, 4, 1),
-        torch.rand(2, 3, 1, 1),
-        torch.rand(2, 3, 4, 1),
-        torch.rand(()),
-        torch.rand(()),
-    )
-)
 def idw_acquisition_function(
     Y_hat: Tensor,
     Y_std: Tensor,
@@ -85,6 +74,19 @@ def idw_acquisition_function(
     """
     distance = _idw_distance(W_sum_recipr)
     return c1 * Y_std + c2 * Y_span * distance - Y_hat
+
+
+idw_acquisition_function_jit = torch.jit.trace(
+    idw_acquisition_function,
+    (
+        torch.rand(2, 3, 4, 1),
+        torch.rand(2, 3, 4, 1),
+        torch.rand(2, 3, 1, 1),
+        torch.rand(2, 3, 4, 1),
+        torch.rand(()),
+        torch.rand(()),
+    ),
+)
 
 
 class IdwAcquisitionFunction(AnalyticAcquisitionFunction):
@@ -143,7 +145,7 @@ class IdwAcquisitionFunction(AnalyticAcquisitionFunction):
     def forward(self, X: Tensor) -> Tensor:
         # input of this forward is `b x 1 x d`, and output `b`
         posterior = self.model.posterior(X)
-        return idw_acquisition_function(
+        return idw_acquisition_function_jit(
             posterior.mean,  # `b x 1 x 1`
             posterior._scale,  # `b x 1 x 1`
             self.span_Y,  # `1 x 1 x 1` or `1 x 1`
@@ -197,9 +199,7 @@ class qIdwAcquisitionFunction(MCAcquisitionFunction):
             contribution is null).
         """
         super().__init__(model, sampler)
-        # Y_min, Y_max = model.train_Y.aminmax(dim=-2, keepdim=True)
-        Y_min = model.train_Y.amin(dim=-2, keepdim=True)
-        Y_max = model.train_Y.amax(dim=-2, keepdim=True)
+        Y_min, Y_max = model.train_Y.aminmax(dim=-2, keepdim=True)
         self.register_buffer("span_Y", (Y_max - Y_min).clamp_min(span_Y_min))
         self.register_buffer("c1", torch.scalar_tensor(c1))
         self.register_buffer("c2", torch.scalar_tensor(c2))
@@ -220,11 +220,11 @@ class qIdwAcquisitionFunction(MCAcquisitionFunction):
         posterior = mdl.posterior(X)
 
         samples = self.get_posterior_samples(posterior)
-        scale = _idw_scale(samples, mdl.train_Y, posterior._V)
+        scale = _idw_scale_jit(samples, mdl.train_Y, posterior._V)
         if hasattr(sampler, "base_weights") and sampler.base_weights is not None:
             scale = sampler.base_weights.unsqueeze(-1).mul(scale).sum(0, keepdim=True)
 
-        acqvals = idw_acquisition_function(
+        acqvals = idw_acquisition_function_jit(
             posterior.mean,  # `b x q x 1`
             scale,  # `n_samples x b x q x 1` or `1 x b x q x 1` for GH quadrature
             self.span_Y,  # `b x 1 x 1` or # `1 x 1`

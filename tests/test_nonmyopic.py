@@ -3,16 +3,18 @@ import unittest
 import torch
 from botorch.acquisition import ExpectedImprovement, qExpectedImprovement
 
-from globopt import GaussHermiteSampler, Ms, Rbf, make_idw_acq_factory
+from globopt import GaussHermiteSampler, Ms, Rbf, make_idw_acq_arg_factory
 from globopt.problems import SimpleProblem
 
 
 class TestNonMyopicAcquisitionFunction(unittest.TestCase):
     def test_make_idw_acq_factory(self):
         c1, c2, span_Y_min = 1.0, 0.5, 1e-3
-        factory = make_idw_acq_factory(c1, c2, span_Y_min)
+        factory = make_idw_acq_arg_factory(c1, c2, span_Y_min)
         self.assertTrue(callable(factory))
-        self.assertDictEqual(factory(), {"c1": c1, "c2": c2, "span_Y_min": span_Y_min})
+        self.assertDictEqual(
+            factory(object(), object()), {"c1": c1, "c2": c2, "span_Y_min": span_Y_min}
+        )
 
     def test_init__overrides_default_samplers__with_base_MC_acq_func(self):
         problem = SimpleProblem()

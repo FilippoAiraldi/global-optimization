@@ -9,7 +9,7 @@ from globopt import (
     Rbf,
     qIdwAcquisitionFunction,
 )
-from globopt.myopic_acquisitions import _idw_distance, idw_acquisition_function
+from globopt.myopic_acquisitions import _idw_distance, idw_acquisition_function_jit
 from globopt.problems import SimpleProblem
 
 with open(r"tests/data_test_myopic.pkl", "rb") as f:
@@ -33,7 +33,7 @@ class TestAcquisitionFunction(unittest.TestCase):
         y_hat, scale, W_sum_recipr, _ = mdl(x)
         dym = Y.amax(-2) - Y.amin(-2)
         dist = _idw_distance(W_sum_recipr)
-        acqfun2 = idw_acquisition_function(
+        acqfun2 = idw_acquisition_function_jit(
             y_hat, scale, dym, W_sum_recipr, MAF.c1, MAF.c2
         )
 
