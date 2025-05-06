@@ -8,15 +8,22 @@ References
     functions. Computational Optimization and Applications, 77(2):571–595, 2020
 """
 
+from math import exp, sqrt
 from typing import Any, Optional, Union
 
+import numpy as np
 import torch
 from botorch.models.model import FantasizeMixin, Model
 from botorch.posteriors import GPyTorchPosterior
 from gpytorch.distributions import MultivariateNormal
 from linear_operator.operators import DiagLinearOperator
+from scipy.stats import lognorm
+from sklearn.model_selection import KFold
 from torch import Tensor
 from torch.nn import Module
+
+HALF_EXP_MINUS_2SQRT2 = exp(-2 * sqrt(2)) / 2
+TWICESQRT3 = sqrt(3) * 2
 
 DELTA = 1e-12
 """Small value to avoid division by zero."""
@@ -296,9 +303,10 @@ class Rbf(BaseRegression):
         self,
         train_X: Tensor,
         train_Y: Tensor,
-        eps: Union[float, Tensor] = 1.0,
+        eps: Union[None, float, Tensor] = None,
         svd_tol: Union[float, Tensor] = 1e-8,
         init_state: Optional[tuple[Tensor, Tensor]] = None,
+        rng: Optional[np.random.Generator] = None,
     ) -> None:
         """Instantiates an RBF regression model for Global Optimization.
 
@@ -312,7 +320,8 @@ class Rbf(BaseRegression):
             A `(b0 x b1 x ...) x m x 1` tensor of evaluation corresponding to the
             `train_X` points.
         eps : float, optional
-            Distance-scaling parameter for the RBF kernel, by default `1.0`.
+            Distance-scaling parameter for the RBF kernel. If `None`, its value is
+            automatically determined via cross-validation. By default `None`.
         svd_tol : float, optional
             Tolerance for singular value decomposition for inversion, by default `1e-8`.
         init_state : tuple of 3 Tensors, optional
@@ -323,11 +332,33 @@ class Rbf(BaseRegression):
                 - `coeffs (b0 x b1 x ...) x m' x 1`
             where `m'` are the number of training points in the previous fitting.
             By default `None`, in which case the model is fit anew to the training data.
+            This initial state is also disregarded if `eps` is `None`.
+        rng : int or RandomState, optional
+            Random state for the cross-validation, by default `None`.
+
+        Raises
+        ------
+        ValueError
+            If `eps` is `None` and the model is not fit to a single batch of data, i.e.,
+            `train_X` has more than `2` dimensions.
         """
         super().__init__(train_X, train_Y)
-        eps = torch.scalar_tensor(eps)
         svd_tol = torch.scalar_tensor(svd_tol)
-        if init_state is None:
+        use_cv = eps is None
+        if use_cv:
+            # when fantasizing, avoid performing cross-validation
+            if self.train_X.ndim != 2:
+                raise ValueError(
+                    "Cannot fit `eps` via cross-validation when fitting a model with "
+                    "multiple batches."
+                )
+            eps = self.eps_cross_validation(
+                self.train_X, self.train_Y, svd_tol, rng=rng
+            )
+        eps = torch.scalar_tensor(eps)
+        if use_cv or init_state is None:
+            # if eps was tuned via CV, we must fit the model from scratch as the
+            # previous state was most likely fitted with a different eps
             Minv, coeffs = _rbf_fit_jit(self.train_X, self.train_Y, eps, svd_tol)
         else:
             Minv, coeffs = _rbf_partial_fit_jit(
@@ -375,3 +406,77 @@ class Rbf(BaseRegression):
 
     def __str__(self) -> str:
         return f"{self.__class__.__name__}(eps={self.eps})"
+
+    @staticmethod
+    def eps_cross_validation(
+        X: Tensor,
+        Y: Tensor,
+        svd_tol: Tensor,
+        n_iter: int = 20,
+        max_n_splits: int = 5,
+        rng: Optional[np.random.Generator] = None,
+    ) -> float:
+        """Computes the optimal `eps` parameter for the RBF kernel via cross-validation.
+        This is done by sampling `eps` from a log-normal distribution and selecting the
+        one that minimizes the prediction error on a test set.
+
+        Parameters
+        ----------
+        X : Tensor
+            The training data points of shape `m x d`, where `m` is the number of
+            training points and `d` is the dimension of each point.
+        Y : Tensor
+            The training data values of shape `m x 1`.
+        svd_tol : Tensor
+            Tolerance for singular value decomposition for inversion.
+        n_iter : int, optional
+            Number of iterations for the random cross-validation, by default `20`.
+        max_n_splits : int, optional
+            Maximum number of splits for the cross-validation, by default `5`.
+        rng : np.random.Generator, optional
+            Random state for the cross-validation, by default `None`.
+
+        Returns
+        -------
+        float
+            The optimal `eps` parameter for the RBF kernel.
+        """
+        n_samples, dim = X.shape
+        n_splits = min(max_n_splits, n_samples)
+
+        eps_dist = lognorm(s=TWICESQRT3, scale=HALF_EXP_MINUS_2SQRT2 / dim, loc=1e-3)
+        eps_samples = torch.as_tensor(
+            eps_dist.rvs(size=n_iter, random_state=rng), dtype=X.dtype, device=X.device
+        )
+
+        splitter = KFold(n_splits=n_splits)
+        if n_samples % n_splits != 0:
+            # we cannot vectorize cross-validation computations, so we use a for loop
+            scores = torch.zeros((n_iter,), dtype=X.dtype, device=X.device)
+            for train_idx, test_idx in splitter.split(X, Y):
+                X_train = X[train_idx]
+                Y_train = Y[train_idx]
+                X_test = X[test_idx]
+                Y_test = Y[test_idx]
+                _, coeffs = _rbf_fit(X_train, Y_train, eps_samples, svd_tol)
+                Y_pred, _, _, _ = _rbf_predict(
+                    X_train, Y_train, eps_samples, coeffs, X_test
+                )
+                scores += (Y_test - Y_pred).square().sum(dim=(-1, -2))
+        else:
+            # we can vectorize here instead
+            train_idx_, test_idx_ = zip(*splitter.split(X, Y))
+            train_idx = np.asarray(train_idx_)
+            test_idx = np.asarray(test_idx_)
+            X_train = X[train_idx]
+            Y_train = Y[train_idx]
+            X_test = X[test_idx]
+            Y_test = Y[test_idx]
+            eps_samples_ = eps_samples.unsqueeze(-1)
+            _, coeffs = _rbf_fit(X_train, Y_train, eps_samples_, svd_tol)
+            Y_pred, _, _, _ = _rbf_predict(
+                X_train, Y_train, eps_samples_, coeffs, X_test
+            )
+            scores = (Y_test - Y_pred).square().sum(dim=(-1, -2, -3))
+
+        return eps_samples[scores.argmin()].item()

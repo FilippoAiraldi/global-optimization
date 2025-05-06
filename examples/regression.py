@@ -15,6 +15,7 @@ from typing import Union
 
 import matplotlib.pyplot as plt
 import torch
+from numpy.random import default_rng
 
 from globopt import Idw, Rbf
 from globopt.problems import SimpleProblem
@@ -38,6 +39,7 @@ mdls: list[Union[Idw, Rbf]] = [
     Idw(train_X[:n], train_Y[:n]),
     Rbf(train_X[:n], train_Y[:n], eps=0.5),
     Rbf(train_X[:n], train_Y[:n], eps=2.0),
+    Rbf(train_X[:n], train_Y[:n], rng=default_rng(0)),
 ]
 
 # to partially fit new data, use the `fantasize` method, or manually pass the new
