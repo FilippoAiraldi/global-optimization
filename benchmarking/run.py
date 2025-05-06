@@ -79,7 +79,6 @@ def run_problem(
         n_init = ndim * 2
     c1 = torch.scalar_tensor(1.0 / ndim)
     c2 = torch.scalar_tensor(0.5 / ndim)
-    eps = torch.scalar_tensor(1.0 / ndim)
     n_restarts = 10 * ndim
     raw_samples = max(n_restarts, 512)
     bounds: Tensor = problem.bounds
@@ -120,9 +119,17 @@ def run_problem(
     elif method.startswith("myopic") or method.startswith("msgo"):
         if regression_type == "rbf":
 
-            def get_mdl(X: Tensor, Y: Tensor, prev_mdl: Optional[Rbf], **_) -> Rbf:
-                state = None if prev_mdl is None else prev_mdl.state
-                return Rbf(X, Y, eps, init_state=state)
+            def get_mdl(
+                X: Tensor, Y: Tensor, prev_mdl: Optional[Rbf], iter: int, **_
+            ) -> Rbf:
+                # every 10 iterations, we find the optimal eps via CV; otherwise, we use
+                # the previous model's state to initialize the new model
+                if prev_mdl is None or iter % 10 == 0:
+                    init_state = eps = None
+                else:
+                    init_state = prev_mdl.state
+                    eps = None
+                return Rbf(X, Y, eps=eps, init_state=init_state)
 
         else:  # regression_type == "idw":
 
@@ -162,9 +169,9 @@ def run_problem(
         if method == "myopic":
 
             def next_obs(
-                X: Tensor, Y: Tensor, prev_mdl: Union[None, Idw, Rbf], **_
+                X: Tensor, Y: Tensor, prev_mdl: Union[None, Idw, Rbf], iter: int, **_
             ) -> tuple[Tensor, None, Union[Idw, Rbf]]:
-                mdl = get_mdl(X=X, Y=Y, prev_mdl=prev_mdl)
+                mdl = get_mdl(X=X, Y=Y, prev_mdl=prev_mdl, iter=iter)
                 acqfun = IdwAcquisitionFunction(mdl, c1, c2)
                 X_opt, _ = optimize_acqf(
                     acqfun,
@@ -183,9 +190,9 @@ def run_problem(
             gh_sampler = GaussHermiteSampler(sample_shape=torch.Size([16]))
 
             def next_obs(
-                X: Tensor, Y: Tensor, prev_mdl: Union[None, Idw, Rbf], **_
+                X: Tensor, Y: Tensor, prev_mdl: Union[None, Idw, Rbf], iter: int, **_
             ) -> tuple[Tensor, None, Union[Idw, Rbf]]:
-                mdl = get_mdl(X=X, Y=Y, prev_mdl=prev_mdl)
+                mdl = get_mdl(X=X, Y=Y, prev_mdl=prev_mdl, iter=iter)
                 acqfun = qIdwAcquisitionFunction(mdl, c1, c2, sampler=gh_sampler)
                 X_opt, _ = optimize_acqf(
                     acqfun,
@@ -230,10 +237,10 @@ def run_problem(
                 Y: Tensor,
                 prev_mdl: Union[None, Idw, Rbf],
                 prev_full_opt: Optional[Tensor],
-                iteration: int,
+                iter: int,
             ) -> tuple[Tensor, Optional[Tensor], Union[Idw, Rbf]]:
-                mdl = get_mdl(X=X, Y=Y, prev_mdl=prev_mdl)
-                h = min(horizon, maxiter - iteration)
+                mdl = get_mdl(X=X, Y=Y, prev_mdl=prev_mdl, iter=iter)
+                h = min(horizon, maxiter - iter)
                 if h == 1:
                     kwargs = kwargs_factory(mdl, X)
                     if valfunc_sampler is not None:
@@ -298,15 +305,11 @@ def run_problem(
     bests: list[float] = [Y.amin().item()]
     timings: list[float] = []
     try:
-        for iteration in range(maxiter):
+        for i in range(maxiter):
             # fit model and optimize acquisition to get the next point to sample
             start_time = perf_counter()
             obs_opt, full_opt, mdl = next_obs(
-                X=X,
-                Y=Y,
-                prev_mdl=mdl,
-                prev_full_opt=full_opt,
-                iteration=iteration,
+                X=X, Y=Y, prev_mdl=mdl, prev_full_opt=full_opt, iter=i
             )
             timings.append(perf_counter() - start_time)
 

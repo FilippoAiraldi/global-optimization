@@ -99,7 +99,7 @@ def _rbf_fit(
 
 
 def _rbf_partial_fit(
-    X: Tensor, Y: Tensor, eps: Tensor, svd_tol: Tensor, Minv: Tensor, coeffs: Tensor
+    X: Tensor, Y: Tensor, Minv: Tensor, coeffs: Tensor, eps: Tensor, svd_tol: Tensor
 ) -> tuple[Tensor, Tensor]:
     """Fits the given RBF regression to the new training data.
 
@@ -298,18 +298,21 @@ class Rbf(BaseRegression):
         points.
     eps : float, optional
         Distance-scaling parameter for the RBF kernel. If `None`, its value is
-        automatically determined via cross-validation. By default `None`.
-    svd_tol : float, optional
-        Tolerance for singular value decomposition for inversion, by default `1e-8`.
+        automatically determined via cross-validation, unless `init_state` is provided
+        at which point `eps` is taken from there. By default `None`.
     init_state : tuple of 3 Tensors, optional
         Initial state of the regressor, in case of previous partial fitting, made up of
-        the inverse of previous kernel distance matrix and the RBF coefficients. This is
-        a tuple of
+        the inverse of previous kernel distance matrix, the RBF coefficients, and the
+        distance scaling parameter `eps` for which these were computed. This is a tuple
+        of
             - `Minv (b0 x b1 x ...) x m' x m'`
             - `coeffs (b0 x b1 x ...) x m' x 1`
+            - `eps` (scalar)
         where `m'` are the number of training points in the previous fitting. By default
         `None`, in which case the model is fit anew to the training data. This initial
         state is also disregarded if `eps` is `None`.
+    svd_tol : float, optional
+        Tolerance for singular value decomposition for inversion, by default `1e-8`.
     rng : int or RandomState, optional
         Random state for the cross-validation, by default `None`.
 
@@ -317,7 +320,8 @@ class Rbf(BaseRegression):
     ------
     ValueError
         If `eps` is `None` and the model is not fit to a single batch of data, i.e.,
-        `train_X` has more than `2` dimensions.
+        `train_X` has more than `2` dimensions; if `eps` is not `None` and `init_state`
+        is not `None` (unclear which `eps` to use)
     """
 
     def __init__(
@@ -325,32 +329,41 @@ class Rbf(BaseRegression):
         train_X: Tensor,
         train_Y: Tensor,
         eps: Union[None, float, Tensor] = None,
+        init_state: Optional[tuple[Tensor, Tensor, Tensor]] = None,
         svd_tol: Union[float, Tensor] = 1e-8,
-        init_state: Optional[tuple[Tensor, Tensor]] = None,
         rng: Optional[np.random.Generator] = None,
     ) -> None:
         super().__init__(train_X, train_Y)
+
         svd_tol = torch.scalar_tensor(svd_tol)
-        use_cv = eps is None
-        if use_cv:
-            # when fantasizing, avoid performing cross-validation
-            if self.train_X.ndim != 2:
-                raise ValueError(
-                    "Cannot fit `eps` via cross-validation when fitting a model with "
-                    "multiple batches."
+
+        if init_state is None:
+            # no initial state provided, so we need to fit the model from scratch
+            if eps is None:
+                # find optimal eps via cross-validation
+                eps = 1.0
+                if self.train_X.ndim != 2:
+                    raise ValueError(
+                        "Cannot find `eps` via cross-validation when fitting a model "
+                        "with multiple batches."
+                    )
+                eps = self.eps_cross_validation(
+                    self.train_X, self.train_Y, svd_tol, rng=rng
                 )
-            eps = self.eps_cross_validation(
-                self.train_X, self.train_Y, svd_tol, rng=rng
-            )
-        eps = torch.scalar_tensor(eps)
-        if use_cv or init_state is None:
-            # if eps was tuned via CV, we must fit the model from scratch as the
-            # previous state was most likely fitted with a different eps
+            eps = torch.scalar_tensor(eps)
             Minv, coeffs = _rbf_fit_jit(self.train_X, self.train_Y, eps, svd_tol)
         else:
+            # initial state provided, so we can partially fit the new model
+            if eps is not None:
+                raise ValueError(
+                    "Cannot provide `eps` and `init_state` at the same time, since the "
+                    "state already contains an `eps`. Please provide only one of them."
+                )
+            Minv_prev, coeffs_prev, eps = init_state
             Minv, coeffs = _rbf_partial_fit(
-                self.train_X, self.train_Y, eps, svd_tol, *init_state
+                self.train_X, self.train_Y, Minv_prev, coeffs_prev, eps, svd_tol
             )
+
         self.register_buffer("eps", eps)
         self.register_buffer("svd_tol", svd_tol)
         self.register_buffer("Minv", Minv)
@@ -358,10 +371,11 @@ class Rbf(BaseRegression):
         self.to(train_X)
 
     @property
-    def state(self) -> tuple[Tensor, Tensor]:
-        """State of a fitted RBF regressor, i.e., the inverse of the kernel matrix and
-        coefficients. Use this to partially fit a new regressor (see `__init__`)"""
-        return self.Minv, self.coeffs
+    def state(self) -> tuple[Tensor, Tensor, Tensor]:
+        """State of a fitted RBF regressor, i.e., the inverse of the kernel matrix, the
+        coefficients and distance scaling parameter. Use this to partially fit a new
+        regressor (see `__init__`)"""
+        return self.Minv, self.coeffs, self.eps
 
     def forward(self, X: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         """Computes the RBF regression model.
