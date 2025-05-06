@@ -1,20 +1,21 @@
+"""
+Analysis and visualization and summary of results of benchmarking of myopic and
+non-myopic Global Optimization strategies on the data-driven MPC tuning problem.
+"""
+
 import os
 import sys
+from pathlib import Path
 from typing import Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from tune import (
-    INIT_ITER,
-    MAX_ITER,
-    PROBLEM_NAME,
-    TIME_STEPS,
-    CstrEnv,
-    setup_mpc_tuning,
-)
 
-sys.path.append(os.getcwd())
+repo_dir = Path(__file__).resolve().parents[1]
+sys.path.extend((str(repo_dir), str(repo_dir / "mpc-tuning")))
+
+from run import INIT_ITER, MAX_ITER, PROBLEM_NAME, TIME_STEPS, CstrEnv, setup_mpc_tuning
 
 from benchmarking.analyze import (
     itertime_vs_gap,

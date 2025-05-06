@@ -421,7 +421,13 @@ def setup_mpc_tuning() -> None:
     from globopt.problems import TESTS
 
     if PROBLEM_NAME not in TESTS:
-        TESTS[PROBLEM_NAME] = (CstrMpcControllerTuning, {}, MAX_ITER, REGRESSION_TYPE)
+        TESTS[PROBLEM_NAME] = (
+            CstrMpcControllerTuning,
+            {},
+            MAX_ITER,
+            REGRESSION_TYPE,
+            False,
+        )
 
 
 def save_callback(problem: CstrMpcControllerTuning) -> str:

@@ -262,7 +262,7 @@ You can monitor the progress of the simulation with the same `benchmarking/statu
 script as before. To analyze the results obtained by us, run
 
 ```bash
-python mpc-tuning/analyze.py mpc-tuning/results.csv {--summary,--plot,--pgfplotstables} --include-methods myopic ms-gh.1.1.1$ ms-gh.10.5
+python mpc-tuning/analyze.py mpc-tuning/results.csv {--summary,--plot,--pgfplotstables}
 ```
 
 ---
