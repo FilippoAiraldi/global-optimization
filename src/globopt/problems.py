@@ -926,8 +926,9 @@ def get_benchmark_problem(
     """
     name_ = name.lower()
     source = TESTS if name_ in TESTS else CONSTRAINED_TESTS
-    cls, kwargs, max_evals, regressor, normalize = source[name_]
+    cls, kwargs, max_evals, regressor = source[name_]
     problem = cls(**kwargs)
+    normalize = False
     if normalize:
         problem = NormalizedProblemWrapper(
             problem, [(0.0, 1.0) for _ in range(problem.dim)]

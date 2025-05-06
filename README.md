@@ -16,8 +16,8 @@ approximation.
 
 [![Tests](https://github.com/FilippoAiraldi/global-optimization/actions/workflows/ci.yml/badge.svg)](https://github.com/FilippoAiraldi/global-optimization/actions/workflows/ci.yml)
 [![Downloads](https://static.pepy.tech/badge/globopt)](https://www.pepy.tech/projects/globopt)
-[![Maintainability](https://api.codeclimate.com/v1/badges/6847f2c2c04b20a909fe/maintainability)](https://codeclimate.com/github/FilippoAiraldi/global-optimization/maintainability)
-[![Test Coverage](https://api.codeclimate.com/v1/badges/6847f2c2c04b20a909fe/test_coverage)](https://codeclimate.com/github/FilippoAiraldi/global-optimization/test_coverage)
+[![Maintainability](https://qlty.sh/badges/c5ad1722-12a0-4920-b009-312c1e167a67/maintainability.svg)](https://qlty.sh/gh/FilippoAiraldi/projects/global-optimization)
+[![Test Coverage](https://qlty.sh/badges/c5ad1722-12a0-4920-b009-312c1e167a67/test_coverage.svg)](https://qlty.sh/gh/FilippoAiraldi/projects/global-optimization)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 ---
