@@ -185,21 +185,20 @@ _rbf_predict_jit = torch.jit.trace(
 
 
 class BaseRegression(Model, FantasizeMixin):
-    """Base class for a regression model."""
+    """Base class for a regression model.
+
+    Parameters
+    ----------
+    train_X : Tensor
+        A `(b0 x b1 x ...) x m x d`, where `m` is the number of training points, `d` is
+        the dimension of each point, and `b`s are the size of batched/parallel
+        regressors to train.
+    train_Y : Tensor
+        A `(b0 x b1 x ...) x m x 1` tensor of evaluation corresponding to the `train_X`
+        points.
+    """
 
     def __init__(self, train_X: Tensor, train_Y: Tensor) -> None:
-        """Instantiates a regression model for Global Optimization.
-
-        Parameters
-        ----------
-        train_X : Tensor
-            A `(b0 x b1 x ...) x m x d`, where `m` is the number of training points,
-            `d` is the dimension of each point, and `b`s are the size of
-            batched/parallel regressors to train.
-        train_Y : Tensor
-            A `(b0 x b1 x ...) x m x 1` tensor of evaluation corresponding to the
-            `train_X` points.
-        """
         Model.__init__(self)
         FantasizeMixin.__init__(self)
         self.train_X = train_X
@@ -286,7 +285,40 @@ class Idw(BaseRegression):
 
 
 class Rbf(BaseRegression):
-    """Radial Basis Function regression model in Global Optimization."""
+    """Radial Basis Function regression model in Global Optimization.
+
+    Parameters
+    ----------
+    train_X : Tensor
+        A `(b0 x b1 x ...) x m x d`, where `m` is the number of training points, `d` is
+        the dimension of each point, and `b`s are the size of batched/parallel
+        regressors to train.
+    train_Y : Tensor
+        A `(b0 x b1 x ...) x m x 1` tensor of evaluation corresponding to the `train_X`
+        points.
+    eps : float, optional
+        Distance-scaling parameter for the RBF kernel. If `None`, its value is
+        automatically determined via cross-validation. By default `None`.
+    svd_tol : float, optional
+        Tolerance for singular value decomposition for inversion, by default `1e-8`.
+    init_state : tuple of 3 Tensors, optional
+        Initial state of the regressor, in case of previous partial fitting, made up of
+        the inverse of previous kernel distance matrix and the RBF coefficients. This is
+        a tuple of
+            - `Minv (b0 x b1 x ...) x m' x m'`
+            - `coeffs (b0 x b1 x ...) x m' x 1`
+        where `m'` are the number of training points in the previous fitting. By default
+        `None`, in which case the model is fit anew to the training data. This initial
+        state is also disregarded if `eps` is `None`.
+    rng : int or RandomState, optional
+        Random state for the cross-validation, by default `None`.
+
+    Raises
+    ------
+    ValueError
+        If `eps` is `None` and the model is not fit to a single batch of data, i.e.,
+        `train_X` has more than `2` dimensions.
+    """
 
     def __init__(
         self,
@@ -297,40 +329,6 @@ class Rbf(BaseRegression):
         init_state: Optional[tuple[Tensor, Tensor]] = None,
         rng: Optional[np.random.Generator] = None,
     ) -> None:
-        """Instantiates an RBF regression model for Global Optimization.
-
-        Parameters
-        ----------
-        train_X : Tensor
-            A `(b0 x b1 x ...) x m x d`, where `m` is the number of training points,
-            `d` is the dimension of each point, and `b`s are the size of
-            batched/parallel regressors to train.
-        train_Y : Tensor
-            A `(b0 x b1 x ...) x m x 1` tensor of evaluation corresponding to the
-            `train_X` points.
-        eps : float, optional
-            Distance-scaling parameter for the RBF kernel. If `None`, its value is
-            automatically determined via cross-validation. By default `None`.
-        svd_tol : float, optional
-            Tolerance for singular value decomposition for inversion, by default `1e-8`.
-        init_state : tuple of 3 Tensors, optional
-            Initial state of the regressor, in case of previous partial fitting, made up
-            of the inverse of previous kernel distance matrix and the RBF coefficients.
-            This is a tuple of
-                - `Minv (b0 x b1 x ...) x m' x m'`
-                - `coeffs (b0 x b1 x ...) x m' x 1`
-            where `m'` are the number of training points in the previous fitting.
-            By default `None`, in which case the model is fit anew to the training data.
-            This initial state is also disregarded if `eps` is `None`.
-        rng : int or RandomState, optional
-            Random state for the cross-validation, by default `None`.
-
-        Raises
-        ------
-        ValueError
-            If `eps` is `None` and the model is not fit to a single batch of data, i.e.,
-            `train_X` has more than `2` dimensions.
-        """
         super().__init__(train_X, train_Y)
         svd_tol = torch.scalar_tensor(svd_tol)
         use_cv = eps is None

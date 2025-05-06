@@ -99,6 +99,18 @@ class IdwAcquisitionFunction(AnalyticAcquisitionFunction):
     does not exploit this deviation to approximate the estimate variance, and it only
     supports `q = 1`. For a version that does so instead, see `qIdwAcquisitionFunction`.
 
+    Parameters
+    ----------
+    model : Idw or Rbf
+        BoTorch model based on IDW or RBF regression.
+    c1 : float or scalar Tensor
+        Weight of the contribution of the variance function.
+    c2 : float or scalar Tensor
+        Weight of the contribution of the distance function.
+    span_Y_min: float, optional
+        Minimum value of the span of observed values (avoids that the distance
+        contribution is null).
+
     Example
     -------
     >>> model = Idw(train_X, train_Y)
@@ -119,20 +131,6 @@ class IdwAcquisitionFunction(AnalyticAcquisitionFunction):
         span_Y_min: float = 1e-3,
         **_: Any,
     ) -> None:
-        """Instantiates the myopic acquisition function.
-
-        Parameters
-        ----------
-        model : Idw or Rbf
-            BoTorch model based on IDW or RBF regression.
-        c1 : float or scalar Tensor
-            Weight of the contribution of the variance function.
-        c2 : float or scalar Tensor
-            Weight of the contribution of the distance function.
-        span_Y_min: float, optional
-            Minimum value of the span of observed values (avoids that the distance
-            contribution is null).
-        """
         super().__init__(model)
         # Y_min, Y_max = model.train_Y.aminmax(dim=-2, keepdim=True)
         Y_min = model.train_Y.amin(dim=-2, keepdim=True)
@@ -165,6 +163,20 @@ class qIdwAcquisitionFunction(MCAcquisitionFunction):
     deviation to better take into account the uncertainty in the regression estimate. It
     supports `q > 1`.
 
+    Parameters
+    ----------
+    model : Idw or Rbf
+        BoTorch model based on IDW or RBF regression.
+    c1 : float or scalar Tensor
+        Weight of the contribution of the variance function.
+    c2 : float or scalar Tensor
+        Weight of the contribution of the distance function.
+    sampler : MCSampler, optional
+        The sampler used to draw base samples.
+    span_Y_min: float, optional
+        Minimum value of the span of observed values (avoids that the distance
+        contribution is null).
+
     Example
     -------
     >>> model = Idw(train_X, train_Y)
@@ -182,22 +194,6 @@ class qIdwAcquisitionFunction(MCAcquisitionFunction):
         span_Y_min: float = 1e-3,
         **_: Any,
     ) -> None:
-        """Instantiates the myopic acquisition function.
-
-        Parameters
-        ----------
-        model : Idw or Rbf
-            BoTorch model based on IDW or RBF regression.
-        c1 : float or scalar Tensor
-            Weight of the contribution of the variance function.
-        c2 : float or scalar Tensor
-            Weight of the contribution of the distance function.
-        sampler : MCSampler, optional
-            The sampler used to draw base samples.
-        span_Y_min: float, optional
-            Minimum value of the span of observed values (avoids that the distance
-            contribution is null).
-        """
         super().__init__(model, sampler)
         Y_min, Y_max = model.train_Y.aminmax(dim=-2, keepdim=True)
         self.register_buffer("span_Y", (Y_max - Y_min).clamp_min(span_Y_min))

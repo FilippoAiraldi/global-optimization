@@ -42,11 +42,18 @@ TUNABLE_PARS = ("narx_weights", "backoff")
 
 
 class CstrEnv(Env[npt.NDArray[np.floating], float]):
-    """
-    ## Description
+    """Continuously stirred tank reactor environment.
 
-    Continuously stirred tank reactor environment. The ongoing reaction is
-                    A -> B -> C, 2A -> D.
+    Parameters
+    ----------
+    constraint_violation_penalty : float
+        Reward penalty for violating soft constraints on the reactor temperature.
+
+    Notes
+    -----
+
+    ## Description
+    The ongoing reaction is A -> B -> C, 2A -> D.
 
     ## Action Space
 
@@ -116,13 +123,6 @@ class CstrEnv(Env[npt.NDArray[np.floating], float]):
     tf = 0.2 / 40  # 0.2 hours / 40 steps
 
     def __init__(self, constraint_violation_penalty: float) -> None:
-        """Creates a CSTR environment.
-
-        Parameters
-        ----------
-        constraint_violation_penalty : float
-            Reward penalty for violating soft constraints on the reactor temperature.
-        """
         super().__init__()
         self.constraint_violation_penalty = constraint_violation_penalty
         self.observation_space = Box(
@@ -193,7 +193,19 @@ class CstrEnv(Env[npt.NDArray[np.floating], float]):
 class NoisyFilterObservation(ObservationWrapper):
     """Wrapper for filtering the env's (internal) states to the subset of measurable
     ones. Moreover, it can corrupt the measurements with additive zero-mean gaussian
-    noise."""
+    noise.
+
+    Parameters
+    ----------
+    env : gymnasium Env
+        The env to wrap.
+    measurable_states : iterable of int
+        The indices of the states that are measurables.
+    measurement_noise_std : array-like, optional
+        The standard deviation of the measurement noise to be applied to the
+        measurements. If specified, must have the same length as the indices. If `None`,
+        no noise is applied.
+    """
 
     def __init__(
         self,
@@ -201,19 +213,6 @@ class NoisyFilterObservation(ObservationWrapper):
         measurable_states: Iterable[int],
         measurement_noise_std: Optional[npt.ArrayLike] = None,
     ) -> None:
-        """Instantiates the wrapper.
-
-        Parameters
-        ----------
-        env : gymnasium Env
-            The env to wrap.
-        measurable_states : iterable of int
-            The indices of the states that are measurables.
-        measurement_noise_std : array-like, optional
-            The standard deviation of the measurement noise to be applied to the
-            measurements. If specified, must have the same length as the indices. If
-            `None`, no noise is applied.
-        """
         assert isinstance(env.observation_space, Box), "only Box spaces are supported."
         super().__init__(env)
         self.measurable_states = list(map(int, measurable_states))

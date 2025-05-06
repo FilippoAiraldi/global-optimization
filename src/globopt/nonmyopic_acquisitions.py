@@ -61,7 +61,25 @@ class Ms(qMultiStepLookahead):
     horizon and with the provided number of fantasies, and returns the sum of the values
     of the base acquisition function at each stage and fantasy. Rollout is known to
     always outperform greedy selection, and is a good tool for improving the performance
-    of myopic base acquisition functions."""
+    of myopic base acquisition functions.
+
+    Parameters
+    ----------
+    model : Model
+        A fitted model.
+    fantasies_samplers : collection of MCSampler
+        A collection of samplers, one for each stage of the lookahead. Each sampler is
+        used to sample the fantasies for the corresponding stage. The horizon is
+        determined by the length of this collection plus one.
+    valfunc_cls : type[AcquisitionFunction]
+        The type of the base acquisition function class.
+    valfunc_argfactory: TAcqfArgConstructor, optional
+        A callable that takes the current model and observatiosn and returns the kwargs
+        to pass to the base acquisition function constructor.
+    valfunc_sampler : MCSampler, optional
+        A custom sampler to override the sampling of the base acquisition function
+        values (different from sampling the fantasies).
+    """
 
     def __init__(
         self,
@@ -71,25 +89,6 @@ class Ms(qMultiStepLookahead):
         valfunc_argfactory: Optional[TAcqfArgConstructor] = None,
         valfunc_sampler: Optional[MCSampler] = None,
     ) -> None:
-        """Instantiates the multi-step acquisition function.
-
-        Parameters
-        ----------
-        model : Model
-            A fitted model.
-        fantasies_samplers : collection of MCSampler
-            A collection of samplers, one for each stage of the lookahead. Each sampler
-            is used to sample the fantasies for the corresponding stage. The horizon is
-            determined by the length of this collection plus one.
-        valfunc_cls : type[AcquisitionFunction]
-            The type of the base acquisition function class.
-        valfunc_argfactory: TAcqfArgConstructor, optional
-            A callable that takes the current model and observatiosn and returns
-            the kwargs to pass to the base acquisition function constructor.
-        valfunc_sampler : MCSampler, optional
-            A custom sampler to override the sampling of the base acquisition function
-            values (different from sampling the fantasies).
-        """
         horizon = len(fantasies_samplers) + 1
         if horizon < 2:
             raise ValueError("horizon must be at least 2")
