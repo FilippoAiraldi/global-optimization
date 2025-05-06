@@ -32,7 +32,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    "torch >= 2.1.2",
+    "torch > 2.6.0",
     "botorch >= 0.9.5",
 ]
 keywords = [
@@ -69,10 +69,7 @@ exclude = ["tests"]
 module = [
     "joblib.*",
     "matplotlib.*",
-    "numba.*",
-    "pymoo.*",
     "scipy.*",
-    "vpso.*",
     "globopt.*",
 ]
 ignore_missing_imports = true

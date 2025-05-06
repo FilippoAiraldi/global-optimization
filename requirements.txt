@@ -1,2 +1,2 @@
-torch>=2.1.2
+torch>2.6.0
 botorch>=0.9.5
