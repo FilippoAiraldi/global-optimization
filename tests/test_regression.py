@@ -24,7 +24,7 @@ class TestRegression(unittest.TestCase):
 
         # partial fit
         idw_mdl = Idw(X, Y)
-        rbf_mdl = Rbf(X, Y, rbf_mdl.eps, rbf_mdl.svd_tol, rbf_mdl.state)
+        rbf_mdl = Rbf(X, Y, svd_tol=rbf_mdl.svd_tol, init_state=rbf_mdl.state)
 
         x_hat = torch.linspace(-3, 3, RESULTS["N"], dtype=X.dtype).view(1, -1, 1)
         y_hat_idw = idw_mdl.posterior(x_hat).mean.squeeze()
@@ -52,7 +52,7 @@ class TestRegression(unittest.TestCase):
 
         # partial fit
         idw_mdl = Idw(X, Y)
-        rbf_mdl = Rbf(X, Y, rbf_mdl.eps, rbf_mdl.svd_tol, rbf_mdl.state)
+        rbf_mdl = Rbf(X, Y, svd_tol=rbf_mdl.svd_tol, init_state=rbf_mdl.state)
 
         x_hat = torch.linspace(-3, 3, RESULTS["N"], dtype=X.dtype).view(1, -1, 1)
         y_hat_idw = idw_mdl.posterior(x_hat).mean.squeeze()

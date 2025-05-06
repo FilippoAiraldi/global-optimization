@@ -20,7 +20,7 @@ class TestNonMyopicAcquisitionFunction(unittest.TestCase):
         problem = SimpleProblem()
         X = torch.as_tensor([-2.61, -1.92, -0.63, 0.38, 2], device="cpu").unsqueeze(-1)
         Y = problem(X)
-        mdl = Rbf(X, Y, 0.5)
+        mdl = Rbf(X, Y, eps=0.5)
         fantasies_samplers = [GaussHermiteSampler(torch.Size([1]))]
         valfunc_sampler = GaussHermiteSampler(torch.Size([16]))
 
@@ -39,7 +39,7 @@ class TestNonMyopicAcquisitionFunction(unittest.TestCase):
         problem = SimpleProblem()
         X = torch.as_tensor([-2.61, -1.92, -0.63, 0.38, 2], device="cpu").unsqueeze(-1)
         Y = problem(X)
-        mdl = Rbf(X, Y, 0.5)
+        mdl = Rbf(X, Y, eps=0.5)
         fantasies_samplers = [GaussHermiteSampler(torch.Size([1]))]
         valfunc_sampler = GaussHermiteSampler(torch.Size([16]))
 

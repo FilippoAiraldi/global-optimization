@@ -328,6 +328,7 @@ class Rbf(BaseRegression):
         self,
         train_X: Tensor,
         train_Y: Tensor,
+        *,
         eps: Union[None, float, Tensor] = None,
         init_state: Optional[tuple[Tensor, Tensor, Tensor]] = None,
         svd_tol: Union[float, Tensor] = 1e-8,
@@ -403,7 +404,7 @@ class Rbf(BaseRegression):
         train_X, train_Y = self._prepare_for_fantasizing(X, Y)
         Xnew = torch.cat((train_X, X), dim=-2)
         Ynew = torch.cat((train_Y, Y), dim=-2)
-        return Rbf(Xnew, Ynew, self.eps, self.svd_tol, self.state)
+        return Rbf(Xnew, Ynew, eps=None, svd_tol=self.svd_tol, init_state=self.state)
 
     def __str__(self) -> str:
         return f"{self.__class__.__name__}(eps={self.eps})"

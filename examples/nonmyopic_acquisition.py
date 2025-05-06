@@ -45,7 +45,7 @@ train_X = torch.as_tensor([-2.61, -1.92, -0.63, 0.38, 2]).view(-1, 1)
 train_Y = problem(train_X)
 
 # create regressor and fit it
-mdl = Rbf(train_X, train_Y, 0.5)
+mdl = Rbf(train_X, train_Y, eps=0.5)
 
 # predict the posterior over all domain via fitted model
 X = torch.linspace(lb, ub, 1000)

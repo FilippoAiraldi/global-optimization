@@ -22,7 +22,7 @@ class TestAcquisitionFunction(unittest.TestCase):
         X = torch.as_tensor([-2.61, -1.92, -0.63, 0.38, 2], device="cpu").unsqueeze(-1)
         Y = problem(X)
 
-        mdl = Rbf(X, Y, 0.5)
+        mdl = Rbf(X, Y, eps=0.5)
         x = torch.linspace(-3, 3, RESULTS["N"], dtype=X.dtype).view(1, -1, 1)
         MAF = IdwAcquisitionFunction(mdl, 1.0, 0.5)
 
@@ -56,7 +56,7 @@ class TestAcquisitionFunction(unittest.TestCase):
         X = torch.as_tensor([-2.61, -1.92, -0.63, 0.38, 2], device="cpu").unsqueeze(-1)
         Y = problem(X)
 
-        mdl = Rbf(X, Y, 0.5)
+        mdl = Rbf(X, Y, eps=0.5)
         x = torch.linspace(-3, 3, RESULTS["N"], dtype=X.dtype).view(1, -1, 1)
         sampler = GaussHermiteSampler(torch.Size([RESULTS["gh_samples"]]))
         MAF = qIdwAcquisitionFunction(mdl, 1.0, 0.5, sampler)

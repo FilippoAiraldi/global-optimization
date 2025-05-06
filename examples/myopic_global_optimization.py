@@ -42,13 +42,13 @@ x_plot = torch.linspace(lb, ub, 300).view(-1, 1, 1)
 history: list[tuple[Tensor, ...]] = []
 
 # run optimization loop
-for iteration in range(N_ITERS):
+for iter in range(N_ITERS):
     # instantiate model and acquisition function
-    mdl = Rbf(train_X, train_Y, eps, init_state=rbf_state)
+    mdl = Rbf(train_X, train_Y, eps=eps if iter == 0 else None, init_state=rbf_state)
     MAF = IdwAcquisitionFunction(mdl, c1, c2)
 
     # minimize acquisition function
-    X_opt, acq_opt = optimize_acqf(MAF, bounds, 1, 8, 16, options={"seed": iteration})
+    X_opt, acq_opt = optimize_acqf(MAF, bounds, 1, 8, 16, options={"seed": iter})
 
     # evaluate objective function at the new point, and append it to training data
     Y_opt = problem(X_opt)

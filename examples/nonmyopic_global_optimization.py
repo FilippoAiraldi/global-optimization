@@ -64,9 +64,9 @@ history: list[tuple[Tensor, ...]] = []
 
 
 # run optimization loop
-for iteration in range(N_ITERS):
+for iter in range(N_ITERS):
     # instantiate model and acquisition function
-    mdl = Rbf(train_X, train_Y, eps, init_state=rbf_state)
+    mdl = Rbf(train_X, train_Y, eps=eps if iter == 0 else None, init_state=rbf_state)
     # remaining_horizon = min(horizon, N_ITERS - iteration)
     NMAF = Ms(
         model=mdl,
@@ -88,7 +88,7 @@ for iteration in range(N_ITERS):
         batch_initial_conditions=full_opt,
         return_best_only=False,
         return_full_tree=True,
-        options={"seed": iteration, "maxfun": 15_000},
+        options={"seed": iter, "maxfun": 15_000},
     )
     best_tree_idx = tree_vals.argmax()
     acq_opt = tree_vals[best_tree_idx]
