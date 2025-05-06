@@ -101,7 +101,9 @@ def _rbf_fit(
 def _rbf_partial_fit(
     X: Tensor, Y: Tensor, eps: Tensor, svd_tol: Tensor, Minv: Tensor, coeffs: Tensor
 ) -> tuple[Tensor, Tensor]:
-    """Fits the given RBF regression to the new training data."""
+    """Fits the given RBF regression to the new training data.
+
+    Since this function's control flow is data dependent, it is not jittable."""
     n = coeffs.shape[-2]  # index of the first new data point onwards
     X_new = X[..., n:, :]
     _, Phi_and_phi = _cdist_and_inverse_quadratic_kernel_jit(X_new, X, eps)
@@ -169,19 +171,6 @@ def _rbf_predict(
 
 _rbf_fit_jit = torch.jit.trace(
     _rbf_fit, (torch.rand(5, 4, 3), torch.rand(5, 4, 1), torch.rand(()), torch.rand(()))
-)
-_rbf_partial_fit_jit = torch.jit.script(
-    _rbf_partial_fit,
-    example_inputs=[
-        (
-            torch.rand(5, 4, 3),
-            torch.rand(5, 4, 1),
-            torch.rand(()),
-            torch.rand(()),
-            torch.rand(5, 2, 2),
-            torch.rand(5, 2, 1),
-        )
-    ],
 )
 _rbf_predict_jit = torch.jit.trace(
     _rbf_predict,
@@ -361,7 +350,7 @@ class Rbf(BaseRegression):
             # previous state was most likely fitted with a different eps
             Minv, coeffs = _rbf_fit_jit(self.train_X, self.train_Y, eps, svd_tol)
         else:
-            Minv, coeffs = _rbf_partial_fit_jit(
+            Minv, coeffs = _rbf_partial_fit(
                 self.train_X, self.train_Y, eps, svd_tol, *init_state
             )
         self.register_buffer("eps", eps)
