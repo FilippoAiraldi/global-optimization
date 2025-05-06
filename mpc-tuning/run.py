@@ -294,9 +294,9 @@ def get_cstr_mpc(
         "calc_lam_x": False,
         "calc_lam_p": False,
         "calc_multipliers": False,
-        "fatrop": {"max_iter": 1000, "print_level": 0},
+        "ipopt": {"max_iter": 500, "print_level": 0, "sb": "yes"},
     }
-    mpc.init_solver(opts, solver="fatrop", type="nlp")
+    mpc.init_solver(opts, solver="ipopt", type="nlp")
     return mpc
 
 
