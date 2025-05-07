@@ -44,7 +44,7 @@ from botorch.test_functions import (
 from botorch.test_functions.base import BaseTestProblem, ConstrainedBaseTestProblem
 from botorch.test_functions.synthetic import ConstrainedGramacy as _ConstrainedGramacy
 from botorch.test_functions.synthetic import (
-    ConstrainedHartmannSmooth as ConstrainedHartmann6,
+    ConstrainedHartmannSmooth as _ConstrainedHartmannSmooth,
 )
 from botorch.test_functions.synthetic import ConstrainedSyntheticTestFunction
 from botorch.test_functions.synthetic import PressureVessel as _PressureVessel
@@ -545,12 +545,20 @@ class ConstrainedGramacy(_ConstrainedGramacy):
     @staticmethod
     def _nonlinear_inequality_constraint0(X: Tensor) -> Tensor:
         x1, x2 = X.unbind(-1)
-        return x1 + 2 * x2 + 0.5 * torch.sin(2 * pi * (x1.pow(2) - 2 * x2)) - 1.5
+        return x1 + 2 * x2 + 0.5 * torch.sin(2 * pi * (x1.square() - 2 * x2)) - 1.5
 
     @staticmethod
     def _nonlinear_inequality_constraint1(X: Tensor) -> Tensor:
         x1, x2 = X.unbind(-1)
-        return 1.5 - x1.pow(2) - x2.pow(2)
+        return 1.5 - x1.square() - x2.square()
+
+
+class ConstrainedHartmann6(_ConstrainedHartmannSmooth):
+    """Constrained Hartmann (dim=6) test function with tighetened bounds."""
+
+    @staticmethod
+    def _nonlinear_inequality_constraint0(X: Tensor) -> Tensor:
+        return 1 - X.square().sum(-1)
 
 
 class PressureVessel(_PressureVessel):
