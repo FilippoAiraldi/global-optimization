@@ -17,7 +17,7 @@ import pandas as pd
 import prettytable as pt
 from matplotlib.lines import Line2D
 from matplotlib.ticker import MaxNLocator
-from scipy.stats import sem, t, wilcoxon
+from scipy.stats import t, wilcoxon
 
 from globopt.problems import get_benchmark_problem
 
@@ -25,7 +25,7 @@ plt.style.use("bmh")
 pd.options.mode.copy_on_write = True
 
 
-ALPHA = 0.95
+ALPHA = 1 - 0.95
 NONMYOPIC_METHOD_PATTER = re.compile(r"ms(g|b)o-(mc|gh)((?:\.\d+)+)")
 VALID_PATTERN = re.compile(r"[^a-zA-Z0-9]+")
 
@@ -166,10 +166,12 @@ def _compute_avg_and_ci(
     row: pd.Series, column: str, bounds: Optional[tuple[float, float]] = None
 ) -> pd.Series:
     """Computes the average and conf. interval of the given row of the dataframe."""
-    data = row[column]
+    data: np.ndarray = row[column]
+    N = data.shape[0]
     avg = data.mean(axis=0)
-    scale = sem(data, axis=0) + 1e-12
-    lb, ub = t.interval(ALPHA, data.shape[0] - 1, loc=avg, scale=scale)
+    ci = t.ppf(1 - ALPHA / 2, N - 1) * data.std(axis=0, ddof=1, mean=avg) / np.sqrt(N)
+    lb = avg - ci
+    ub = avg + ci
     if bounds is not None:
         lb = np.clip(lb, *bounds)
         ub = np.clip(ub, *bounds)
@@ -265,7 +267,9 @@ def _compute_dispersion(row: pd.Series) -> pd.Series:
         data = np.asarray(row[col])
         mean = data.mean()
         out[col] = mean
-        out[f"{col}-err"] = sem(data) if data.size > 1 else 0.0
+        out[f"{col}-err"] = (
+            data.std(ddof=1, mean=mean) / np.sqrt(data.size) if data.size > 1 else 0.0
+        )
     return pd.Series(out)
 
 
