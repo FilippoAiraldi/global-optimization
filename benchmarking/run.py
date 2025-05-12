@@ -6,12 +6,12 @@ import argparse
 import gc
 import os
 import sys
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from itertools import cycle, product
 from pathlib import Path
 from time import perf_counter
 from traceback import format_exc
-from typing import Callable, Literal, Optional, Union
+from typing import Literal
 from warnings import filterwarnings, warn
 
 import numpy as np
@@ -69,8 +69,8 @@ def run_problem(
     rng: np.random.Generator,
     csv: str,
     device: torch.device,
-    n_init: Optional[int] = None,
-    callback: Optional[Callable[[SyntheticTestFunction], str]] = None,
+    n_init: int | None = None,
+    callback: Callable[[SyntheticTestFunction], str] | None = None,
 ) -> None:
     """Solves the given problem with the given method, and writes the results to csv."""
     # set hyperparameters
@@ -91,9 +91,11 @@ def run_problem(
     # get the problem's inequality and nonlinear constraints, if any. If there is at
     # least one nonlinear constraint, we have to manually provide the batch initial
     # conditions via ic_generator (noop otherwise)
-    ineq_constr, nonlin_ineq_constr, ic_generator = (
-        get_problem_constraints_and_ic_generator(problem)
-    )
+    (
+        ineq_constr,
+        nonlin_ineq_constr,
+        ic_generator,
+    ) = get_problem_constraints_and_ic_generator(problem)
     has_nonlinear_ineq_constr = nonlin_ineq_constr is not None
 
     # draw random initial points - if there are nonlinear constraints, we have to use
@@ -120,7 +122,7 @@ def run_problem(
         if regression_type == "rbf":
 
             def get_mdl(
-                X: Tensor, Y: Tensor, prev_mdl: Optional[Rbf], iter: int, **_
+                X: Tensor, Y: Tensor, prev_mdl: Rbf | None, iter: int, **_
             ) -> Rbf:
                 # every 10 iterations, we find the optimal eps via CV; otherwise, we use
                 # the previous model's state to initialize the new model
@@ -169,8 +171,8 @@ def run_problem(
         if method == "myopic":
 
             def next_obs(
-                X: Tensor, Y: Tensor, prev_mdl: Union[None, Idw, Rbf], iter: int, **_
-            ) -> tuple[Tensor, None, Union[Idw, Rbf]]:
+                X: Tensor, Y: Tensor, prev_mdl: Idw | Rbf | None, iter: int, **_
+            ) -> tuple[Tensor, None, Idw | Rbf]:
                 mdl = get_mdl(X=X, Y=Y, prev_mdl=prev_mdl, iter=iter)
                 acqfun = IdwAcquisitionFunction(mdl, c1, c2)
                 X_opt, _ = optimize_acqf(
@@ -190,8 +192,8 @@ def run_problem(
             gh_sampler = GaussHermiteSampler(sample_shape=torch.Size([16]))
 
             def next_obs(
-                X: Tensor, Y: Tensor, prev_mdl: Union[None, Idw, Rbf], iter: int, **_
-            ) -> tuple[Tensor, None, Union[Idw, Rbf]]:
+                X: Tensor, Y: Tensor, prev_mdl: Idw | Rbf | None, iter: int, **_
+            ) -> tuple[Tensor, None, Idw | Rbf]:
                 mdl = get_mdl(X=X, Y=Y, prev_mdl=prev_mdl, iter=iter)
                 acqfun = qIdwAcquisitionFunction(mdl, c1, c2, sampler=gh_sampler)
                 X_opt, _ = optimize_acqf(
@@ -235,10 +237,10 @@ def run_problem(
             def next_obs(
                 X: Tensor,
                 Y: Tensor,
-                prev_mdl: Union[None, Idw, Rbf],
-                prev_full_opt: Optional[Tensor],
+                prev_mdl: Idw | Rbf | None,
+                prev_full_opt: Tensor | None,
                 iter: int,
-            ) -> tuple[Tensor, Optional[Tensor], Union[Idw, Rbf]]:
+            ) -> tuple[Tensor, Tensor | None, Idw | Rbf]:
                 mdl = get_mdl(X=X, Y=Y, prev_mdl=prev_mdl, iter=iter)
                 h = min(horizon, maxiter - iter)
                 if h == 1:
@@ -300,8 +302,8 @@ def run_problem(
             raise NotImplementedError(f"Method {method} not implemented.")
 
     # run optimization loop
-    mdl: Optional[Model] = None
-    full_opt: Optional[Tensor] = None
+    mdl: Model | None = None
+    full_opt: Tensor | None = None
     bests: list[float] = [Y.amin().item()]
     timings: list[float] = []
     try:
@@ -345,9 +347,9 @@ def run_benchmark(
     seed: np.random.SeedSequence,
     csv: str,
     device: torch.device,
-    n_init: Optional[int] = None,
-    setup_callback: Optional[Callable[[], None]] = None,
-    save_callback: Optional[Callable[[SyntheticTestFunction], str]] = None,
+    n_init: int | None = None,
+    setup_callback: Callable[[], None] | None = None,
+    save_callback: Callable[[SyntheticTestFunction], str] | None = None,
 ) -> None:
     """Sets default values and then runs the given benchmarks"""
     filterwarnings("ignore", "Optimization failed", module="botorch")
@@ -380,9 +382,9 @@ def run_benchmarks(
     n_jobs: int,
     csv: str,
     devices: list[torch.device],
-    n_init: Optional[int] = None,
-    setup_callback: Optional[Callable[[], None]] = None,
-    save_callback: Optional[Callable[[SyntheticTestFunction], str]] = None,
+    n_init: int | None = None,
+    setup_callback: Callable[[], None] | None = None,
+    save_callback: Callable[[SyntheticTestFunction], str] | None = None,
 ) -> None:
     """Runs the benchmarks for the given problems, methods and horizons, repeated per
     the number of trials, distributively across the given devices."""
@@ -412,9 +414,7 @@ def run_benchmarks(
     )
 
 
-def parse_args(
-    name: str, available_problems: Optional[list[str]]
-) -> argparse.Namespace:
+def parse_args(name: str, available_problems: list[str] | None) -> argparse.Namespace:
     """Parses the command-line arguments for the benchmarking script."""
     parser = argparse.ArgumentParser(
         description=f"Benchmarking of Global Optimization strategies on {name}.",

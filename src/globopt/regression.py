@@ -9,7 +9,7 @@ References
 """
 
 from math import exp, sqrt
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 import torch
@@ -231,7 +231,7 @@ class BaseRegression(Model, FantasizeMixin):
         posterior._V = V
         return posterior
 
-    def transform_inputs(self, X: Tensor, _: Optional[Module] = None) -> Tensor:
+    def transform_inputs(self, X: Tensor, _: Module | None = None) -> Tensor:
         return X  # does nothing
 
     def _prepare_for_fantasizing(self, X: Tensor, Y: Tensor) -> tuple[Tensor, Tensor]:
@@ -329,10 +329,10 @@ class Rbf(BaseRegression):
         train_X: Tensor,
         train_Y: Tensor,
         *,
-        eps: Union[None, float, Tensor] = None,
-        init_state: Optional[tuple[Tensor, Tensor, Tensor]] = None,
-        svd_tol: Union[float, Tensor] = 1e-8,
-        rng: Optional[np.random.Generator] = None,
+        eps: float | Tensor | None = None,
+        init_state: tuple[Tensor, Tensor, Tensor] | None = None,
+        svd_tol: float | Tensor = 1e-8,
+        rng: np.random.Generator | None = None,
     ) -> None:
         super().__init__(train_X, train_Y)
 
@@ -416,7 +416,7 @@ class Rbf(BaseRegression):
         svd_tol: Tensor,
         n_iter: int = 20,
         max_n_splits: int = 5,
-        rng: Optional[np.random.Generator] = None,
+        rng: np.random.Generator | None = None,
     ) -> float:
         """Computes the optimal `eps` parameter for the RBF kernel via cross-validation.
         This is done by sampling `eps` from a log-normal distribution and selecting the

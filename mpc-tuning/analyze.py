@@ -6,7 +6,6 @@ non-myopic Global Optimization strategies on the data-driven MPC tuning problem.
 import os
 import sys
 from pathlib import Path
-from typing import Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -29,7 +28,7 @@ from benchmarking.analyze import (
 
 def _extract_reactor_temp(
     row: pd.Series,
-    iters: Union[None, int, list[int], slice] = None,
+    iters: int | list[int] | slice | None = None,
     temp_idx: int = 2,
 ) -> pd.Series:
     """Extracts the reactor temperature from a row of the dataframe."""
@@ -42,7 +41,7 @@ def _extract_reactor_temp(
 
 
 def plot_reactor_temp(
-    df: pd.DataFrame, plot: bool, pgfplotstables: bool, title: Optional[str]
+    df: pd.DataFrame, plot: bool, pgfplotstables: bool, title: str | None
 ) -> None:
     """Plots/saves the results on the reactor temperature from the env."""
     iters = [2, 20, 54]

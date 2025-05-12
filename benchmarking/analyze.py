@@ -8,7 +8,7 @@ import os
 import re
 from functools import partial
 from math import ceil
-from typing import Literal, Optional
+from typing import Literal
 from warnings import warn
 
 import matplotlib.pyplot as plt
@@ -163,7 +163,7 @@ def load_data(
 
 
 def _compute_avg_and_ci(
-    row: pd.Series, column: str, bounds: Optional[tuple[float, float]] = None
+    row: pd.Series, column: str, bounds: tuple[float, float] | None = None
 ) -> pd.Series:
     """Computes the average and conf. interval of the given row of the dataframe."""
     data: np.ndarray = row[column]
@@ -183,7 +183,7 @@ def optimiser_convergences(
     plot: bool,
     pgfplotstables: bool,
     column: Literal["best-so-far", "gap"] = "gap",
-    title: Optional[str] = None,
+    title: str | None = None,
     ncols: int = 4,
 ) -> None:
     """Analyzes the results in the given dataframe. In particular, it plots the
@@ -283,7 +283,7 @@ def _compute_official_name_and_type(row: pd.Series) -> pd.Series:
 
 
 def itertime_vs_gap(
-    df: pd.DataFrame, plot: bool, pgfplotstables: bool, title: Optional[str] = None
+    df: pd.DataFrame, plot: bool, pgfplotstables: bool, title: str | None = None
 ) -> None:
     """Analyzes the average time per iteration versus the optimality gap."""
     df_ = (
@@ -393,7 +393,7 @@ def _format_row(
 
 
 def summary_tables(
-    df: pd.DataFrame, summary: bool, pgfplotstables: bool, title: Optional[str] = None
+    df: pd.DataFrame, summary: bool, pgfplotstables: bool, title: str | None = None
 ) -> None:
     """Analyzes the results in the given dataframe and outputs a summary as two
     tables: one containing the (final) optimality gap, and the other the solver time per

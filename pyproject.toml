@@ -15,13 +15,12 @@ authors = [
 ]
 description = "Myopic and Non-Myopic Global Optimization"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
 classifiers = [
     "Programming Language :: Python",
     "Programming Language :: Python :: 3 :: Only",
-	"Programming Language :: Python :: 3.9",
 	"Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -53,15 +52,15 @@ dynamic = ["version"]
 version = {attr = "globopt.__version__"}
 
 [tool.black]
-target-version = ["py39", "py310", "py311", "py312"]
+target-version = ["py310", "py311", "py312"]
 color = true
 
 [tool.isort]
 profile = "black"
-py_version = 39
+py_version = 310
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.10"
 plugins = ["numpy.typing.mypy_plugin"]
 exclude = ["tests"]
 

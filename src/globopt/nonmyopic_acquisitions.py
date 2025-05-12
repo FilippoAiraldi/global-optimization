@@ -1,5 +1,5 @@
 from collections.abc import Collection
-from typing import Any, Optional
+from typing import Any
 
 import torch
 from botorch.acquisition import AcquisitionFunction
@@ -12,7 +12,7 @@ from botorch.sampling.base import MCSampler
 
 
 def make_acq_arg_factory(
-    action: Optional[TAcqfArgConstructor] = None, **kwargs: Any
+    action: TAcqfArgConstructor | None = None, **kwargs: Any
 ) -> TAcqfArgConstructor:
     """Returns a kwargs factory for `qMultiStepLookahead` with the given parameters,
     and an optional action to be called with the model and the current observation
@@ -86,8 +86,8 @@ class Ms(qMultiStepLookahead):
         model: Model,
         fantasies_samplers: Collection[MCSampler],
         valfunc_cls: type[AcquisitionFunction],  # base policy
-        valfunc_argfactory: Optional[TAcqfArgConstructor] = None,
-        valfunc_sampler: Optional[MCSampler] = None,
+        valfunc_argfactory: TAcqfArgConstructor | None = None,
+        valfunc_sampler: MCSampler | None = None,
     ) -> None:
         horizon = len(fantasies_samplers) + 1
         if horizon < 2:

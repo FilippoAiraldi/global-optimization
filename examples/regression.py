@@ -11,8 +11,6 @@ References
     functions. Computational Optimization and Applications, 77(2):571–595, 2020
 """
 
-from typing import Union
-
 import matplotlib.pyplot as plt
 import torch
 from numpy.random import default_rng
@@ -35,7 +33,7 @@ train_Y = problem(train_X)
 
 # fit regression models - only first n points for now
 n = 3
-mdls: list[Union[Idw, Rbf]] = [
+mdls: list[Idw | Rbf] = [
     Idw(train_X[:n], train_Y[:n]),
     Rbf(train_X[:n], train_Y[:n], eps=0.5),
     Rbf(train_X[:n], train_Y[:n], eps=2.0),

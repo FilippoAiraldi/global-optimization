@@ -8,7 +8,7 @@ References
     functions. Computational Optimization and Applications, 77(2):571–595, 2020
 """
 
-from typing import Any, Optional, Union
+from typing import Any
 
 import torch
 from botorch.acquisition.analytic import AnalyticAcquisitionFunction
@@ -125,9 +125,9 @@ class IdwAcquisitionFunction(AnalyticAcquisitionFunction):
 
     def __init__(
         self,
-        model: Union[Idw, Rbf],
-        c1: Union[float, Tensor],
-        c2: Union[float, Tensor],
+        model: Idw | Rbf,
+        c1: float | Tensor,
+        c2: float | Tensor,
         span_Y_min: float = 1e-3,
         **_: Any,
     ) -> None:
@@ -187,10 +187,10 @@ class qIdwAcquisitionFunction(MCAcquisitionFunction):
 
     def __init__(
         self,
-        model: Union[Idw, Rbf],
-        c1: Union[float, Tensor],
-        c2: Union[float, Tensor],
-        sampler: Optional[MCSampler],
+        model: Idw | Rbf,
+        c1: float | Tensor,
+        c2: float | Tensor,
+        sampler: MCSampler | None,
         span_Y_min: float = 1e-3,
         **_: Any,
     ) -> None:

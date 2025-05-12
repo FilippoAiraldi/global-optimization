@@ -8,8 +8,8 @@ References
     functions. Computational Optimization and Applications, 77(2):571–595, 2020
 """
 
+from collections.abc import Callable
 from math import ceil, pi, sqrt
-from typing import Callable, Optional
 
 import numpy as np
 import torch
@@ -67,8 +67,8 @@ def latin_hypercube_with_nonlinear_constraint(
     lb: Tensor,
     ub: Tensor,
     constraint: Callable[[Tensor], Tensor],
-    device: Optional[torch.device] = None,
-    dtype: Optional[torch.dtype] = None,
+    device: torch.device | None = None,
+    dtype: torch.dtype | None = None,
     iteration_limit: int = 10_000,
 ) -> Tensor:
     """Generates `n` samples of `q`-batches in `d` dimensions using scrambled Latin

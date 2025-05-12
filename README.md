@@ -12,7 +12,7 @@ approximation.
 
 [![PyPI version](https://badge.fury.io/py/globopt.svg)](https://badge.fury.io/py/globopt)
 [![Source Code License](https://img.shields.io/badge/license-MIT-blueviolet)](https://github.com/FilippoAiraldi/global-optimization/blob/botorch/LICENSE)
-![Python 3.9](https://img.shields.io/badge/python->=3.9-green.svg)
+![Python 3.10](https://img.shields.io/badge/python->=3.10-green.svg)
 
 [![Tests](https://github.com/FilippoAiraldi/global-optimization/actions/workflows/ci.yml/badge.svg)](https://github.com/FilippoAiraldi/global-optimization/actions/workflows/ci.yml)
 [![Downloads](https://static.pepy.tech/badge/globopt)](https://www.pepy.tech/projects/globopt)
@@ -67,7 +67,7 @@ pip install globopt
 
 **globopt** has the following dependencies
 
-- Python 3.9 or higher
+- Python 3.10 or higher
 - [PyTorch](https://pytorch.org/)
 - [BoTorch](https://botorch.org/).
 
@@ -193,7 +193,7 @@ As aforementioned, this package was used as source code of the following paper:
 ```
 
 Below the details on how to run the experiments and reproduce the results of the paper
-are reported. Note that, while the package is available for Python >= 3.9, the results
+are reported. Note that, while the package is available for Python >= 3.10, the results
 of the paper, and thus the commands below, are based on Python 3.13.2.
 
 ### Synthetic and real problems

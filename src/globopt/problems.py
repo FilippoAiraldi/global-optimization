@@ -19,10 +19,11 @@ References
     choice data. Advances in neural information processing systems, 20.
 """
 
+from collections.abc import Callable
 from functools import partial
 from importlib import resources
 from math import pi, sqrt
-from typing import Any, Callable, Literal, Optional, Union
+from typing import Any, Literal
 from warnings import warn
 
 import numpy as np
@@ -306,7 +307,7 @@ class HyperTuningGridTestFunction(SyntheticTestFunction):
     def __init__(
         self,
         dataname: str,
-        noise_std: Union[None, float, list[float]] = None,
+        noise_std: float | list[float] | None = None,
         negate: bool = False,
     ) -> None:
         with resources.path("globopt.data", dataname) as datapath:
@@ -715,9 +716,9 @@ CONSTRAINED_TESTS: dict[
 def get_problem_constraints_and_ic_generator(
     problem: ConstrainedSyntheticTestFunction,
 ) -> tuple[
-    Optional[list[tuple[Tensor, Tensor, float]]],
-    Optional[list[tuple[Callable, bool]]],
-    Callable[[int, int], Optional[Tensor]],
+    list[tuple[Tensor, Tensor, float]] | None,
+    list[tuple[Callable, bool]] | None,
+    Callable[[int, int], Tensor] | None,
 ]:
     """Given a problem, returns the inequality and nonlinear constraints in a form
     amenable to BoTorch's `optimize_acqf`, and, if necessary, a callable to generate

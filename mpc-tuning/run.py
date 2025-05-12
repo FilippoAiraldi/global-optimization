@@ -3,7 +3,7 @@ import sys
 from collections.abc import Iterable
 from math import prod
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 from warnings import filterwarnings
 
 import casadi as cs
@@ -163,8 +163,8 @@ class CstrEnv(Env[npt.NDArray[np.floating], float]):
     def reset(
         self,
         *,
-        seed: Optional[int] = None,
-        options: Optional[dict[str, Any]] = None,
+        seed: int | None = None,
+        options: dict[str, Any] | None = None,
     ) -> tuple[npt.NDArray[np.floating], dict[str, Any]]:
         """Resets the state of the CSTR env."""
         super().reset(seed=seed, options=options)
@@ -211,7 +211,7 @@ class NoisyFilterObservation(ObservationWrapper):
         self,
         env: Env[npt.NDArray[np.floating], float],
         measurable_states: Iterable[int],
-        measurement_noise_std: Optional[npt.ArrayLike] = None,
+        measurement_noise_std: npt.ArrayLike | None = None,
     ) -> None:
         assert isinstance(env.observation_space, Box), "only Box spaces are supported."
         super().__init__(env)
@@ -308,14 +308,14 @@ class CstrMpcControllerTuning(SyntheticTestFunction):
     def __init__(
         self,
         negate: bool = True,  # because the inner env returns rewards instead of costs
-        bounds_dict: Optional[dict[str, tuple[float, float]]] = None,
+        bounds_dict: dict[str, tuple[float, float]] | None = None,
         env_constraint_violation_penalty: float = 4e3,
-        env_measurement_noise_std: Optional[npt.ArrayLike] = (0.2, 10.0),
+        env_measurement_noise_std: npt.ArrayLike | None = (0.2, 10.0),
         mpc_horizon: int = 10,
         mpc_multistarts: int = 10,
         mpc_n_jobs: int = 1,
         mc_repeats: int = 1,  # a.k.a., M in [1]
-        seed: Optional[int] = None,
+        seed: int | None = None,
     ) -> None:
         if bounds_dict is None:
             bounds_dict = {"narx_weights": (-2, 2), "backoff": (0, 10)}
