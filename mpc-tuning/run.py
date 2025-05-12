@@ -390,7 +390,7 @@ class CstrMpcControllerTuning(SyntheticTestFunction):
         self._agent = agent
         self._mc_repeats = mc_repeats
 
-    def evaluate_true(self, X: Tensor) -> Tensor:
+    def _evaluate_true(self, X: Tensor) -> Tensor:
         agent = self._agent
         env = self._env
         repeats = self._mc_repeats

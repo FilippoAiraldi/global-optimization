@@ -72,7 +72,7 @@ class SimpleProblem(SyntheticTestFunction):
     _optimizers = [(-0.959769,)]
     _bounds = [(-3.0, +3.0)]
 
-    def evaluate_true(self, X: Tensor) -> Tensor:
+    def _evaluate_true(self, X: Tensor) -> Tensor:
         X2 = X.square()
         return (
             (1 + X * (2 * X).sin() * (3 * X).cos() / (1 + X2)).square()
@@ -95,7 +95,7 @@ class Adjiman(SyntheticTestFunction):
     _optimizers = [(2.0, 0.10578)]
     _bounds = [(-1.0, 2.0), (-1.0, 1.0)]
 
-    def evaluate_true(self, X: Tensor) -> Tensor:
+    def _evaluate_true(self, X: Tensor) -> Tensor:
         x = X[..., 0]
         y = X[..., 1]
         return x.cos() * y.sin() - x / (y.square() + 1.0)
@@ -118,7 +118,7 @@ class Step2(SyntheticTestFunction):
         self.dim = dim
         super().__init__(bounds=[self._bounds[0] for _ in range(dim)], *args, **kwargs)
 
-    def evaluate_true(self, X: Tensor) -> Tensor:
+    def _evaluate_true(self, X: Tensor) -> Tensor:
         return (X + 0.5).floor().square().sum(-1)
 
 
@@ -142,7 +142,7 @@ class Himmelblau(SyntheticTestFunction):
     ]
     _bounds = [(-5.0, 5.0), (-5.0, 5.0)]
 
-    def evaluate_true(self, X: Tensor) -> Tensor:
+    def _evaluate_true(self, X: Tensor) -> Tensor:
         x1 = X[..., 0]
         x2 = X[..., 1]
         return (x1.square() + x2 - 11).square() + (x1 + x2.square() - 7).square()
@@ -174,7 +174,7 @@ class Brochu(SyntheticTestFunction):
             self._optimal_value = -10.987919267921836
         super().__init__(bounds=[(0.0, 1.0) for _ in range(dim)], *args, **kwargs)
 
-    def evaluate_true(self, X: Tensor) -> Tensor:
+    def _evaluate_true(self, X: Tensor) -> Tensor:
         g = (X.sin() + X / 3 + (12 * X).sin()).sum(dim=-1)
         return (g - 1.0).clamp_min(0.0).neg() if self.dim == 2 else g.neg()
 
@@ -195,7 +195,7 @@ class GoldsteinPrice(SyntheticTestFunction):
     _optimizers = [(0.0, -1.0)]
     _bounds = [(-2.0, 2.0), (-2.0, 2.0)]
 
-    def evaluate_true(self, X: Tensor) -> Tensor:
+    def _evaluate_true(self, X: Tensor) -> Tensor:
         x1 = X[..., 0]
         x2 = X[..., 1]
         x1sq = x1.square()
@@ -224,7 +224,7 @@ class Bohachevsky(SyntheticTestFunction):
     _optimizers = [(0.0, 0.0)]
     _bounds = [(-100.0, 100.0), (-100.0, 100.0)]
 
-    def evaluate_true(self, X: Tensor) -> Tensor:
+    def _evaluate_true(self, X: Tensor) -> Tensor:
         x1 = X[..., 0]
         x2 = X[..., 1]
         return (
@@ -268,7 +268,7 @@ class Shubert(SyntheticTestFunction):
     ]
     _bounds = [(-5.12, 5.12), (-5.12, 5.12)]
 
-    def evaluate_true(self, X: Tensor) -> Tensor:
+    def _evaluate_true(self, X: Tensor) -> Tensor:
         ndim = X.ndim - 1
         I = torch.arange(1, 6, dtype=X.dtype, device=X.device).view(5, *(1,) * ndim)
         Ip1 = I + 1
@@ -291,7 +291,7 @@ class Bukin(SyntheticTestFunction):
     _optimizers = [(-10.0, 1.0)]
     _bounds = [(-15.0, -5.0), (-3.0, 3.0)]
 
-    def evaluate_true(self, X: Tensor) -> Tensor:
+    def _evaluate_true(self, X: Tensor) -> Tensor:
         x1 = X[..., 0]
         x2 = X[..., 1]
         return 100.0 * (x2 - 0.01 * x1.square()).abs().sqrt() + 0.01 * (x1 + 10.0).abs()
@@ -338,7 +338,7 @@ class HyperTuningGridTestFunction(SyntheticTestFunction):
 
         super().__init__(noise_std, negate, bounds)
 
-    def evaluate_true(self, X: Tensor) -> Tensor:
+    def _evaluate_true(self, X: Tensor) -> Tensor:
         with torch.no_grad():
             Y = self.model.predict(X.cpu().numpy())
             return torch.as_tensor(Y, dtype=X.dtype, device=X.device)
@@ -522,7 +522,7 @@ class ConstrainedSixHumpCamel(SixHumpCamel, ConstrainedSyntheticTestFunction):
         x1, x2 = X.unbind(-1)
         return 0.5 - x1.square() - (x2 + 0.1).square()
 
-    def evaluate_slack_true(self, X: Tensor) -> Tensor:
+    def _evaluate_slack_true(self, X: Tensor) -> Tensor:
         nonlinear_ineq_con = self._nonlinear_inequality_constraint0(X).unsqueeze(-1)
         lin_ineq_cons = (self.A @ X.unsqueeze(-1)).squeeze(-1) - self.b
         return torch.concat((nonlinear_ineq_con, lin_ineq_cons), dim=-1)
@@ -899,11 +899,11 @@ class NormalizedProblemWrapper(BaseTestProblem):
         """Unnormalizes the input from the new bounds to the original search space."""
         return (X - self._offset) / self._coeff
 
-    def evaluate_true(self, X: Tensor) -> Tensor:
-        return self._problem.evaluate_true(self.unnormalize(X))
+    def _evaluate_true(self, X: Tensor) -> Tensor:
+        return self._problem._evaluate_true(self.unnormalize(X))
 
-    def evaluate_slack_true(self, X: Tensor) -> Tensor:
-        return self._problem.evaluate_slack_true(self.unnormalize(X))
+    def _evaluate_slack_true(self, X: Tensor) -> Tensor:
+        return self._problem._evaluate_slack_true(self.unnormalize(X))
 
 
 def get_benchmark_problem(

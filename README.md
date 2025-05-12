@@ -114,7 +114,7 @@ class CustomProblem(SyntheticTestFunction):
     _optimizers = [(-0.959769,)]
     _bounds = [(-3.0, +3.0)]
 
-    def evaluate_true(self, X: Tensor) -> Tensor:
+    def _evaluate_true(self, X: Tensor) -> Tensor:
         X2 = X.square()
         return (
             (1 + X * (2 * X).sin() * (3 * X).cos() / (1 + X2)).square()
