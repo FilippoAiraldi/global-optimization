@@ -383,6 +383,7 @@ class CstrMpcControllerTuning(SyntheticTestFunction):
             bounds.extend(par_bounds for _ in range(par_size))
             self._sizes.append(par_size)
         self.dim = sum(self._sizes)
+        self.continuous_inds = list(range(self.dim))
 
         # instantiate the parent class
         super().__init__(None, negate, bounds)

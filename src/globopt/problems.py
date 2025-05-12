@@ -68,6 +68,7 @@ class SimpleProblem(SyntheticTestFunction):
     """
 
     dim = 1
+    continuous_inds = list(range(dim))
     _optimal_value = 0.279504
     _optimizers = [(-0.959769,)]
     _bounds = [(-3.0, +3.0)]
@@ -91,6 +92,7 @@ class Adjiman(SyntheticTestFunction):
     """
 
     dim = 2
+    continuous_inds = list(range(dim))
     _optimal_value = -2.02181
     _optimizers = [(2.0, 0.10578)]
     _bounds = [(-1.0, 2.0), (-1.0, 1.0)]
@@ -116,6 +118,7 @@ class Step2(SyntheticTestFunction):
 
     def __init__(self, dim: int, *args: Any, **kwargs: Any) -> None:
         self.dim = dim
+        self.continuous_inds = list(range(dim))
         super().__init__(bounds=[self._bounds[0] for _ in range(dim)], *args, **kwargs)
 
     def _evaluate_true(self, X: Tensor) -> Tensor:
@@ -133,6 +136,7 @@ class Himmelblau(SyntheticTestFunction):
     """
 
     dim = 2
+    continuous_inds = list(range(dim))
     _optimal_value = 0.0
     _optimizers = [
         (3.0, 2.0),
@@ -165,6 +169,7 @@ class Brochu(SyntheticTestFunction):
         if dim not in (2, 4, 6):
             raise ValueError(f"Brochu with dim {dim} not defined")
         self.dim = dim
+        self.continuous_inds = list(range(dim))
         self._optimizers = [(0.6623009251970219,) * dim]
         if dim == 2:
             self._optimal_value = -2.662639755973945
@@ -191,6 +196,7 @@ class GoldsteinPrice(SyntheticTestFunction):
     """
 
     dim = 2
+    continuous_inds = list(range(dim))
     _optimal_value = 3.0
     _optimizers = [(0.0, -1.0)]
     _bounds = [(-2.0, 2.0), (-2.0, 2.0)]
@@ -220,6 +226,7 @@ class Bohachevsky(SyntheticTestFunction):
     """
 
     dim = 2
+    continuous_inds = list(range(dim))
     _optimal_value = 0.0
     _optimizers = [(0.0, 0.0)]
     _bounds = [(-100.0, 100.0), (-100.0, 100.0)]
@@ -245,6 +252,7 @@ class Shubert(SyntheticTestFunction):
     locations with `f_opt = -186.7309`."""
 
     dim = 2
+    continuous_inds = list(range(dim))
     _optimal_value = -186.7309
     _optimizers = [
         (-7.0835, 4.858),
@@ -287,6 +295,7 @@ class Bukin(SyntheticTestFunction):
     """
 
     dim = 2
+    continuous_inds = list(range(dim))
     _optimal_value = 0.0
     _optimizers = [(-10.0, 1.0)]
     _bounds = [(-15.0, -5.0), (-3.0, 3.0)]
@@ -317,6 +326,7 @@ class HyperTuningGridTestFunction(SyntheticTestFunction):
         is_not_nan = np.logical_not(np.any(np.isnan(data), axis=1))
         data = data[is_not_nan, :]
         self.dim = data.shape[1] - 1
+        self.continuous_inds = list(range(self.dim))
         bounds = [(data[:, i].min(), data[:, i].max()) for i in range(self.dim)]
 
         opt_idx = np.argmin(data[:, -1])
@@ -481,7 +491,6 @@ def get_available_benchmark_problems() -> list[str]:
 class ConstrainedSixHumpCamel(SixHumpCamel, ConstrainedSyntheticTestFunction):
     r"""Constraind six hump camel function."""
 
-    dim = SixHumpCamel.dim
     _optimizers = [
         (
             (684452907 - 5000 * sqrt(2889571934)) / 1950978529,
