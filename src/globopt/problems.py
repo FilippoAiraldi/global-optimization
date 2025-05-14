@@ -1,22 +1,38 @@
-"""
-Collection of popular tests for benchmarking optimization algorithms. These tests were
-implemented according to [1, 2, 3].
+r"""
+Collection of popular tests for benchmarking optimization algorithms. For the synthetic
+test functions, see [1, 2, 3]; for the realistic hyperparameter tuning test functions,
+see [4] (LDA, logreg), [5] (cancer and boston NN), [6] (robot pushing), and [7] (SVM?
+and cosmological). For the constrained test functions, see [8, 9, 10, 11].
 
 References
 ----------
-[1] Jamil, M., Yang, X.-S.: A literature survey of benchmark functions for global
-    optimisation problems. Int. J. Math. Model. Numer. Optim. 4(2):150–194 (2013).
-[2] Surjanovic, S. & Bingham, D. (2013). Virtual Library of Simulation Experiments: Test
-    Functions and Datasets. Retrieved May 3, 2023, from
-    http://www.sfu.ca.tudelft.idm.oclc.org/~ssurjano.
-[3] Jiang, S., Chai, H., Gonzalez, J. and Garnett, R., 2020, November. BINOCULARS for
-    efficient, nonmyopic sequential experimental design. In International Conference on
-    Machine Learning (pp. 4794-4803). PMLR.
-[4] Wang, Z. and Jegelka, S., 2017, July. Max-value entropy search for efficient
-    Bayesian optimization. In International Conference on Machine Learning
-    (pp. 3627-3635). PMLR.
-[5] Eric, B., Freitas, N. and Ghosh, A., 2007. Active preference learning with discrete
-    choice data. Advances in neural information processing systems, 20.
+[1]  Jamil, M., Yang, X.-S.: A literature survey of benchmark functions for global
+     optimisation problems. Int. J. Math. Model. Numer. Optim. 4(2):150-194 (2013).
+[2]  Surjanovic, S. & Bingham, D. (2013). Virtual Library of Simulation Experiments:
+     Test Functions and Datasets. Retrieved May 3, 2023.
+[3]  Brochu, E., Freitas, N. and Ghosh, A., 2007. Active preference learning with
+     discrete choice data. Advances in neural information processing systems, 20.
+[4]  Snoek, J., Larochelle, H., Adams, R.P.: Practical Bayesian optimization of machine
+     learning algorithms. In: Pereira, F., Burges, C.J., Bottou, L., Weinberger, K.Q.
+     (eds.) Advances in Neural Information Processing Systems, vol. 25, pp. 2951-2959.
+     Curran Associates, Inc., Lake Tahoe, USA (2012).
+[5]  Bache, Kevin and Lichman, Moshe. UCI machine learning repository. 2013.
+[6]  Kaelbling, Leslie Pack and Lozano-Perez, Tomas. Learning composable models of
+     primitive actions. In International Conference on Robotics and Automation (ICRA),
+     2017.
+[7]  Malkomes, Gustavo, and Roman Garnett. Automating Bayesian optimization with
+     Bayesian optimization. Advances in Neural Information Processing Systems 31 (2018).
+[8]  Bemporad, A., 2020. Global optimization via inverse distance weighting and radial
+     basis functions. Computational Optimization and Applications, 77(2), pp.571-595.
+[9]  R. Gramacy, G. Gray, S. Le Digabel, H. Lee, P. Ranjan, G. Wells & S. Wild. Modeling
+     an Augmented Lagrangian for Blackbox Constrained Optimization, Technometrics, 2016.
+[10] C. A. Coello Coello and E. Mezura Montes. Constraint-handling in genetic algorithms
+     through the use of dominance-based tournament selection. Advanced Engineering
+     Informatics, 16(3):193–203, 2002.
+[11] A. C. C. Lemonge, H. J. C. Barbosa, C. C. H. Borges, and F. B. dos Santos Silva.
+     Constrained optimization problems in mechanical engineering design using a
+     real-coded steady-state genetic algorithm. Mecánica Computacional, XXIX:9287–9303,
+     2010.
 """
 
 from collections.abc import Callable
@@ -31,6 +47,7 @@ import torch
 from botorch.test_functions import (
     Ackley,
     Branin,
+    Bukin,
     DropWave,
     EggHolder,
     Griewank,
@@ -82,6 +99,9 @@ class SimpleProblem(SyntheticTestFunction):
         )
 
 
+########################################################################################
+
+
 class Adjiman(SyntheticTestFunction):
     r"""Adjiman function, a 2-dimensional synthetic test function given by:
 
@@ -103,53 +123,31 @@ class Adjiman(SyntheticTestFunction):
         return x.cos() * y.sin() - x / (y.square() + 1.0)
 
 
-class Step2(SyntheticTestFunction):
-    r"""Step 2 function, an m-dimensional synthetic test function given by:
+class Bohachevsky(SyntheticTestFunction):
+    r"""Bohachevsky function, a 2-dimensional synthetic test function given by:
 
-        f(x) = sum( floor(x + 0.5)^2 ).
+        f(x) = x1^2 + 2*x2^2 - 0.3*cos(3*pi*x1) - 0.4*cos(4*pi*x2) + 0.7.
 
-    x is bounded [-100,100] in each dimension. f has infinitely many global minima at
-    the origin, with `f_opt = 0`.
-    """
-
-    _optimal_value = 0.0
-
-    def __init__(self, dim: int, *args: Any, **kwargs: Any) -> None:
-        self.dim = dim
-        self._optimzers = [(0.0,) * dim]
-        self._bounds = [(-100.0, 100.0) for _ in range(dim)]
-        self.continuous_inds = list(range(dim))
-        super().__init__(bounds=[self._bounds[0] for _ in range(dim)], *args, **kwargs)
-
-    def _evaluate_true(self, X: Tensor) -> Tensor:
-        return (X + 0.5).floor().square().sum(-1)
-
-
-class Himmelblau(SyntheticTestFunction):
-    r"""Himmelblau function, a 2-dimensional synthetic test function given by:
-
-        f(x) = (x1^2 + x2 - 11)^2 + (x1 + x2^2 - 7)^2.
-
-    x is bounded [-5,5] in each dimension. f has 4 global minima at
-    `x_opt = (3, 2), (-2.80511, 3.13131), (-3.77931, -3.28318), (3.58442, -1.84812)`
-    with `f_opt = 0`.
+    x is bounded [-100,100] in each dimension. f has a global minimum at
+    `x_opt = (0, 0)` with `f_opt = 0.0`.
     """
 
     dim = 2
     continuous_inds = list(range(dim))
     _optimal_value = 0.0
-    _optimizers = [
-        (3.0, 2.0),
-        (-2.805118, 3.131312),
-        (-3.779310, -3.283186),
-        (3.584428, -1.848126),
-    ]
-    _bounds = [(-5.0, 5.0), (-5.0, 5.0)]
+    _optimizers = [(0.0, 0.0)]
+    _bounds = [(-100.0, 100.0), (-100.0, 100.0)]
 
     def _evaluate_true(self, X: Tensor) -> Tensor:
         x1 = X[..., 0]
         x2 = X[..., 1]
-        return (x1.square() + x2 - 11).square() + (x1 + x2.square() - 7).square()
+        return (
+            x1.square()
+            + 2 * x2.square()
+            - 0.3 * (3 * torch.pi * x1).cos()
+            - 0.4 * (4 * torch.pi * x2).cos()
+            + 0.7
+        )
 
 
 class Brochu(SyntheticTestFunction):
@@ -216,31 +214,31 @@ class GoldsteinPrice(SyntheticTestFunction):
         return p * g
 
 
-class Bohachevsky(SyntheticTestFunction):
-    r"""Bohachevsky function, a 2-dimensional synthetic test function given by:
+class Himmelblau(SyntheticTestFunction):
+    r"""Himmelblau function, a 2-dimensional synthetic test function given by:
 
-        f(x) = x1^2 + 2*x2^2 - 0.3*cos(3*pi*x1) - 0.4*cos(4*pi*x2) + 0.7.
+        f(x) = (x1^2 + x2 - 11)^2 + (x1 + x2^2 - 7)^2.
 
-    x is bounded [-100,100] in each dimension. f has a global minimum at
-    `x_opt = (0, 0)` with `f_opt = 0.0`.
+    x is bounded [-5,5] in each dimension. f has 4 global minima at
+    `x_opt = (3, 2), (-2.80511, 3.13131), (-3.77931, -3.28318), (3.58442, -1.84812)`
+    with `f_opt = 0`.
     """
 
     dim = 2
     continuous_inds = list(range(dim))
     _optimal_value = 0.0
-    _optimizers = [(0.0, 0.0)]
-    _bounds = [(-100.0, 100.0), (-100.0, 100.0)]
+    _optimizers = [
+        (3.0, 2.0),
+        (-2.805118, 3.131312),
+        (-3.779310, -3.283186),
+        (3.584428, -1.848126),
+    ]
+    _bounds = [(-5.0, 5.0), (-5.0, 5.0)]
 
     def _evaluate_true(self, X: Tensor) -> Tensor:
         x1 = X[..., 0]
         x2 = X[..., 1]
-        return (
-            x1.square()
-            + 2 * x2.square()
-            - 0.3 * (3 * torch.pi * x1).cos()
-            - 0.4 * (4 * torch.pi * x2).cos()
-            + 0.7
-        )
+        return (x1.square() + x2 - 11).square() + (x1 + x2.square() - 7).square()
 
 
 class Shubert(SyntheticTestFunction):
@@ -285,25 +283,29 @@ class Shubert(SyntheticTestFunction):
         return p1 * p2
 
 
-class Bukin(SyntheticTestFunction):
-    r"""Bukin function, a 2-dimensional synthetic test function given by:
+class Step2(SyntheticTestFunction):
+    r"""Step 2 function, an m-dimensional synthetic test function given by:
 
-        f(x) = 100 * sqrt(abs(x2 - 0.01 * x1^2)) + 0.01 * abs(x1 + 10).
+        f(x) = sum( floor(x + 0.5)^2 ).
 
-    x is bounded [-15,-5] in the first dimension and [-3,3] in the second dimension.
-    f has a global minimum at `x_opt = (-10, 1)` with `f_opt = 0.0`.
+    x is bounded [-100,100] in each dimension. f has infinitely many global minima at
+    the origin, with `f_opt = 0`.
     """
 
-    dim = 2
-    continuous_inds = list(range(dim))
     _optimal_value = 0.0
-    _optimizers = [(-10.0, 1.0)]
-    _bounds = [(-15.0, -5.0), (-3.0, 3.0)]
+
+    def __init__(self, dim: int, *args: Any, **kwargs: Any) -> None:
+        self.dim = dim
+        self._optimzers = [(0.0,) * dim]
+        self._bounds = [(-100.0, 100.0) for _ in range(dim)]
+        self.continuous_inds = list(range(dim))
+        super().__init__(bounds=[self._bounds[0] for _ in range(dim)], *args, **kwargs)
 
     def _evaluate_true(self, X: Tensor) -> Tensor:
-        x1 = X[..., 0]
-        x2 = X[..., 1]
-        return 100.0 * (x2 - 0.01 * x1.square()).abs().sqrt() + 0.01 * (x1 + 10.0).abs()
+        return (X + 0.5).floor().square().sum(-1)
+
+
+########################################################################################
 
 
 class HyperTuningGridTestFunction(SyntheticTestFunction):
@@ -354,6 +356,13 @@ class HyperTuningGridTestFunction(SyntheticTestFunction):
             return torch.as_tensor(Y, dtype=X.dtype, device=X.device)
 
 
+class Cosmological(HyperTuningGridTestFunction):
+    """Estimation of cosmological constants of a physical model of the Universe."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__("cosmological_on_grid.csv", *args, **kwargs)
+
+
 class Lda(HyperTuningGridTestFunction):
     """Online Latent Dirichlet allocation (LDA) for Wikipedia articles."""
 
@@ -401,13 +410,6 @@ class Svm(HyperTuningGridTestFunction):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__("svm_on_grid.csv", *args, **kwargs)
-
-
-class Cosmological(HyperTuningGridTestFunction):
-    """Estimation of cosmological constants of a physical model of the Universe."""
-
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__("cosmological_on_grid.csv", *args, **kwargs)
 
 
 Ackley2 = partial(Ackley, dim=2)
@@ -488,8 +490,32 @@ def get_available_benchmark_problems() -> list[str]:
 ########################################################################################
 
 
+class ConstrainedGramacy(_ConstrainedGramacy):
+    """Constrained Gramacy test function with tighetened bounds."""
+
+    _bounds = [(0.0, 1.0), (0.1, 1.0)]
+
+    @staticmethod
+    def _nonlinear_inequality_constraint0(X: Tensor) -> Tensor:
+        x1, x2 = X.unbind(-1)
+        return x1 + 2 * x2 + 0.5 * torch.sin(2 * pi * (x1.square() - 2 * x2)) - 1.5
+
+    @staticmethod
+    def _nonlinear_inequality_constraint1(X: Tensor) -> Tensor:
+        x1, x2 = X.unbind(-1)
+        return 1.5 - x1.square() - x2.square()
+
+
+class ConstrainedHartmann6(_ConstrainedHartmannSmooth):
+    """Constrained Hartmann (dim=6) test function with tighetened bounds."""
+
+    @staticmethod
+    def _nonlinear_inequality_constraint0(X: Tensor) -> Tensor:
+        return 1 - X.square().sum(-1)
+
+
 class ConstrainedSixHumpCamel(SixHumpCamel, ConstrainedSyntheticTestFunction):
-    r"""Constraind six hump camel function."""
+    """Constraind six hump camel function."""
 
     _optimizers = [
         (
@@ -537,30 +563,6 @@ class ConstrainedSixHumpCamel(SixHumpCamel, ConstrainedSyntheticTestFunction):
         return torch.concat((nonlinear_ineq_con, lin_ineq_cons), dim=-1)
 
 
-class ConstrainedGramacy(_ConstrainedGramacy):
-    """Constrained Gramacy test function with tighetened bounds."""
-
-    _bounds = [(0.0, 1.0), (0.1, 1.0)]
-
-    @staticmethod
-    def _nonlinear_inequality_constraint0(X: Tensor) -> Tensor:
-        x1, x2 = X.unbind(-1)
-        return x1 + 2 * x2 + 0.5 * torch.sin(2 * pi * (x1.square() - 2 * x2)) - 1.5
-
-    @staticmethod
-    def _nonlinear_inequality_constraint1(X: Tensor) -> Tensor:
-        x1, x2 = X.unbind(-1)
-        return 1.5 - x1.square() - x2.square()
-
-
-class ConstrainedHartmann6(_ConstrainedHartmannSmooth):
-    """Constrained Hartmann (dim=6) test function with tighetened bounds."""
-
-    @staticmethod
-    def _nonlinear_inequality_constraint0(X: Tensor) -> Tensor:
-        return 1 - X.square().sum(-1)
-
-
 class PressureVessel(_PressureVessel):
     """Pressure vessel design test function with tighetened bounds."""
 
@@ -582,60 +584,6 @@ class PressureVessel(_PressureVessel):
     def _nonlinear_inequality_constraint0(X: Tensor) -> Tensor:
         x3, x4 = X[..., 2], X[..., 3]
         return x3.square() * x4 + 4 / 3 * x3.pow(3) - 1296000 / pi
-
-
-class WeldedBeam(_WeldedBeamSO):
-    """ "Welded beam design test function with tighetened bounds."""
-
-    _optimizers = [(0.205986, 3.471328, 9.020224, 0.206480)]
-    _optimal_value = 1.728226
-    _bounds = [(0.125, 2.5), (0.3, 10.0), (2.0, 10.0), (0.1, 3.0)]
-
-    def __init__(
-        self, *args: Any, dtype: torch.dtype = torch.double, **kwargs: Any
-    ) -> None:
-        self.A = torch.as_tensor([(-1.0, 0.0, 0.0, 1.0)], dtype=dtype)
-        self.b = torch.zeros(1, dtype=dtype)
-        self._P = 6000.0
-        self._L = 14.0
-        self._E = 30e6
-        self._G = 12e6
-        self._t_max = 13600.0
-        self._s_max = 30000.0
-        self._d_max = 0.25
-        super().__init__(*args, **kwargs, dtype=dtype)
-
-    def _nonlinear_inequality_constraint0(self, X: Tensor) -> Tensor:
-        x1, x2, x3, _ = X.unbind(-1)
-        sqrt2 = sqrt(2)
-        M = self._P * (self._L + x2 / 2)
-        R = (0.25 * (x2.square() + (x1 + x3).square())).sqrt()
-        J = 2 * sqrt2 * x1 * x2 * (x2.square() / 12 + 0.25 * (x1 + x3).square())
-        t1 = self._P / (sqrt2 * x1 * x2)
-        t2 = M * R / J
-        return self._t_max - (t1.square() + t1 * t2 * x2 / R + t2.square()).sqrt()
-
-    def _nonlinear_inequality_constraint1(self, X: Tensor) -> Tensor:
-        x3, x4 = X[..., 2], X[..., 3]
-        s = 6 * self._P * self._L / (x4 * x3.square())
-        return self._s_max - s
-
-    def _nonlinear_inequality_constraint2(self, X: Tensor) -> Tensor:
-        x1, x2, x3, x4 = X.unbind(-1)
-        return 5.0 - 0.10471 * x1.square() - 0.04811 * x3 * x4 * (14.0 + x2)
-
-    def _nonlinear_inequality_constraint3(self, X: Tensor) -> Tensor:
-        x3, x4 = X[..., 2], X[..., 3]
-        d = 4 * self._P * self._L**3 / (self._E * x3.pow(3) * x4)
-        return self._d_max - d
-
-    def _nonlinear_inequality_constraint4(self, X: Tensor) -> Tensor:
-        x3, x4 = X[..., 2], X[..., 3]
-        E = self._E
-        L = self._L
-        C = 4.013 * 6 * E / (L**2)
-        P_c = C * x3 * x4.pow(3) * (1 - 0.25 * x3 / L * sqrt(E / self._G))
-        return P_c - self._P
 
 
 class SpeedReducer(_SpeedReducer):
@@ -708,6 +656,60 @@ class SpeedReducer(_SpeedReducer):
         return 1 - (1.1 * x7 + 1.9) / x5
 
 
+class WeldedBeam(_WeldedBeamSO):
+    """ "Welded beam design test function with tighetened bounds."""
+
+    _optimizers = [(0.205986, 3.471328, 9.020224, 0.206480)]
+    _optimal_value = 1.728226
+    _bounds = [(0.125, 2.5), (0.3, 10.0), (2.0, 10.0), (0.1, 3.0)]
+
+    def __init__(
+        self, *args: Any, dtype: torch.dtype = torch.double, **kwargs: Any
+    ) -> None:
+        self.A = torch.as_tensor([(-1.0, 0.0, 0.0, 1.0)], dtype=dtype)
+        self.b = torch.zeros(1, dtype=dtype)
+        self._P = 6000.0
+        self._L = 14.0
+        self._E = 30e6
+        self._G = 12e6
+        self._t_max = 13600.0
+        self._s_max = 30000.0
+        self._d_max = 0.25
+        super().__init__(*args, **kwargs, dtype=dtype)
+
+    def _nonlinear_inequality_constraint0(self, X: Tensor) -> Tensor:
+        x1, x2, x3, _ = X.unbind(-1)
+        sqrt2 = sqrt(2)
+        M = self._P * (self._L + x2 / 2)
+        R = (0.25 * (x2.square() + (x1 + x3).square())).sqrt()
+        J = 2 * sqrt2 * x1 * x2 * (x2.square() / 12 + 0.25 * (x1 + x3).square())
+        t1 = self._P / (sqrt2 * x1 * x2)
+        t2 = M * R / J
+        return self._t_max - (t1.square() + t1 * t2 * x2 / R + t2.square()).sqrt()
+
+    def _nonlinear_inequality_constraint1(self, X: Tensor) -> Tensor:
+        x3, x4 = X[..., 2], X[..., 3]
+        s = 6 * self._P * self._L / (x4 * x3.square())
+        return self._s_max - s
+
+    def _nonlinear_inequality_constraint2(self, X: Tensor) -> Tensor:
+        x1, x2, x3, x4 = X.unbind(-1)
+        return 5.0 - 0.10471 * x1.square() - 0.04811 * x3 * x4 * (14.0 + x2)
+
+    def _nonlinear_inequality_constraint3(self, X: Tensor) -> Tensor:
+        x3, x4 = X[..., 2], X[..., 3]
+        d = 4 * self._P * self._L**3 / (self._E * x3.pow(3) * x4)
+        return self._d_max - d
+
+    def _nonlinear_inequality_constraint4(self, X: Tensor) -> Tensor:
+        x3, x4 = X[..., 2], X[..., 3]
+        E = self._E
+        L = self._L
+        C = 4.013 * 6 * E / (L**2)
+        P_c = C * x3 * x4.pow(3) * (1 - 0.25 * x3 / L * sqrt(E / self._G))
+        return P_c - self._P
+
+
 CONSTRAINED_TESTS: dict[
     str,
     tuple[
@@ -720,12 +722,12 @@ CONSTRAINED_TESTS: dict[
 ] = {
     problem.__name__.lower(): (problem, kwargs, max_evals, regressor_type)
     for problem, kwargs, max_evals, regressor_type in [
-        (ConstrainedSixHumpCamel, {}, 30, "rbf"),
         (ConstrainedGramacy, {}, 30, "rbf"),
         (ConstrainedHartmann6, {}, 30, "rbf"),
+        (ConstrainedSixHumpCamel, {}, 30, "rbf"),
         (PressureVessel, {}, 30, "rbf"),
-        (WeldedBeam, {}, 30, "rbf"),
         (SpeedReducer, {}, 30, "rbf"),
+        (WeldedBeam, {}, 30, "rbf"),
     ]
 }
 
