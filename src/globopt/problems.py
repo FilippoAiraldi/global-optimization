@@ -834,15 +834,18 @@ def get_problem_constraints_and_ic_generator(
         return lin_ineq_constrs, None, lambda *_, **__: None
 
     def constraint_func(X: Tensor) -> Tensor:
-        # X \in (num_restart, q, dim), so we take the minimum of all constraints and
-        # along the whole (q) trajectory/batch
-        return problem.evaluate_slack_true(X).amin((1, 2))
+        return problem.evaluate_slack_true(X).amin(-1)
 
     def sampler(num_restart: int, q: int) -> Tensor:
         # NOTE: lb, ub and the constr. func. live in the original unnormalized space
         samples = latin_hypercube_with_nonlinear_constraint(
-            num_restart, q, dim, lb, ub, constraint_func
-        ).view(num_restart, q, dim)
+            num_restart * q, dim, lb, ub, constraint_func
+        )
+        if q == 1:
+            samples.unsqueeze_(1)  # n_sampled x q=1 x dim
+        else:
+            n_sampled = samples.shape[0]
+            samples = samples[: n_sampled - n_sampled % q].view(-1, q, dim)
         if norm is not None:
             samples = norm.normalize(samples)
         return samples

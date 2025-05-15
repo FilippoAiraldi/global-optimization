@@ -62,17 +62,17 @@ class GaussHermiteSampler(MCSampler):
 
 def latin_hypercube_with_nonlinear_constraint(
     n: int,
-    q: int,
     d: int,
     lb: Tensor,
     ub: Tensor,
     constraint: Callable[[Tensor], Tensor],
     device: torch.device | None = None,
     dtype: torch.dtype | None = None,
-    iteration_limit: int = 10_000,
+    max_iterations: int = 1_000,
+    max_memory_usage: int = 2**31,
 ) -> Tensor:
-    """Generates `n` samples of `q`-batches in `d` dimensions using scrambled Latin
-    Hypercube Sampling, subject to a nonlinear constraint.
+    """Generates `n` samples in `d` dimensions using scrambled Latin Hypercube Sampling,
+    subject to a nonlinear constraint.
 
     This function iteratively draws a larger batch of Latin Hypercube Samples within
     the axis-aligned box defined by `lb` and `ub`, applies the user-provided
@@ -83,8 +83,6 @@ def latin_hypercube_with_nonlinear_constraint(
     ----------
     n : int
         The number of samples to generate (also the number of strata per dimension)
-    q : int
-        The number of candidates per q-batch.
     d : int
         The number of dimensions (variables) of the sample space
     lb : Tensor
@@ -92,61 +90,64 @@ def latin_hypercube_with_nonlinear_constraint(
     ub : Tensor
         The upper bounds of the sample space. Should be a 1D tensor of length `d`.
     constraint : Callable[[Tensor], Tensor]
-        A callable that takes a tensor of shape `(n, q, d)` and returns another tensor
-        of shape `n`. For each entry, the constraint is deemed satisfied if the output
-        is nonnegative.
+        A callable that takes a tensor of shape `(n, d)` and returns another tensor of
+        shape `n`. For each entry, the constraint is deemed satisfied if the output is
+        nonnegative.
     device : torch.device, optional
         The desired device for the output tensor. If `None`, it is taken from `lb`.
     dtype : torch.dtype, optional
         The desired data type for the output tensor. If `None`, it is taken from `lb`.
-    iteration_limit : int, optional
-        The maximum number of iterations to attempt before raising an error. Default is
-        `10000`.
+    max_iterations : int, optional
+        The maximum number of iterations to attempt generating `n` feasible samples.
+        Default is `1000`. If the number of iterations exceeds this threshold, the
+        currently available feasible samples are returned (likely less than `n`).
+    max_memory_usage : int, optional
+        Limitation (in bytes) on the maximum of samples that can be generated in terms
+        of memory to avoid out-of-memory issues. Default is `2^31` bytes.
 
     Returns
     -------
     Tensor
-        A tensor of shape `(n, q, d)` containing the generated Latin Hypercube Samples.
+        A tensor of shape `(n, d)` containing the generated Latin Hypercube Samples.
         Each value is in the range `[lb, ub)`.
     """
     # constant variables
     device = device or lb.device
     dtype = dtype or lb.dtype
     span = ub - lb
-    qdim = q * d
+    N_max = max_memory_usage // (d * lb.element_size())
+    assert n < N_max, (
+        f"Unable to generate {n} samples with maximum memory footprint of "
+        f"{max_memory_usage} bytes"
+    )
 
     # start the iterative sampling process
     N = n
     n_valid = 0
-    iters = 0
-    while n_valid < n:
+    iter = 0
+    while n_valid < n and iter < max_iterations:
+        iter += 1
+
         # generate N LHS samples
         # stratify the [0, 1] interval into N bins
         cut = torch.linspace(0, 1, steps=N + 1, device=device, dtype=dtype)
         lower, upper = cut[:-1], cut[1:]
         # draw one random point per interval for each dimension independently
-        u = torch.rand(N, qdim, device=device, dtype=dtype)
+        u = torch.rand(N, d, device=device, dtype=dtype)
         pts_unscaled = lower.view(N, 1) + u * (upper - lower).view(N, 1)
         # generate column-wise permutations and apply them using gather to reorder each
         # column of pts_unscaled by its own permutation
-        perm_indices = torch.rand(N, qdim, dtype=dtype, device=device).argsort(0)
+        perm_indices = torch.rand(N, d, dtype=dtype, device=device).argsort(0)
         pts_scrambled = pts_unscaled.gather(0, perm_indices)
         # scale to the range [lb, ub)
-        pts = lb + span * pts_scrambled.view(N, q, d)
+        pts = lb + span * pts_scrambled
 
         # compute the number of samples that satisfy the constraint
         constraint_mask = constraint(pts).ge(0)
         n_valid = constraint_mask.sum().item()
 
-        # if n_valid < n, then increase N as follows and repeat the process
-        N = ceil(min(20, 1.1 * n / n_valid) * N) if n_valid > 0 else 20 * N
-
-        # if we reach the recursion limit, raise an error
-        iters += 1
-        if iters > iteration_limit:
-            raise RuntimeError(
-                f"Recursion limit reached: {iteration_limit}. "
-                f"Try increasing the recursion limit or adjusting the constraint."
-            )
+        # if n_valid < n, then increase N as follows (but keep it below the memory max)
+        # and repeat the process
+        N = min(ceil(min(20, 1.1 * n / (n_valid + 1e-6)) * N), N_max)
 
     return pts[constraint_mask][:n]
