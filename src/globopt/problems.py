@@ -438,40 +438,40 @@ TESTS: dict[
         type[SyntheticTestFunction], dict[str, Any], int, Literal["rbf", "idw"], bool
     ],
 ] = {
-    problem.__name__.lower(): (problem, kwargs, max_evals, regressor_type)
-    for problem, kwargs, max_evals, regressor_type in [
-        (Ackley2, {}, 80, "rbf"),
-        (Ackley5, {}, 80, "rbf"),
-        (Adjiman, {}, 25, "rbf"),
-        (Bohachevsky, {}, 50, "rbf"),
-        (Branin, {}, 35, "rbf"),
-        (Brochu2, {}, 50, "rbf"),
-        (Brochu4, {}, 80, "rbf"),
-        (Brochu6, {}, 80, "rbf"),
-        (Bukin, {}, 25, "rbf"),
-        (Cosmological, {}, 80, "rbf"),
-        (DropWave, {}, 100, "rbf"),
-        (EggHolder, {}, 80, "rbf"),
-        (GoldsteinPrice, {}, 50, "rbf"),
-        (Griewank, {"dim": 3}, 80, "rbf"),
-        (Hartmann3, {}, 80, "rbf"),
-        (Hartmann6, {}, 100, "rbf"),
-        (Himmelblau, {}, 40, "rbf"),
-        (Lda, {}, 30, "rbf"),
-        (LogReg, {}, 25, "rbf"),
-        (NnBoston, {}, 100, "rbf"),
-        (NnCancer, {}, 60, "rbf"),
-        (Rastrigin, {"dim": 4}, 100, "rbf"),
-        (RobotPush3, {}, 90, "rbf"),
-        (RobotPush4, {}, 100, "rbf"),
-        (Rosenbrock, {"dim": 8}, 50, "rbf"),
-        (Shekel5, {}, 80, "rbf"),
-        (Shekel7, {}, 100, "rbf"),
-        (Shubert, {}, 50, "rbf"),
-        (SixHumpCamel, {"bounds": [(-5.0, 5.0), (-5.0, 5.0)]}, 50, "rbf"),
-        (Step2, {"dim": 5}, 80, "rbf"),
-        (StyblinskiTang, {"dim": 5}, 100, "rbf"),
-        (Svm, {}, 20, "rbf"),
+    problem.__name__.lower(): (problem, kwargs, max_evals, regressor_type, normalize)
+    for problem, kwargs, max_evals, regressor_type, normalize in [
+        (Ackley2, {}, 75, "idw", True),
+        (Ackley5, {}, 75, "idw", False),
+        (Adjiman, {}, 20, "idw", True),
+        (Bohachevsky, {}, 45, "idw", True),
+        (Branin, {}, 30, "idw", True),
+        (Brochu2, {}, 50, "rbf", False),  # NOTE: already normalized..
+        (Brochu4, {}, 75, "idw", False),  # NOTE: already normalized..
+        (Brochu6, {}, 70, "idw", False),  # NOTE: already normalized..
+        (Bukin, {}, 25, "idw", True),
+        (Cosmological, {}, 80, "rbf", True),
+        (DropWave, {}, 100, "rbf", True),
+        (EggHolder, {}, 75, "idw", True),
+        (GoldsteinPrice, {}, 45, "idw", True),
+        (Griewank, {"dim": 3}, 75, "idw", True),
+        (Hartmann3, {}, 75, "idw", False),  # NOTE: already normalized..
+        (Hartmann6, {}, 95, "rbf", False),  # NOTE: already normalized..
+        (Himmelblau, {}, 40, "idw", True),
+        (Lda, {}, 20, "idw", True),
+        (LogReg, {}, 25, "idw", True),
+        (NnBoston, {}, 100, "rbf", True),
+        (NnCancer, {}, 45, "rbf", True),
+        (Rastrigin, {"dim": 4}, 100, "rbf", True),
+        (RobotPush3, {}, 50, "idw", True),
+        (RobotPush4, {}, 100, "idw", False),
+        (Rosenbrock, {"dim": 8}, 50, "idw", False),
+        (Shekel5, {}, 80, "rbf", False),
+        (Shekel7, {}, 100, "rbf", False),
+        (Shubert, {}, 50, "idw", False),
+        (SixHumpCamel, {}, 30, "idw", True),
+        (Step2, {"dim": 5}, 75, "idw", False),
+        (StyblinskiTang, {"dim": 5}, 100, "idw", False),
+        (Svm, {}, 20, "idw", False),
     ]
 }
 
@@ -720,14 +720,14 @@ CONSTRAINED_TESTS: dict[
         bool,
     ],
 ] = {
-    problem.__name__.lower(): (problem, kwargs, max_evals, regressor_type)
-    for problem, kwargs, max_evals, regressor_type in [
-        (ConstrainedGramacy, {}, 30, "rbf"),
-        (ConstrainedHartmann6, {}, 30, "rbf"),
-        (ConstrainedSixHumpCamel, {}, 30, "rbf"),
-        (PressureVessel, {}, 30, "rbf"),
-        (SpeedReducer, {}, 30, "rbf"),
-        (WeldedBeam, {}, 30, "rbf"),
+    problem.__name__.lower(): (problem, kwargs, max_evals, regressor_type, normalize)
+    for problem, kwargs, max_evals, regressor_type, normalize in [
+        (ConstrainedGramacy, {}, 30, "rbf", False),
+        (ConstrainedHartmann6, {}, 30, "rbf", False),
+        (ConstrainedSixHumpCamel, {}, 30, "rbf", False),
+        (PressureVessel, {}, 30, "rbf", False),
+        (SpeedReducer, {}, 30, "rbf", False),
+        (WeldedBeam, {}, 30, "rbf", False),
     ]
 }
 
@@ -951,9 +951,8 @@ def get_benchmark_problem(
     """
     name_ = name.lower()
     source = TESTS if name_ in TESTS else CONSTRAINED_TESTS
-    cls, kwargs, max_evals, regressor = source[name_]
+    cls, kwargs, max_evals, regressor, normalize = source[name_]
     problem = cls(**kwargs)
-    normalize = False
     if normalize:
         problem = NormalizedProblemWrapper(
             problem, [(0.0, 1.0) for _ in range(problem.dim)]
