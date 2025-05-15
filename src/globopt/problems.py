@@ -878,6 +878,9 @@ class NormalizedProblemWrapper(BaseTestProblem):
         self, problem: BaseTestProblem, bounds: list[tuple[float, float]]
     ) -> None:
         self.dim = problem.dim
+        self.continuous_inds = problem.continuous_inds
+        self.discrete_inds = problem.discrete_inds
+        self.categorical_inds = problem.categorical_inds
         self._bounds = bounds  # must be done before calling super().__init__
         self._check_grad_at_opt = problem._check_grad_at_opt
         self._bounds_original = problem._bounds
