@@ -737,7 +737,7 @@ def get_problem_constraints_and_ic_generator(
 ) -> tuple[
     list[tuple[Tensor, Tensor, float]] | None,
     list[tuple[Callable, bool]] | None,
-    Callable[[int, int], Tensor] | None,
+    Callable[[int, int], Tensor | None],
 ]:
     """Given a problem, returns the inequality and nonlinear constraints in a form
     amenable to BoTorch's `optimize_acqf`, and, if necessary, a callable to generate

@@ -470,7 +470,7 @@ def summary_tables(
             f.write(latex)
 
 
-def parse_args(name: str, multiproblem: bool = True) -> argparse.ArgumentParser:
+def parse_args(name: str, multiproblem: bool = True) -> argparse.Namespace:
     """Parses the command line arguments."""
     parser = argparse.ArgumentParser(
         description=f"Visualization of {name} results.",
