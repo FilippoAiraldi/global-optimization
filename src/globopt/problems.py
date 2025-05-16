@@ -46,17 +46,23 @@ import numpy as np
 import torch
 from botorch.test_functions import (
     Ackley,
+    Beale,
     Branin,
     Bukin,
+    DixonPrice,
     DropWave,
     EggHolder,
     Griewank,
     Hartmann,
+    Levy,
+    Michalewicz,
+    Powell,
     Rastrigin,
     Rosenbrock,
     Shekel,
     SixHumpCamel,
     StyblinskiTang,
+    ThreeHumpCamel,
 )
 from botorch.test_functions.base import BaseTestProblem, ConstrainedBaseTestProblem
 from botorch.test_functions.synthetic import ConstrainedGramacy as _ConstrainedGramacy
@@ -422,10 +428,20 @@ Brochu4 = partial(Brochu, dim=4)
 setattr(Brochu4, "__name__", Brochu.__name__ + "4")
 Brochu6 = partial(Brochu, dim=6)
 setattr(Brochu6, "__name__", Brochu.__name__ + "6")
+DixonPrice2 = partial(DixonPrice, dim=2)
+setattr(DixonPrice2, "__name__", DixonPrice.__name__ + "2")
+DixonPrice4 = partial(DixonPrice, dim=4)
+setattr(DixonPrice4, "__name__", DixonPrice.__name__ + "4")
 Hartmann3 = partial(Hartmann, dim=3)
 setattr(Hartmann3, "__name__", Hartmann.__name__ + "3")
 Hartmann6 = partial(Hartmann, dim=6)
 setattr(Hartmann6, "__name__", Hartmann.__name__ + "6")
+Levy2 = partial(Levy, dim=2)
+setattr(Levy2, "__name__", Levy.__name__ + "2")
+Levy4 = partial(Levy, dim=4)
+setattr(Levy4, "__name__", Levy.__name__ + "4")
+Levy6 = partial(Levy, dim=6)
+setattr(Levy6, "__name__", Levy.__name__ + "6")
 Shekel5 = partial(Shekel, m=5)
 setattr(Shekel5, "__name__", Shekel.__name__ + "5")
 Shekel7 = partial(Shekel, m=7)
@@ -440,38 +456,47 @@ TESTS: dict[
 ] = {
     problem.__name__.lower(): (problem, kwargs, max_evals, regressor_type, normalize)
     for problem, kwargs, max_evals, regressor_type, normalize in [
-        (Ackley2, {}, 75, "idw", True),
+        (Ackley2, {}, 70, "idw", False),
         (Ackley5, {}, 75, "idw", False),
         (Adjiman, {}, 20, "idw", True),
+        (Beale, {}, 100, "rbf", False),
         (Bohachevsky, {}, 45, "idw", True),
         (Branin, {}, 30, "idw", True),
         (Brochu2, {}, 50, "rbf", False),  # NOTE: already normalized..
-        (Brochu4, {}, 75, "idw", False),  # NOTE: already normalized..
+        (Brochu4, {}, 75, "rbf", False),  # NOTE: already normalized..
         (Brochu6, {}, 70, "idw", False),  # NOTE: already normalized..
         (Bukin, {}, 25, "idw", True),
         (Cosmological, {}, 80, "rbf", True),
+        (DixonPrice2, {}, 60, "idw", False),
+        (DixonPrice4, {}, 65, "rbf", False),
         (DropWave, {}, 100, "rbf", True),
         (EggHolder, {}, 75, "idw", True),
         (GoldsteinPrice, {}, 45, "idw", True),
         (Griewank, {"dim": 3}, 75, "idw", True),
-        (Hartmann3, {}, 75, "idw", False),  # NOTE: already normalized..
+        (Hartmann3, {}, 80, "idw", False),  # NOTE: already normalized..
         (Hartmann6, {}, 95, "rbf", False),  # NOTE: already normalized..
         (Himmelblau, {}, 40, "idw", True),
         (Lda, {}, 20, "idw", True),
+        (Levy2, {}, 35, "idw", True),
+        (Levy4, {}, 100, "rbf", False),
+        (Levy6, {}, 100, "rbf", True),
         (LogReg, {}, 25, "idw", True),
+        (Michalewicz, {}, 100, "idw", False),
         (NnBoston, {}, 100, "rbf", True),
         (NnCancer, {}, 45, "rbf", True),
+        (Powell, {}, 100, "idw", True),
         (Rastrigin, {"dim": 4}, 100, "rbf", True),
         (RobotPush3, {}, 50, "idw", True),
-        (RobotPush4, {}, 100, "idw", False),
-        (Rosenbrock, {"dim": 8}, 50, "idw", False),
+        (RobotPush4, {}, 50, "idw", True),
+        (Rosenbrock, {"dim": 8}, 50, "rbf", True),
         (Shekel5, {}, 80, "rbf", False),
         (Shekel7, {}, 100, "rbf", False),
         (Shubert, {}, 50, "idw", False),
-        (SixHumpCamel, {}, 30, "idw", True),
-        (Step2, {"dim": 5}, 75, "idw", False),
+        (SixHumpCamel, {}, 75, "idw", True),
+        (Step2, {"dim": 5}, 75, "rbf", True),
         (StyblinskiTang, {"dim": 5}, 100, "idw", False),
         (Svm, {}, 20, "idw", False),
+        (ThreeHumpCamel, {}, 50, "rbf", True),
     ]
 }
 
