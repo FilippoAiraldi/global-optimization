@@ -302,7 +302,7 @@ class Step2(SyntheticTestFunction):
 
     def __init__(self, dim: int, *args: Any, **kwargs: Any) -> None:
         self.dim = dim
-        self._optimzers = [(0.0,) * dim]
+        self._optimizers = [(0.0,) * dim]
         self._bounds = [(-100.0, 100.0) for _ in range(dim)]
         self.continuous_inds = list(range(dim))
         super().__init__(bounds=[self._bounds[0] for _ in range(dim)], *args, **kwargs)
