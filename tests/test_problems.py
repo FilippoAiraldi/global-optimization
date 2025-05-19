@@ -4,12 +4,10 @@ import torch
 from parameterized import parameterized
 
 from globopt.problems import (
-    Ackley2,
-    Ackley5,
+    Ackley,
     Adjiman,
     Beale,
     Bohachevsky,
-    Branin,
     Brochu2,
     Brochu4,
     Brochu6,
@@ -30,7 +28,6 @@ from globopt.problems import (
     Levy4,
     Levy6,
     LogReg,
-    Michalewicz,
     NnBoston,
     NnCancer,
     NormalizedProblemWrapper,
@@ -54,12 +51,10 @@ from globopt.problems import (
 
 DTYPE = torch.float64
 CLS: list[type, float] = [
-    (Ackley2, 0.0),
-    (Ackley5, 0.0),
+    (Ackley, 0.0),
     (Adjiman, -2.02181),
     (Beale, 0.0),
     (Bohachevsky, 0.0),
-    (Branin, 0.3978873),
     (Brochu2, -2.662639755973945),
     (Brochu4, -7.32527951194789),
     (Brochu6, -10.987919267921836),
@@ -79,7 +74,6 @@ CLS: list[type, float] = [
     (Levy4, 0.0),
     (Levy6, 0.0),
     (LogReg, 0.0685),
-    (Michalewicz, -1.80130341),
     (NnBoston, 6.5212),
     (NnCancer, 0.040576),
     (Powell, 0.0),
