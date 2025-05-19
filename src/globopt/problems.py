@@ -47,7 +47,6 @@ import torch
 from botorch.test_functions import (
     Ackley,
     Beale,
-    Branin,
     Bukin,
     DixonPrice,
     DropWave,
@@ -55,7 +54,6 @@ from botorch.test_functions import (
     Griewank,
     Hartmann,
     Levy,
-    Michalewicz,
     Powell,
     Rastrigin,
     Rosenbrock,
@@ -418,10 +416,6 @@ class Svm(HyperTuningGridTestFunction):
         super().__init__("svm_on_grid.csv", *args, **kwargs)
 
 
-Ackley2 = partial(Ackley, dim=2)
-setattr(Ackley2, "__name__", Ackley.__name__ + "2")
-Ackley5 = partial(Ackley, dim=5)
-setattr(Ackley5, "__name__", Ackley.__name__ + "5")
 Brochu2 = partial(Brochu, dim=2)
 setattr(Brochu2, "__name__", Brochu.__name__ + "2")
 Brochu4 = partial(Brochu, dim=4)
@@ -456,12 +450,10 @@ TESTS: dict[
 ] = {
     problem.__name__.lower(): (problem, kwargs, max_evals, regressor_type, normalize)
     for problem, kwargs, max_evals, regressor_type, normalize in [
-        (Ackley2, {}, 70, "idw", False),
-        (Ackley5, {}, 75, "idw", False),
+        (Ackley, {}, 70, "idw", False),
         (Adjiman, {}, 20, "idw", True),
         (Beale, {}, 100, "rbf", False),
         (Bohachevsky, {}, 45, "idw", True),
-        (Branin, {}, 30, "idw", True),
         (Brochu2, {}, 50, "rbf", False),  # NOTE: already normalized..
         (Brochu4, {}, 75, "rbf", False),  # NOTE: already normalized..
         (Brochu6, {}, 70, "idw", False),  # NOTE: already normalized..
@@ -471,7 +463,6 @@ TESTS: dict[
         (DixonPrice4, {}, 65, "rbf", False),
         (DropWave, {}, 100, "rbf", True),
         (EggHolder, {}, 75, "idw", True),
-        (GoldsteinPrice, {}, 45, "idw", True),
         (Griewank, {"dim": 3}, 75, "idw", True),
         (Hartmann3, {}, 80, "idw", False),  # NOTE: already normalized..
         (Hartmann6, {}, 95, "rbf", False),  # NOTE: already normalized..
@@ -481,7 +472,6 @@ TESTS: dict[
         (Levy4, {}, 100, "rbf", False),
         (Levy6, {}, 100, "rbf", True),
         (LogReg, {}, 25, "idw", True),
-        (Michalewicz, {}, 100, "idw", False),
         (NnBoston, {}, 100, "rbf", True),
         (NnCancer, {}, 45, "rbf", True),
         (Powell, {}, 100, "idw", True),
@@ -489,8 +479,6 @@ TESTS: dict[
         (RobotPush3, {}, 50, "idw", True),
         (RobotPush4, {}, 50, "idw", True),
         (Rosenbrock, {"dim": 8}, 50, "rbf", True),
-        (Shekel5, {}, 80, "rbf", False),
-        (Shekel7, {}, 100, "rbf", False),
         (Shubert, {}, 50, "idw", False),
         (SixHumpCamel, {}, 75, "idw", True),
         (Step2, {"dim": 5}, 75, "rbf", True),
