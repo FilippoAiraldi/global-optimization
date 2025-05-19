@@ -380,7 +380,8 @@ def _format_row(
         method = methods[i]
         method_data = src_data[(problem, method)]
         try:
-            _, alpha = wilcoxon(best_method_data, method_data, alternative=side)
+            n = min(best_method_data.size, method_data.size)
+            _, alpha = wilcoxon(best_method_data[:n], method_data[:n], alternative=side)
         except ValueError as e:
             warn(
                 f"Exception during statistical test of `{best_method}` vs `{method}` "
