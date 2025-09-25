@@ -17,6 +17,7 @@ sys.path.extend((str(repo_dir), str(repo_dir / "mpc-tuning")))
 from run import INIT_ITER, MAX_ITER, PROBLEM_NAME, TIME_STEPS, CstrEnv, setup_mpc_tuning
 
 from benchmarking.analyze import (
+    _compute_avg_and_ci,
     itertime_vs_gap,
     load_data,
     official_method_name_and_type,
@@ -44,9 +45,11 @@ def plot_reactor_temp(
     df: pd.DataFrame, plot: bool, pgfplotstables: bool, title: str | None
 ) -> None:
     """Plots/saves the results on the reactor temperature from the env."""
-    iters = [2, 20, 54]
-    df_ = df.apply(_extract_reactor_temp, iters=iters, axis=1).loc[PROBLEM_NAME]
+    iters = [1, 25, 53]
     time = np.arange(TIME_STEPS + 1) * CstrEnv.tf
+    df_ = df.apply(_extract_reactor_temp, iters=iters, axis=1).loc[PROBLEM_NAME]
+    df_ = df_.map(lambda x: x.transpose((1, 2, 0)))
+    df_ = df_.apply(_compute_avg_and_ci, args=("Tr", None), axis=1)
 
     if plot:
         methods = df_.index
@@ -56,9 +59,15 @@ def plot_reactor_temp(
         fig, axs = plt.subplots(nrows, ncols, constrained_layout=True, sharex=True)
         axs = np.atleast_1d(axs).flat
         for (method, row_data), ax in zip(df_.iterrows(), axs):
-            Tr = row_data["Tr"]
-            for i in range(len(iters)):
-                ax.plot(time, Tr[i].T, color=f"C{i}")
+            Tr_avg = row_data["avg"].T
+            Tr_lb = row_data["lb"].T
+            Tr_ub = row_data["ub"].T
+            for i, (Tr_avg_, Tr_lb_, Tr_ub_) in enumerate(zip(Tr_avg, Tr_lb, Tr_ub)):
+                color = f"C{i}"
+                ax.plot(time, Tr_avg_, lw=1.0, color=color)
+                ax.fill_between(time, Tr_lb_, Tr_ub_, alpha=0.2, color=color)
+                ax.plot(time, Tr_lb_, color=color, lw=0.1)
+                ax.plot(time, Tr_ub_, color=color, lw=0.1)
             ax.set_xlabel("Time [h]")
             ax.set_ylabel("Reactor Temperature [°C]")
             ax.set_title(method)
@@ -70,10 +79,12 @@ def plot_reactor_temp(
         os.makedirs("pgfplotstables", exist_ok=True)
         for method, row_data in df_.iterrows():
             method = official_method_name_and_type(method, for_filename=True)[0].lower()
-            Tr = row_data["Tr"]
-            columns = ["time"] + [f"TempTrial{t}" for t in range(Tr.shape[1])]
-            for iter_, Tr_ in zip(iters, Tr):
-                data = np.vstack((time, Tr_)).T
+            Tr_avg = row_data["avg"].T
+            Tr_lb = row_data["lb"].T
+            Tr_ub = row_data["ub"].T
+            columns = ["time", "avg", "lb", "ub"]
+            for iter_, Tr_avg_, Tr_lb_, Tr_ub_ in zip(iters, Tr_avg, Tr_lb, Tr_ub):
+                data = np.column_stack((time, Tr_avg_, Tr_lb_, Tr_ub_))
                 fn = f"pgfplotstables/reactor_temp_{method}_iter{iter_}"
                 fn += f"_{title}.dat" if title is not None else ".dat"
                 pd.DataFrame(data, columns=columns).to_string(fn, index=False)
