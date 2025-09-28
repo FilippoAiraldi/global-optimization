@@ -7,4 +7,5 @@ joblib==1.4.2
 torch==2.7.0
 gpytorch==1.14
 botorch==0.14.0
+scikit-learn==1.6.1
 globopt==1.0.0

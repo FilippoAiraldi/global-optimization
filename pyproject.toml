@@ -33,6 +33,7 @@ classifiers = [
 dependencies = [
     "torch > 2.6.0",
     "botorch >= 0.14.0",
+    "scikit-learn >= 1.6.1",
 ]
 keywords = [
     "optimization",
