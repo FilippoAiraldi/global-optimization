@@ -443,7 +443,7 @@ def parse_args(name: str, available_problems: list[str] | None) -> argparse.Name
             help="Problems to include in the benchmarking.",
         )
     group.add_argument(
-        "--n-trials", type=int, default=30, help="Number  of trials to run per problem."
+        "--n-trials", type=int, default=30, help="Number of trials to run per problem."
     )
     group = parser.add_argument_group("Simulation options")
     group.add_argument(

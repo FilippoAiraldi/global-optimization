@@ -1,7 +1,7 @@
 r"""
 Collection of popular tests for benchmarking optimization algorithms. For the synthetic
 test functions, see [1, 2, 3]; for the realistic hyperparameter tuning test functions,
-see [4] (LDA, logreg), [5] (cancer and boston NN), [6] (robot pushing), and [7] (SVM?
+see [4] (LDA, logreg), [5] (cancer and boston NN), [6] (robot pushing), and [7] (SVM
 and cosmological). For the constrained test functions, see [8, 9, 10, 11].
 
 References
@@ -163,7 +163,7 @@ class Brochu(SyntheticTestFunction):
         f6(x) = -g(x)
 
     x is bounded [0,1] in each dimension. f has the following minimizer
-    `x_opt_i = 0.6623009251970219` and optimal values  `f_opt2 = -2.662639755973945`,
+    `x_opt_i = 0.6623009251970219` and optimal values `f_opt2 = -2.662639755973945`,
     `f_opt4 = -7.32527951194789`, and `f_opt6 = -10.987919267921836`.
     """
 

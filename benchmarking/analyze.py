@@ -554,4 +554,5 @@ if __name__ == "__main__":
             itertime_vs_gap(dataframe, fplot, fpgfplotstables, stitle)
         if fsummary or fpgfplotstables:
             summary_tables(dataframe, fsummary, fpgfplotstables, stitle)
-    plt.show()
+    if fplot:
+        plt.show()

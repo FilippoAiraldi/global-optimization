@@ -211,7 +211,7 @@ class qIdwAcquisitionFunction(MCAcquisitionFunction):
         # NOTE: there is no need to use sampling to estimate all the terms of the
         # acquisition function, but only for the scale. This is because this term is the
         # only one that depends on the posterior sample variances (actually, it is the
-        # formula of the  variance itself), and we cannot directly compute. The rest
+        # formula of the variance itself), and we cannot directly compute. The rest
         # are either deterministic or have an analytical expression.
         mdl = self.model
         sampler = self.sampler
