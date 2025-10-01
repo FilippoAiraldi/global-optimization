@@ -110,4 +110,5 @@ if __name__ == "__main__":
             plot_reactor_temp(dataframe, fplot, fpgfplotstables, stitle)
         if fsummary or fpgfplotstables:
             summary_tables(dataframe, fsummary, fpgfplotstables, stitle)
-    plt.show()
+    if fplot:
+        plt.show()

@@ -4,10 +4,10 @@ non-myopic Global Optimization strategies on various problems.
 """
 
 import argparse
-import os
 import re
 from functools import partial
 from math import ceil
+from pathlib import Path
 from typing import Literal
 from warnings import warn
 
@@ -28,6 +28,7 @@ pd.options.mode.copy_on_write = True
 ALPHA = 1 - 0.95
 NONMYOPIC_METHOD_PATTER = re.compile(r"ms(g|b)o-(mc|gh)((?:\.\d+)+)")
 VALID_PATTERN = re.compile(r"[^a-zA-Z0-9]+")
+PGFPLOTSTABLES_DIR = Path("pgfplotstables")
 
 
 def _sort_method(method: str) -> float:
@@ -243,15 +244,18 @@ def optimiser_convergences(
         fig.suptitle(title, fontsize=12)
 
     if pgfplotstables:
-        os.makedirs("pgfplotstables", exist_ok=True)
+        PGFPLOTSTABLES_DIR.mkdir(exist_ok=True)
         tables_already_written = set()
         column = column.replace("-", "")
         for problem in problem_names:
             for method, row in df_.loc[problem].iterrows():
                 method, _ = official_method_name_and_type(method, for_filename=True)
-                fn = f"pgfplotstables/{column}_{problem}_{method.lower()}"
-                fn += f"_{title}.dat" if title is not None else ".dat"
-                pd.DataFrame(row.to_dict()).to_string(fn, index=False)
+                fn = f"{column}_{problem}_{method.lower()}" + (
+                    f"_{title}.dat" if title is not None else ".dat"
+                )
+                pd.DataFrame(row.to_dict()).to_string(
+                    PGFPLOTSTABLES_DIR / fn, index=False
+                )
                 print(f"INFO: written `{fn}`.")
                 if fn in tables_already_written:
                     print(f"WARNING: overwritten `{fn}`.")
@@ -342,11 +346,10 @@ def itertime_vs_gap(
         fig.suptitle(title, fontsize=12)
 
     if pgfplotstables:
-        os.makedirs("pgfplotstables", exist_ok=True)
-        fn = "pgfplotstables/itertime-vs-gap"
-        fn += f"_{title}.dat" if title is not None else ".dat"
+        PGFPLOTSTABLES_DIR.mkdir(exist_ok=True)
+        fn = "itertime-vs-gap" + (f"_{title}.dat" if title is not None else ".dat")
         df_.reset_index().apply(_compute_official_name_and_type, axis=1).to_string(
-            fn, index=False
+            PGFPLOTSTABLES_DIR / fn, index=False
         )
         print(f"INFO: written `{fn}`.")
 
@@ -407,7 +410,7 @@ def summary_tables(
         "time-mean",
         "time-std",
     ]
-    df_ = df[cols].stack(0, False).unstack("method", pd.NA)
+    df_ = df[cols].stack(0).unstack("method", pd.NA)
 
     # then, instantiate the pretty tables to be filled with the statistics
     field_names = ["Name", ""] + df.index.unique(level="method").to_list()
@@ -464,10 +467,9 @@ def summary_tables(
         latex = latex.replace("|", "&")
         latex = "\n".join(line[:-1] + r"\\" for line in latex.split("\n"))
 
-        os.makedirs("pgfplotstables", exist_ok=True)
-        fn = "pgfplotstables/summary"
-        fn += f"_{title}.tex" if title is not None else ".tex"
-        with open(fn, "w", encoding="utf-8") as f:
+        PGFPLOTSTABLES_DIR.mkdir(exist_ok=True)
+        fn = "summary" + (f"_{title}.tex" if title is not None else ".tex")
+        with open(PGFPLOTSTABLES_DIR / fn, "w", encoding="utf-8") as f:
             f.write(latex)
 
 
