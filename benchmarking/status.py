@@ -80,9 +80,17 @@ if __name__ == "__main__":
         nargs="+",
         help="Filenames of the results to be visualized.",
     )
+    parser.add_argument(
+        "--trials-threshold",
+        type=int,
+        default=int(1e9),  # a.k.a., infty
+        help="Threshold on the number of trials to consider a problem as completed "
+        "(thus, not reporting it).",
+    )
     args = parser.parse_args()
 
     # load each result and plot
     for filename in args.filenames:
-        df = get_status(filename).to_string(na_rep="-")
-        print(filename, "@", datetime.now(), "\n", df, "\n")
+        df = get_status(filename)
+        df_ = df[df < args.trials_threshold]
+        print(filename, "@", datetime.now(), "\n", df_.to_string(na_rep="-"), "\n")
